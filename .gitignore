@@ -14,6 +14,7 @@ with_related.json
 full_pipeline_output.json
 latest_headlines.json
 collected_headlines.json
+search_results.json
 final_*.json
 
 # macOS

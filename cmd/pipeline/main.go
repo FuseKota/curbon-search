@@ -94,7 +94,7 @@ func main() {
 	for i, h := range headlines {
 		queries := h.SearchQueries
 		if len(queries) == 0 {
-			queries = buildSearchQueries(h.Title)
+			queries = buildSearchQueries(h.Title, h.Excerpt)
 		}
 		if len(queries) > *queriesPerHead {
 			queries = queries[:*queriesPerHead]

@@ -57,6 +57,7 @@ Carbon Pulse / QCI の**有料記事の見出し**（無料で見れる部分）
 {
   "title": "Climate litigation marks 'turning point' in 2025...",
   "url": "https://carbon-pulse.com/470719/",
+  "excerpt": "Global climate litigation grew and diversified in 2025, marking a turning point...",
   "relatedFree": [
     {
       "title": "Sendeco2 Noticias Climate Litigation...",

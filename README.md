@@ -67,9 +67,9 @@
 go build -o carbon-relay ./cmd/pipeline
 ```
 
-### ヘッドライン収集のみ（OpenAI API不要）🆕
+### ヘッドライン＋記事要約の収集（OpenAI API不要）🆕
 ```bash
-# OpenAI APIキーなしでヘッドラインのみ収集
+# OpenAI APIキーなしでヘッドラインと記事の要約を収集
 ./carbon-relay \
   -sources=carbonpulse \
   -perSource=30 \
@@ -79,6 +79,8 @@ go build -o carbon-relay ./cmd/pipeline
 # または専用スクリプトを使用
 ./collect_headlines_only.sh
 ```
+
+**✨ 新機能:** トップページから記事の要約（無料で見れる部分）を自動的に取得します
 
 **詳細は [HEADLINES_ONLY.md](HEADLINES_ONLY.md) を参照**
 
@@ -165,6 +167,7 @@ export DEBUG_OPENAI_FULL=1      # APIレスポンス全体を表示
     "source": "Carbon Pulse",
     "title": "Climate litigation marks 'turning point' in 2025 but expanded scope on horizon -report",
     "url": "https://carbon-pulse.com/470719/",
+    "excerpt": "Global climate litigation grew and diversified in 2025, marking a turning point especially at the international court level, according to a year-end review by a New York-based legal center.",
     "isHeadline": true,
     "relatedFree": [
       {

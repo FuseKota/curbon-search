@@ -1,6 +1,6 @@
 # Binaries
 carbon-relay
-pipeline
+/pipeline
 
 # Test outputs
 *_test.json

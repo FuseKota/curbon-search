@@ -83,7 +83,8 @@ func collectHeadlinesCarbonPulse(limit int, cfg headlineSourceConfig) ([]Headlin
 		}
 
 		// Special handling for top page: extract from main content area (.post divs)
-		if pageIdx == 0 && os.Getenv("EXTRACT_EXCERPTS") != "" {
+		// Always extract excerpts from the top page
+		if pageIdx == 0 {
 			doc.Find("div.post").Each(func(_ int, postDiv *goquery.Selection) {
 				if limit > 0 && len(out) >= limit {
 					return
@@ -256,10 +257,8 @@ func collectHeadlinesCarbonPulse(limit int, cfg headlineSourceConfig) ([]Headlin
 			seen[abs] = true
 
 			// Try to extract excerpt from nearby text (parent, siblings, or following paragraphs)
-			var excerpt string
-			if os.Getenv("EXTRACT_EXCERPTS") != "" {
-				excerpt = extractExcerptFromContext(s)
-			}
+			// Note: Timeline/newsletter pages typically don't have excerpts in the HTML structure
+			excerpt := extractExcerptFromContext(s)
 
 			out = append(out, Headline{Source: "Carbon Pulse", Title: txt, URL: abs, Excerpt: excerpt, IsHeadline: true})
 		})

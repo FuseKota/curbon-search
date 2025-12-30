@@ -1,11 +1,12 @@
-# ヘッドライン収集のみ（OpenAI API不要）
+# ヘッドライン＋記事要約の収集（OpenAI API不要）
 
 ## 🎯 概要
 
-このモードでは、**OpenAI APIを使わずに**Carbon Pulse / QCI からヘッドラインのみを収集できます。
+このモードでは、**OpenAI APIを使わずに**Carbon Pulse / QCI からヘッドラインと記事要約（無料で見れる部分）を収集できます。
 
 - ✅ OpenAI API不要（OPENAI_API_KEY不要）
 - ✅ スクレイピングのみ
+- ✅ 記事の要約も自動取得（Carbon Pulseトップページから）
 - ✅ 高速（検索なし）
 - ❌ relatedFree は付かない（検索しないため）
 
@@ -51,6 +52,7 @@ go build -o carbon-relay ./cmd/pipeline
     "source": "Carbon Pulse",
     "title": "Climate litigation marks 'turning point' in 2025 but expanded scope on horizon -report",
     "url": "https://carbon-pulse.com/470719/",
+    "excerpt": "Global climate litigation grew and diversified in 2025, marking a turning point especially at the international court level, according to a year-end review by a New York-based legal center.",
     "isHeadline": true
   },
   {
@@ -61,6 +63,8 @@ go build -o carbon-relay ./cmd/pipeline
   }
 ]
 ```
+
+**新機能：** Carbon Pulseのトップページからは記事の要約（無料で見れる部分）も自動的に取得されます。
 
 **注意：** このモードでは`relatedFree`フィールドは含まれません（空配列になります）。
 

@@ -1,0 +1,51 @@
+# Binaries
+carbon-relay
+pipeline
+
+# Test outputs
+*_test.json
+test_*.json
+test_*.txt
+output*.json
+candidates*.json
+matched.json
+headlines.json
+with_related.json
+full_pipeline_output.json
+latest_headlines.json
+collected_headlines.json
+final_*.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Environment files
+.env
+.env.local

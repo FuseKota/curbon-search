@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -35,6 +36,11 @@ func main() {
 		// openaiModel    = flag.String("openaiModel", "gpt-4o-mini", "OpenAI model to use")
 		openaiModel = flag.String("openaiModel", "gpt-5.1", "OpenAI model to use")
 		openaiTool  = flag.String("openaiTool", "web_search", "OpenAI tool type: web_search|web_search_preview")
+
+		// --- Notion integration ---
+		notionClip       = flag.Bool("notionClip", false, "clip articles to Notion database")
+		notionPageID     = flag.String("notionPageID", "", "parent page ID for creating new Notion database (required for new DB)")
+		notionDatabaseID = flag.String("notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
 	)
 	flag.Parse()
 
@@ -179,12 +185,59 @@ func main() {
 		if err := writeJSONFile(*outFile, headlines); err != nil {
 			fatalf("ERROR writing output: %v", err)
 		}
-		return
+	} else {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(headlines)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(headlines)
+	// --- 6) Clip to Notion (if enabled) ---
+	if *notionClip {
+		fmt.Fprintln(os.Stderr, "\n========================================")
+		fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
+		fmt.Fprintln(os.Stderr, "========================================")
+
+		notionToken := os.Getenv("NOTION_TOKEN")
+		if notionToken == "" {
+			fatalf("ERROR: NOTION_TOKEN environment variable is required for Notion integration")
+		}
+
+		clipper, err := NewNotionClipper(notionToken, *notionDatabaseID)
+		if err != nil {
+			fatalf("ERROR creating Notion clipper: %v", err)
+		}
+
+		ctx := context.Background()
+
+		// Create database if needed
+		if *notionDatabaseID == "" {
+			if *notionPageID == "" {
+				fatalf("ERROR: -notionPageID is required when creating a new Notion database")
+			}
+			fmt.Fprintln(os.Stderr, "Creating new Notion database...")
+			if err := clipper.CreateDatabase(ctx, *notionPageID); err != nil {
+				fatalf("ERROR creating Notion database: %v", err)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Using existing Notion database: %s\n", *notionDatabaseID)
+		}
+
+		// Clip all headlines and their related articles
+		fmt.Fprintln(os.Stderr, "\nClipping articles...")
+		clippedCount := 0
+		for _, h := range headlines {
+			if err := clipper.ClipHeadlineWithRelated(ctx, h); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: failed to clip headline '%s': %v\n", h.Title, err)
+				continue
+			}
+			clippedCount++
+			fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s (%d related articles)\n", h.Title, len(h.RelatedFree))
+		}
+
+		fmt.Fprintln(os.Stderr, "========================================")
+		fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
+		fmt.Fprintln(os.Stderr, "========================================")
+	}
 }
 
 func fatalf(format string, args ...any) {

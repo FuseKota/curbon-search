@@ -149,8 +149,11 @@ DEBUG_OPENAI_FULL=1 ./carbon-relay -sources=carbonpulse -perSource=1
 ## 環境変数
 
 ```bash
-# 必須
+# 必須（検索時）
 export OPENAI_API_KEY="sk-..."
+
+# Notion統合（オプション）
+export NOTION_TOKEN="secret_..."  # Notion Integration Token
 
 # デバッグ用（オプション）
 export DEBUG_OPENAI=1           # 検索結果のサマリー表示
@@ -253,6 +256,40 @@ carbon-relay/
 
 ---
 
+## Notion統合 🆕
+
+収集した記事をNotion Databaseに自動的にクリッピングできます。
+
+### 🚀 クイックスタート
+
+```bash
+# 環境変数設定
+export NOTION_TOKEN="secret_..."  # Notion Integration Token
+export OPENAI_API_KEY="sk-..."
+
+# 実行（新規データベース作成 + クリッピング）
+./carbon-relay \
+  -headlines=collected_headlines.json \
+  -queriesPerHeadline=5 \
+  -topK=3 \
+  -out=results.json \
+  -notionClip \
+  -notionPageID="abc123def456..."
+```
+
+### 📋 機能
+
+- ✅ 有料ヘッドライン（Title, URL, Source, Excerpt）をクリッピング
+- ✅ 関連無料記事（Score付き）をクリッピング
+- ✅ 新規データベース自動作成
+- ✅ 既存データベースへの追加も可能
+
+### 📚 詳細ドキュメント
+
+Notion統合の詳しい使い方は **[NOTION_INTEGRATION.md](NOTION_INTEGRATION.md)** を参照してください。
+
+---
+
 ## 次のステップ（優先度順）
 
 ### 優先度：高
@@ -307,6 +344,12 @@ ERROR: no Carbon Pulse headlines found
 ---
 
 ## 開発履歴
+
+### 2025-12-30
+- ✅ 記事要約（excerpt）の自動抽出機能を実装
+- ✅ excerptを活用した検索クエリ生成（固有名詞・数値抽出）
+- ✅ Notion Database統合機能を実装
+- ✅ 自動クリッピング機能（ヘッドライン + 関連記事）
 
 ### 2025-12-29
 - ✅ OpenAI Responses API 統合

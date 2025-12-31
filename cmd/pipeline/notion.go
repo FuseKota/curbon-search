@@ -42,9 +42,10 @@ func NewNotionClipper(token string, databaseID string) (*NotionClipper, error) {
 }
 
 // CreateDatabase creates a new Notion database for article clipping
-func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) error {
+// Returns the database ID and error
+func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (string, error) {
 	if pageID == "" {
-		return fmt.Errorf("NOTION_PAGE_ID is required to create a new database")
+		return "", fmt.Errorf("NOTION_PAGE_ID is required to create a new database")
 	}
 
 	dbRequest := &notionapi.DatabaseCreateRequest{
@@ -110,14 +111,14 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) erro
 
 	db, err := nc.client.Database.Create(ctx, dbRequest)
 	if err != nil {
-		return fmt.Errorf("failed to create Notion database: %w", err)
+		return "", fmt.Errorf("failed to create Notion database: %w", err)
 	}
 
 	nc.dbID = notionapi.DatabaseID(db.ID)
 	fmt.Fprintf(os.Stderr, "✅ Notion database created: %s\n", db.ID)
 	fmt.Fprintf(os.Stderr, "   Database URL: https://notion.so/%s\n", db.ID)
 
-	return nil
+	return string(db.ID), nil
 }
 
 // ClipHeadline clips a headline to Notion
@@ -158,6 +159,17 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	// Add excerpt if available (truncated to Notion property limit)
 	if h.Excerpt != "" {
 		properties["Excerpt"] = notionapi.RichTextProperty{
+			Type: notionapi.PropertyTypeRichText,
+			RichText: []notionapi.RichText{
+				{
+					Text: &notionapi.Text{
+						Content: truncateText(h.Excerpt, 2000), // Notion property limit
+					},
+				},
+			},
+		}
+		// Also add to AI Summary field (same content as Excerpt for now)
+		properties["AI Summary"] = notionapi.RichTextProperty{
 			Type: notionapi.PropertyTypeRichText,
 			RichText: []notionapi.RichText{
 				{
@@ -244,6 +256,17 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 	// Add excerpt if available (truncated to Notion property limit)
 	if rf.Excerpt != "" {
 		properties["Excerpt"] = notionapi.RichTextProperty{
+			Type: notionapi.PropertyTypeRichText,
+			RichText: []notionapi.RichText{
+				{
+					Text: &notionapi.Text{
+						Content: truncateText(rf.Excerpt, 2000), // Notion property limit
+					},
+				},
+			},
+		}
+		// Also add to AI Summary field (same content as Excerpt for now)
+		properties["AI Summary"] = notionapi.RichTextProperty{
 			Type: notionapi.PropertyTypeRichText,
 			RichText: []notionapi.RichText{
 				{

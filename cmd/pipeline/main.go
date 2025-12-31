@@ -243,8 +243,17 @@ func main() {
 				fatalf("ERROR: -notionPageID is required when creating a new Notion database")
 			}
 			fmt.Fprintln(os.Stderr, "Creating new Notion database...")
-			if err := clipper.CreateDatabase(ctx, *notionPageID); err != nil {
+			dbID, err := clipper.CreateDatabase(ctx, *notionPageID)
+			if err != nil {
 				fatalf("ERROR creating Notion database: %v", err)
+			}
+
+			// Save database ID to .env file for future use
+			if err := appendToEnvFile(".env", "NOTION_DATABASE_ID", dbID); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: Failed to save database ID to .env: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Please manually add to .env:\nNOTION_DATABASE_ID=%s\n", dbID)
+			} else {
+				fmt.Fprintf(os.Stderr, "✅ Database ID saved to .env file\n")
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "Using existing Notion database: %s\n", *notionDatabaseID)
@@ -271,4 +280,41 @@ func main() {
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
+}
+
+// appendToEnvFile appends or updates a key=value pair in an .env file
+func appendToEnvFile(filename, key, value string) error {
+	// Read existing .env file if it exists
+	content := ""
+	data, err := os.ReadFile(filename)
+	if err == nil {
+		content = string(data)
+	}
+
+	// Check if key already exists
+	lines := strings.Split(content, "\n")
+	keyExists := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, key+"=") || strings.HasPrefix(line, "#"+key+"=") {
+			lines[i] = key + "=" + value
+			keyExists = true
+			break
+		}
+	}
+
+	// If key doesn't exist, append it
+	if !keyExists {
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		lines = append(lines, key+"="+value)
+	}
+
+	// Write back to file
+	newContent := strings.Join(lines, "\n")
+	if err := os.WriteFile(filename, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .env file: %w", err)
+	}
+
+	return nil
 }

@@ -22,14 +22,24 @@
 
 ---
 
-## 現在の実装状態（2025-12-29）
+## 現在の実装状態（2025-12-31）
 
 ### ✅ 実装済み機能
 
 #### 1. ヘッドライン収集 (`cmd/pipeline/headlines.go`)
+
+**有料ソース（見出しのみ）：**
 - Carbon Pulse の無料ページ（timeline/newsletters）からスクレイピング
 - QCI のホームページからスクレイピング
 - 無意味なリンクテキスト（"Read more"等）を自動除外
+
+**無料ソース（全文取得）：** 🆕
+- **CarbonCredits.jp**（日本語）- 日本のカーボンクレジット市場ニュース
+- **Carbon Herald** - CDR技術・スタートアップ情報
+- **Climate Home News** - 国際交渉・政策情報
+- **CarbonCredits.com** - 初心者向け解説記事
+
+全ての無料ソースはWordPress REST API経由で全文コンテンツを取得します。
 
 #### 2. OpenAI検索統合 (`cmd/pipeline/search_openai.go`)
 **重要な技術的発見：**
@@ -129,7 +139,7 @@ DEBUG_OPENAI_FULL=1 ./carbon-relay -sources=carbonpulse -perSource=1
 | オプション | デフォルト | 説明 |
 |----------|----------|------|
 | `-headlines` | - | 既存のheadlines.jsonを読み込む（指定しない場合はスクレイピング） |
-| `-sources` | `carbonpulse,qci` | スクレイピング対象（カンマ区切り） |
+| `-sources` | `carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com` | スクレイピング対象（カンマ区切り）<br>**有料:** carbonpulse, qci<br>**無料:** carboncredits.jp, carbonherald, climatehomenews, carboncredits.com |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
 | `-queriesPerHeadline` | `3` | 見出しごとに発行する検索クエリ数 |
 | `-resultsPerQuery` | `10` | クエリごとの最大結果数 |
@@ -148,17 +158,24 @@ DEBUG_OPENAI_FULL=1 ./carbon-relay -sources=carbonpulse -perSource=1
 
 ## 環境変数
 
+推奨：`.env`ファイルを作成して管理
+
 ```bash
-# 必須（検索時）
-export OPENAI_API_KEY="sk-..."
+# OpenAI API Key（検索機能使用時に必須）
+OPENAI_API_KEY=sk-...
 
 # Notion統合（オプション）
-export NOTION_TOKEN="secret_..."  # Notion Integration Token
+NOTION_TOKEN=ntn_...              # Notion Integration Token
+NOTION_PAGE_ID=xxx...             # 新規DB作成時の親ページID
+NOTION_DATABASE_ID=xxx...         # 既存DB使用時（自動保存される）
 
 # デバッグ用（オプション）
-export DEBUG_OPENAI=1           # 検索結果のサマリー表示
-export DEBUG_OPENAI_FULL=1      # APIレスポンス全体を表示
+DEBUG_OPENAI=1                    # 検索結果のサマリー表示
+DEBUG_OPENAI_FULL=1               # APIレスポンス全体を表示
+DEBUG_SCRAPING=1                  # スクレイピング詳細表示
 ```
+
+**注意：** `NOTION_DATABASE_ID`は初回データベース作成時に自動的に`.env`に追加されます。
 
 ---
 
@@ -199,13 +216,23 @@ export DEBUG_OPENAI_FULL=1      # APIレスポンス全体を表示
 ```
 carbon-relay/
 ├── cmd/pipeline/
-│   ├── main.go              # パイプライン司令塔
-│   ├── headlines.go         # Carbon Pulse / QCI スクレイピング
+│   ├── main.go              # パイプライン司令塔 + データベースID永続化
+│   ├── headlines.go         # 全ソーススクレイピング
+│   │                        # - 有料: Carbon Pulse, QCI
+│   │                        # - 無料: CarbonCredits.jp, Carbon Herald,
+│   │                        #        Climate Home News, CarbonCredits.com
+│   ├── notion.go            # Notion統合
+│   │                        # - データベース作成・管理
+│   │                        # - 全文保存（ページブロック）
+│   │                        # - AI Summaryフィールド自動入力
 │   ├── search_openai.go     # OpenAI検索 + URL抽出 + 疑似タイトル生成
 │   ├── search_queries.go    # 検索クエリ生成戦略
 │   ├── matcher.go           # IDF + 類似度 + シグナルベースマッチング
 │   ├── types.go             # データ型定義
 │   └── utils.go             # ユーティリティ
+├── test-notion.sh           # Notion統合テストスクリプト
+├── clip-all-sources.sh      # 全4無料ソース一括クリッピング
+├── .env                     # 環境変数（自動生成）
 ├── go.mod
 ├── go.sum
 └── README.md
@@ -262,27 +289,68 @@ carbon-relay/
 
 ### 🚀 クイックスタート
 
-```bash
-# 環境変数設定
-export NOTION_TOKEN="secret_..."  # Notion Integration Token
-export OPENAI_API_KEY="sk-..."
+#### 初回実行（新規データベース作成）
 
-# 実行（新規データベース作成 + クリッピング）
-./carbon-relay \
-  -headlines=collected_headlines.json \
-  -queriesPerHeadline=5 \
-  -topK=3 \
-  -out=results.json \
-  -notionClip \
-  -notionPageID="abc123def456..."
+```bash
+# .envファイルに環境変数を設定
+cat > .env << 'EOF'
+OPENAI_API_KEY=sk-...
+NOTION_TOKEN=ntn_...
+NOTION_PAGE_ID=xxx...
+EOF
+
+# 無料ソースから記事を収集してNotionにクリッピング
+./test-notion.sh
+
+# または全4ソースから5記事ずつ収集
+./clip-all-sources.sh
 ```
 
-### 📋 機能
+#### 2回目以降（既存データベースに追加）
 
-- ✅ 有料ヘッドライン（Title, URL, Source, Excerpt）をクリッピング
-- ✅ 関連無料記事（Score付き）をクリッピング
-- ✅ 新規データベース自動作成
-- ✅ 既存データベースへの追加も可能
+データベースIDは自動的に`.env`に保存されるため、次回からは同じデータベースに追加されます：
+
+```bash
+# 同じコマンドを実行するだけ
+./clip-all-sources.sh
+# → 既存データベースに自動追加
+```
+
+### 📋 主要機能
+
+**データベース管理：**
+- ✅ **新規データベース自動作成**
+- ✅ **データベースID自動永続化** - `.env`ファイルに保存
+- ✅ **既存データベース自動再利用** - 毎回新規作成されない
+
+**記事クリッピング：**
+- ✅ **全文保存** - Notionページ本文に段落ブロックとして保存
+- ✅ **Excerptフィールド** - 全文の最初2000文字（プロパティ制限）
+- ✅ **AI Summaryフィールド** - 全文の最初2000文字（後から手動要約可能）
+- ✅ **メタデータ** - Title, URL, Source, Type, Score
+
+**対応ソース：**
+- Carbon Pulse（有料見出し）
+- QCI（有料見出し）
+- CarbonCredits.jp（全文）
+- Carbon Herald（全文）
+- Climate Home News（全文）
+- CarbonCredits.com（全文）
+- OpenAI検索結果（関連記事）
+
+### 🗂️ Notionデータベーススキーマ
+
+| プロパティ | タイプ | 説明 |
+|----------|--------|------|
+| Title | Title | 記事タイトル |
+| URL | URL | 記事URL |
+| Source | Select | ソース名（カラー分け） |
+| Type | Select | Headline / Related Free |
+| Score | Number | 関連度スコア（Related Freeのみ） |
+| Excerpt | Rich Text | 全文の最初2000文字 |
+| AI Summary | Rich Text | 要約用フィールド（初期値はExcerptと同じ） |
+| Content | Rich Text | 将来の拡張用 |
+| ページ本文 | Blocks | 記事全文（段落ブロック） |
 
 ### 📚 詳細ドキュメント
 
@@ -344,6 +412,24 @@ ERROR: no Carbon Pulse headlines found
 ---
 
 ## 開発履歴
+
+### 2025-12-31 🆕
+- ✅ **4つの無料ソース追加**
+  - CarbonCredits.jp（日本語）
+  - Carbon Herald（CDR技術）
+  - Climate Home News（国際交渉）
+  - CarbonCredits.com（初心者向け）
+- ✅ **WordPress REST API統合** - 全文コンテンツ取得
+- ✅ **Notion全文保存機能**
+  - ページ本文にparagraphブロックとして保存
+  - 2000文字/ブロック制限に対応した自動分割
+- ✅ **データベースID自動永続化**
+  - `.env`ファイルに自動保存
+  - 既存データベース自動再利用
+  - 重複データベース作成を防止
+- ✅ **AI Summaryフィールド自動入力**
+  - 初期値として全文を自動挿入
+  - 後からNotion AIで要約可能
 
 ### 2025-12-30
 - ✅ 記事要約（excerpt）の自動抽出機能を実装

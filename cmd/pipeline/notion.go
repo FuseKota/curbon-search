@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jomei/notionapi"
 )
@@ -71,12 +72,22 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) erro
 					Options: []notionapi.Option{
 						{Name: "Carbon Pulse", Color: notionapi.ColorBlue},
 						{Name: "QCI", Color: notionapi.ColorGreen},
-						{Name: "OpenAI(text_extract)", Color: notionapi.ColorPurple},
-						{Name: "Free Article", Color: notionapi.ColorYellow},
+						{Name: "CarbonCredits.jp", Color: notionapi.ColorOrange},
+						{Name: "Carbon Herald", Color: notionapi.ColorPink},
+						{Name: "Climate Home News", Color: notionapi.ColorPurple},
+						{Name: "CarbonCredits.com", Color: notionapi.ColorYellow},
+						{Name: "OpenAI(text_extract)", Color: notionapi.ColorGray},
+						{Name: "Free Article", Color: notionapi.ColorDefault},
 					},
 				},
 			},
 			"Excerpt": notionapi.RichTextPropertyConfig{
+				Type: notionapi.PropertyConfigTypeRichText,
+			},
+			"Content": notionapi.RichTextPropertyConfig{
+				Type: notionapi.PropertyConfigTypeRichText,
+			},
+			"AI Summary": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
 			"Type": notionapi.SelectPropertyConfig{
@@ -144,20 +155,21 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		},
 	}
 
-	// Add excerpt if available
+	// Add excerpt if available (truncated to Notion property limit)
 	if h.Excerpt != "" {
 		properties["Excerpt"] = notionapi.RichTextProperty{
 			Type: notionapi.PropertyTypeRichText,
 			RichText: []notionapi.RichText{
 				{
 					Text: &notionapi.Text{
-						Content: truncateText(h.Excerpt, 2000), // Notion limit
+						Content: truncateText(h.Excerpt, 2000), // Notion property limit
 					},
 				},
 			},
 		}
 	}
 
+	// Create page request (without content blocks - will add separately)
 	pageRequest := &notionapi.PageCreateRequest{
 		Parent: notionapi.Parent{
 			Type:       notionapi.ParentTypeDatabaseID,
@@ -166,9 +178,25 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		Properties: properties,
 	}
 
-	_, err := nc.client.Page.Create(ctx, pageRequest)
+	page, err := nc.client.Page.Create(ctx, pageRequest)
 	if err != nil {
 		return fmt.Errorf("failed to clip headline: %w", err)
+	}
+
+	// Add full content as page blocks if available
+	if h.Excerpt != "" {
+		blocks := createContentBlocks(h.Excerpt)
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Adding %d content blocks to page (total chars: %d)\n", len(blocks), len(h.Excerpt))
+		}
+
+		// Append blocks to the page
+		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
+			Children: blocks,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add content blocks: %w", err)
+		}
 	}
 
 	return nil
@@ -213,6 +241,21 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 		},
 	}
 
+	// Add excerpt if available (truncated to Notion property limit)
+	if rf.Excerpt != "" {
+		properties["Excerpt"] = notionapi.RichTextProperty{
+			Type: notionapi.PropertyTypeRichText,
+			RichText: []notionapi.RichText{
+				{
+					Text: &notionapi.Text{
+						Content: truncateText(rf.Excerpt, 2000), // Notion property limit
+					},
+				},
+			},
+		}
+	}
+
+	// Create page request (without content blocks - will add separately)
 	pageRequest := &notionapi.PageCreateRequest{
 		Parent: notionapi.Parent{
 			Type:       notionapi.ParentTypeDatabaseID,
@@ -221,9 +264,20 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 		Properties: properties,
 	}
 
-	_, err := nc.client.Page.Create(ctx, pageRequest)
+	page, err := nc.client.Page.Create(ctx, pageRequest)
 	if err != nil {
 		return fmt.Errorf("failed to clip related free article: %w", err)
+	}
+
+	// Add full content as page blocks if available
+	if rf.Excerpt != "" {
+		blocks := createContentBlocks(rf.Excerpt)
+		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
+			Children: blocks,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add content blocks: %w", err)
+		}
 	}
 
 	return nil
@@ -253,4 +307,77 @@ func truncateText(text string, maxLen int) string {
 		return text
 	}
 	return text[:maxLen-3] + "..."
+}
+
+// createContentBlocks splits long text into Notion paragraph blocks
+// Notion has a 2000 character limit per block, so we split long text
+func createContentBlocks(content string) notionapi.Blocks {
+	const maxBlockSize = 2000
+	blocks := notionapi.Blocks{}
+
+	// Split by paragraphs first (double newlines)
+	paragraphs := []string{}
+	currentPara := ""
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == "" {
+			if currentPara != "" {
+				paragraphs = append(paragraphs, strings.TrimSpace(currentPara))
+				currentPara = ""
+			}
+		} else {
+			if currentPara != "" {
+				currentPara += "\n"
+			}
+			currentPara += line
+		}
+	}
+	if currentPara != "" {
+		paragraphs = append(paragraphs, strings.TrimSpace(currentPara))
+	}
+
+	// Create blocks, splitting if any paragraph exceeds max size
+	for _, para := range paragraphs {
+		if len(para) <= maxBlockSize {
+			blocks = append(blocks, notionapi.ParagraphBlock{
+				BasicBlock: notionapi.BasicBlock{
+					Type:   notionapi.BlockTypeParagraph,
+					Object: notionapi.ObjectTypeBlock,
+				},
+				Paragraph: notionapi.Paragraph{
+					RichText: []notionapi.RichText{
+						{
+							Text: &notionapi.Text{
+								Content: para,
+							},
+						},
+					},
+				},
+			})
+		} else {
+			// Split long paragraph into chunks
+			for i := 0; i < len(para); i += maxBlockSize {
+				end := i + maxBlockSize
+				if end > len(para) {
+					end = len(para)
+				}
+				blocks = append(blocks, notionapi.ParagraphBlock{
+					BasicBlock: notionapi.BasicBlock{
+						Type:   notionapi.BlockTypeParagraph,
+						Object: notionapi.ObjectTypeBlock,
+					},
+					Paragraph: notionapi.Paragraph{
+						RichText: []notionapi.RichText{
+							{
+								Text: &notionapi.Text{
+									Content: para[i:end],
+								},
+							},
+						},
+					},
+				})
+			}
+		}
+	}
+
+	return blocks
 }

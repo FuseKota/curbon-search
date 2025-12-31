@@ -523,8 +523,8 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 
 // collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
 func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// WordPress REST API endpoint
-	apiURL := fmt.Sprintf("https://carboncredits.jp/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+	// WordPress REST API endpoint - get full content for free articles
+	apiURL := fmt.Sprintf("https://carboncredits.jp/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -555,9 +555,9 @@ func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Hea
 		} `json:"title"`
 		Link    string `json:"link"`
 		Date    string `json:"date"`
-		Excerpt struct {
+		Content struct {
 			Rendered string `json:"rendered"`
-		} `json:"excerpt"`
+		} `json:"content"`
 	}
 
 	var posts []WPPost
@@ -574,17 +574,15 @@ func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Hea
 			continue
 		}
 
-		// Clean up HTML from excerpt
-		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
-		excerpt = strings.TrimSpace(excerpt)
-		// Remove common "read more" patterns
-		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+		// Clean up HTML from full content (free article)
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
 			Source:     "CarbonCredits.jp",
 			Title:      title,
 			URL:        p.Link,
-			Excerpt:    excerpt,
+			Excerpt:    content, // Store full content in Excerpt field for free articles
 			IsHeadline: true,
 		})
 	}
@@ -608,7 +606,7 @@ func cleanHTMLTags(htmlStr string) string {
 
 // collectHeadlinesCarbonHerald collects headlines from carbonherald.com using WordPress REST API
 func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://carbonherald.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+	apiURL := fmt.Sprintf("https://carbonherald.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -638,9 +636,9 @@ func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headli
 		} `json:"title"`
 		Link    string `json:"link"`
 		Date    string `json:"date"`
-		Excerpt struct {
+		Content struct {
 			Rendered string `json:"rendered"`
-		} `json:"excerpt"`
+		} `json:"content"`
 	}
 
 	var posts []WPPost
@@ -657,15 +655,15 @@ func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headli
 			continue
 		}
 
-		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
-		excerpt = strings.TrimSpace(excerpt)
-		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+		// Clean up HTML from full content (free article)
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
 			Source:     "Carbon Herald",
 			Title:      title,
 			URL:        p.Link,
-			Excerpt:    excerpt,
+			Excerpt:    content, // Store full content in Excerpt field for free articles
 			IsHeadline: true,
 		})
 	}
@@ -679,7 +677,7 @@ func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headli
 
 // collectHeadlinesClimateHomeNews collects headlines from climatechangenews.com using WordPress REST API
 func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://www.climatechangenews.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+	apiURL := fmt.Sprintf("https://www.climatechangenews.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -709,9 +707,9 @@ func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Hea
 		} `json:"title"`
 		Link    string `json:"link"`
 		Date    string `json:"date"`
-		Excerpt struct {
+		Content struct {
 			Rendered string `json:"rendered"`
-		} `json:"excerpt"`
+		} `json:"content"`
 	}
 
 	var posts []WPPost
@@ -728,15 +726,15 @@ func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Hea
 			continue
 		}
 
-		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
-		excerpt = strings.TrimSpace(excerpt)
-		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+		// Clean up HTML from full content (free article)
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
 			Source:     "Climate Home News",
 			Title:      title,
 			URL:        p.Link,
-			Excerpt:    excerpt,
+			Excerpt:    content, // Store full content in Excerpt field for free articles
 			IsHeadline: true,
 		})
 	}
@@ -750,7 +748,7 @@ func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Hea
 
 // collectHeadlinesCarbonCreditscom collects headlines from carboncredits.com using WordPress REST API
 func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://carboncredits.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+	apiURL := fmt.Sprintf("https://carboncredits.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -780,9 +778,9 @@ func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]He
 		} `json:"title"`
 		Link    string `json:"link"`
 		Date    string `json:"date"`
-		Excerpt struct {
+		Content struct {
 			Rendered string `json:"rendered"`
-		} `json:"excerpt"`
+		} `json:"content"`
 	}
 
 	var posts []WPPost
@@ -799,15 +797,15 @@ func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]He
 			continue
 		}
 
-		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
-		excerpt = strings.TrimSpace(excerpt)
-		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+		// Clean up HTML from full content (free article)
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
 			Source:     "CarbonCredits.com",
 			Title:      title,
 			URL:        p.Link,
-			Excerpt:    excerpt,
+			Excerpt:    content, // Store full content in Excerpt field for free articles
 			IsHeadline: true,
 		})
 	}

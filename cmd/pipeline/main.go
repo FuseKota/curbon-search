@@ -18,7 +18,7 @@ func main() {
 	var (
 		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 		outFile       = flag.String("out", "", "optional: write matched output JSON to this path (default: stdout)")
-		sources       = flag.String("sources", "carbonpulse,qci", "sources to scrape when --headlines is empty")
+		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com", "sources to scrape when --headlines is empty")
 		perSource     = flag.Int("perSource", 30, "max headlines to collect per source")
 
 		searchPerHeadline = flag.Int("searchPerHeadline", 25, "max candidate results kept per headline")
@@ -33,9 +33,9 @@ func main() {
 		saveFree = flag.String("saveFree", "", "optional: write pooled free candidates to file")
 		// --- new flags for OpenAI ---
 		searchProvider = flag.String("searchProvider", "openai", "search provider: openai|brave")
-		// openaiModel    = flag.String("openaiModel", "gpt-4o-mini", "OpenAI model to use")
-		openaiModel = flag.String("openaiModel", "gpt-5.1", "OpenAI model to use")
-		openaiTool  = flag.String("openaiTool", "web_search", "OpenAI tool type: web_search|web_search_preview")
+		openaiModel    = flag.String("openaiModel", "gpt-4o-mini", "OpenAI model to use")
+		// openaiModel = flag.String("openaiModel", "gpt-5.1", "OpenAI model to use")
+		openaiTool = flag.String("openaiTool", "web_search", "OpenAI tool type: web_search|web_search_preview")
 
 		// --- Notion integration ---
 		notionClip       = flag.Bool("notionClip", false, "clip articles to Notion database")
@@ -77,6 +77,34 @@ func main() {
 			hs, err := collectHeadlinesQCI(*perSource, cfg)
 			if err != nil {
 				fatalf("ERROR collecting QCI headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carboncredits.jp"] {
+			hs, err := collectHeadlinesCarbonCreditsJP(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting CarbonCredits.jp headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carbonherald"] {
+			hs, err := collectHeadlinesCarbonHerald(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Carbon Herald headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["climatehomenews"] {
+			hs, err := collectHeadlinesClimateHomeNews(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Climate Home News headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carboncredits.com"] {
+			hs, err := collectHeadlinesCarbonCreditscom(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting CarbonCredits.com headlines: %v", err)
 			}
 			headlines = append(headlines, hs...)
 		}

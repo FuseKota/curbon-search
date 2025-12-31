@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"html"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -516,4 +519,302 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	}
 
 	return result
+}
+
+// collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
+func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// WordPress REST API endpoint
+	apiURL := fmt.Sprintf("https://carboncredits.jp/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch carboncredits.jp API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("carboncredits.jp API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse JSON response
+	type WPPost struct {
+		Title struct {
+			Rendered string `json:"rendered"`
+		} `json:"title"`
+		Link    string `json:"link"`
+		Date    string `json:"date"`
+		Excerpt struct {
+			Rendered string `json:"rendered"`
+		} `json:"excerpt"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		// Clean up HTML entities from title
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		// Clean up HTML from excerpt
+		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
+		excerpt = strings.TrimSpace(excerpt)
+		// Remove common "read more" patterns
+		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+
+		out = append(out, Headline{
+			Source:     "CarbonCredits.jp",
+			Title:      title,
+			URL:        p.Link,
+			Excerpt:    excerpt,
+			IsHeadline: true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] CarbonCredits.jp: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// cleanHTMLTags removes HTML tags and decodes HTML entities
+func cleanHTMLTags(htmlStr string) string {
+	// Remove HTML tags
+	re := regexp.MustCompile(`<[^>]*>`)
+	text := re.ReplaceAllString(htmlStr, "")
+	// Decode HTML entities (including Japanese characters)
+	text = html.UnescapeString(text)
+	return text
+}
+
+// collectHeadlinesCarbonHerald collects headlines from carbonherald.com using WordPress REST API
+func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://carbonherald.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch carbonherald.com API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("carbonherald.com API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	type WPPost struct {
+		Title struct {
+			Rendered string `json:"rendered"`
+		} `json:"title"`
+		Link    string `json:"link"`
+		Date    string `json:"date"`
+		Excerpt struct {
+			Rendered string `json:"rendered"`
+		} `json:"excerpt"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		// Clean up HTML entities from title
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
+		excerpt = strings.TrimSpace(excerpt)
+		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+
+		out = append(out, Headline{
+			Source:     "Carbon Herald",
+			Title:      title,
+			URL:        p.Link,
+			Excerpt:    excerpt,
+			IsHeadline: true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Carbon Herald: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesClimateHomeNews collects headlines from climatechangenews.com using WordPress REST API
+func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://www.climatechangenews.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch climatechangenews.com API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("climatechangenews.com API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	type WPPost struct {
+		Title struct {
+			Rendered string `json:"rendered"`
+		} `json:"title"`
+		Link    string `json:"link"`
+		Date    string `json:"date"`
+		Excerpt struct {
+			Rendered string `json:"rendered"`
+		} `json:"excerpt"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		// Clean up HTML entities from title
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
+		excerpt = strings.TrimSpace(excerpt)
+		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+
+		out = append(out, Headline{
+			Source:     "Climate Home News",
+			Title:      title,
+			URL:        p.Link,
+			Excerpt:    excerpt,
+			IsHeadline: true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Climate Home News: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCarbonCreditscom collects headlines from carboncredits.com using WordPress REST API
+func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://carboncredits.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,excerpt", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch carboncredits.com API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("carboncredits.com API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	type WPPost struct {
+		Title struct {
+			Rendered string `json:"rendered"`
+		} `json:"title"`
+		Link    string `json:"link"`
+		Date    string `json:"date"`
+		Excerpt struct {
+			Rendered string `json:"rendered"`
+		} `json:"excerpt"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		// Clean up HTML entities from title
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		excerpt := cleanHTMLTags(p.Excerpt.Rendered)
+		excerpt = strings.TrimSpace(excerpt)
+		excerpt = strings.ReplaceAll(excerpt, "&hellip;", "...")
+
+		out = append(out, Headline{
+			Source:     "CarbonCredits.com",
+			Title:      title,
+			URL:        p.Link,
+			Excerpt:    excerpt,
+			IsHeadline: true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] CarbonCredits.com: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
 }

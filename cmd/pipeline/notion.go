@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jomei/notionapi"
 )
@@ -403,4 +404,98 @@ func createContentBlocks(content string) notionapi.Blocks {
 	}
 
 	return blocks
+}
+
+// FetchRecentHeadlines fetches headlines from Notion database
+// Returns headlines created within the last 'daysBack' days with Type="Headline"
+func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int) ([]NotionHeadline, error) {
+	if nc.dbID == "" {
+		return nil, fmt.Errorf("database ID not set")
+	}
+
+	// Calculate cutoff date
+	cutoffDate := time.Now().AddDate(0, 0, -daysBack)
+
+	// Query database with pagination (no filter - will filter in code)
+	var allHeadlines []NotionHeadline
+	var cursor *notionapi.Cursor
+
+	for {
+		query := &notionapi.DatabaseQueryRequest{
+			PageSize: 100,
+		}
+		if cursor != nil {
+			query.StartCursor = *cursor
+		}
+
+		resp, err := nc.client.Database.Query(ctx, nc.dbID, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query database: %w", err)
+		}
+
+		// Process results
+		for _, page := range resp.Results {
+			// Extract Type and filter for "Headline"
+			pageType := ""
+			if typeProp, ok := page.Properties["Type"].(*notionapi.SelectProperty); ok && typeProp.Select.Name != "" {
+				pageType = typeProp.Select.Name
+			}
+
+			// Skip if not a Headline
+			if pageType != "Headline" {
+				continue
+			}
+
+			// Filter by creation date
+			if !page.CreatedTime.After(cutoffDate) {
+				continue
+			}
+
+			// Extract Title
+			title := ""
+			if titleProp, ok := page.Properties["Title"].(*notionapi.TitleProperty); ok && len(titleProp.Title) > 0 {
+				title = titleProp.Title[0].PlainText
+			}
+
+			// Extract URL
+			url := ""
+			if urlProp, ok := page.Properties["URL"].(*notionapi.URLProperty); ok {
+				url = string(urlProp.URL)
+			}
+
+			// Extract Source
+			source := ""
+			if sourceProp, ok := page.Properties["Source"].(*notionapi.SelectProperty); ok && sourceProp.Select.Name != "" {
+				source = sourceProp.Select.Name
+			}
+
+			// Extract AI Summary
+			aiSummary := ""
+			if summaryProp, ok := page.Properties["AI Summary"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
+				// Concatenate all rich text segments
+				for _, rt := range summaryProp.RichText {
+					aiSummary += rt.PlainText
+				}
+			}
+
+			// Extract Created time
+			createdAt := page.CreatedTime.Format(time.RFC3339)
+
+			allHeadlines = append(allHeadlines, NotionHeadline{
+				Title:      title,
+				URL:        url,
+				Source:     source,
+				AISummary:  aiSummary,
+				CreatedAt:  createdAt,
+			})
+		}
+
+		// Check if there are more pages
+		if !resp.HasMore {
+			break
+		}
+		cursor = &resp.NextCursor
+	}
+
+	return allHeadlines, nil
 }

@@ -30,3 +30,12 @@ type RelatedFree struct {
 	Score       float64 `json:"score"`
 	Reason      string  `json:"reason"`
 }
+
+// NotionHeadline: headline fetched from Notion Database for email sending.
+type NotionHeadline struct {
+	Title      string
+	URL        string
+	Source     string
+	AISummary  string
+	CreatedAt  string // RFC3339 format
+}

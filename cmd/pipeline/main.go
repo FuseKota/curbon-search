@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // Pipeline overview:
@@ -15,6 +17,9 @@ import (
 // 2. For each headline, perform OpenAI web search to find related free/primary sources
 // 3. Score + attach relatedFree links
 func main() {
+	// Load .env file if it exists (silently ignore if not found)
+	_ = godotenv.Load()
+
 	var (
 		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 		outFile       = flag.String("out", "", "optional: write matched output JSON to this path (default: stdout)")
@@ -41,8 +46,18 @@ func main() {
 		notionClip       = flag.Bool("notionClip", false, "clip articles to Notion database")
 		notionPageID     = flag.String("notionPageID", "", "parent page ID for creating new Notion database (required for new DB)")
 		notionDatabaseID = flag.String("notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
+
+		// --- Email integration ---
+		sendEmail      = flag.Bool("sendEmail", false, "send headlines summary via email")
+		emailDaysBack  = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
 	)
 	flag.Parse()
+
+	// --- Early exit for email-only mode ---
+	if *sendEmail {
+		handleEmailSend(*emailDaysBack)
+		return
+	}
 
 	// OpenAI API key check (only if search is enabled)
 	if *queriesPerHead > 0 && os.Getenv("OPENAI_API_KEY") == "" {
@@ -275,6 +290,74 @@ func main() {
 		fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
 		fmt.Fprintln(os.Stderr, "========================================")
 	}
+
+}
+
+// handleEmailSend handles email sending flow
+func handleEmailSend(emailDaysBack int) {
+	fmt.Fprintln(os.Stderr, "\n========================================")
+	fmt.Fprintln(os.Stderr, "📧 Sending Email Summary")
+	fmt.Fprintln(os.Stderr, "========================================")
+
+	// Validate environment variables
+	emailFrom := os.Getenv("EMAIL_FROM")
+	emailPassword := os.Getenv("EMAIL_PASSWORD")
+	emailTo := os.Getenv("EMAIL_TO")
+	notionToken := os.Getenv("NOTION_TOKEN")
+	notionDatabaseID := os.Getenv("NOTION_DATABASE_ID")
+
+	if emailFrom == "" {
+		fatalf("ERROR: EMAIL_FROM environment variable is required for email sending")
+	}
+	if emailPassword == "" {
+		fatalf("ERROR: EMAIL_PASSWORD environment variable is required (use Gmail App Password)")
+	}
+	if emailTo == "" {
+		fatalf("ERROR: EMAIL_TO environment variable is required")
+	}
+	if notionToken == "" {
+		fatalf("ERROR: NOTION_TOKEN environment variable is required to fetch headlines")
+	}
+	if notionDatabaseID == "" {
+		fatalf("ERROR: NOTION_DATABASE_ID environment variable is required (run with -notionClip first to create database)")
+	}
+
+	// Create Notion clipper
+	clipper, err := NewNotionClipper(notionToken, notionDatabaseID)
+	if err != nil {
+		fatalf("ERROR creating Notion clipper: %v", err)
+	}
+
+	// Fetch headlines from Notion DB
+	ctx := context.Background()
+	notionHeadlines, err := clipper.FetchRecentHeadlines(ctx, emailDaysBack)
+	if err != nil {
+		fatalf("ERROR fetching headlines from Notion: %v", err)
+	}
+
+	if len(notionHeadlines) == 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  No headlines found in the last %d days\n", emailDaysBack)
+		fmt.Fprintln(os.Stderr, "========================================")
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "Fetched %d headlines from Notion (last %d days)\n", len(notionHeadlines), emailDaysBack)
+
+	// Create email sender
+	sender, err := NewEmailSender(emailFrom, emailPassword, emailTo)
+	if err != nil {
+		fatalf("ERROR creating email sender: %v", err)
+	}
+
+	// Send email
+	if err := sender.SendHeadlinesSummary(ctx, notionHeadlines); err != nil {
+		fatalf("ERROR sending email: %v", err)
+	}
+
+	fmt.Fprintln(os.Stderr, "✅ Email sent successfully")
+	fmt.Fprintf(os.Stderr, "   From: %s\n", emailFrom)
+	fmt.Fprintf(os.Stderr, "   To: %s\n", emailTo)
+	fmt.Fprintln(os.Stderr, "========================================")
 }
 
 func fatalf(format string, args ...any) {

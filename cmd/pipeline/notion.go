@@ -169,16 +169,10 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 				},
 			},
 		}
-		// Also add to AI Summary field (same content as Excerpt for now)
+		// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 		properties["AI Summary"] = notionapi.RichTextProperty{
-			Type: notionapi.PropertyTypeRichText,
-			RichText: []notionapi.RichText{
-				{
-					Text: &notionapi.Text{
-						Content: truncateText(h.Excerpt, 2000), // Notion property limit
-					},
-				},
-			},
+			Type:     notionapi.PropertyTypeRichText,
+			RichText: splitIntoRichTextBlocks(h.Excerpt),
 		}
 	}
 
@@ -266,16 +260,10 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 				},
 			},
 		}
-		// Also add to AI Summary field (same content as Excerpt for now)
+		// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 		properties["AI Summary"] = notionapi.RichTextProperty{
-			Type: notionapi.PropertyTypeRichText,
-			RichText: []notionapi.RichText{
-				{
-					Text: &notionapi.Text{
-						Content: truncateText(rf.Excerpt, 2000), // Notion property limit
-					},
-				},
-			},
+			Type:     notionapi.PropertyTypeRichText,
+			RichText: splitIntoRichTextBlocks(rf.Excerpt),
 		}
 	}
 
@@ -331,6 +319,32 @@ func truncateText(text string, maxLen int) string {
 		return text
 	}
 	return text[:maxLen-3] + "..."
+}
+
+// splitIntoRichTextBlocks splits long text into multiple RichText blocks
+// Each RichText block in Notion property has a 2000 character limit
+func splitIntoRichTextBlocks(text string) []notionapi.RichText {
+	const maxChars = 2000
+	var richTexts []notionapi.RichText
+
+	if len(text) == 0 {
+		return richTexts
+	}
+
+	// Split text into chunks of maxChars
+	for i := 0; i < len(text); i += maxChars {
+		end := i + maxChars
+		if end > len(text) {
+			end = len(text)
+		}
+		richTexts = append(richTexts, notionapi.RichText{
+			Text: &notionapi.Text{
+				Content: text[i:end],
+			},
+		})
+	}
+
+	return richTexts
 }
 
 // createContentBlocks splits long text into Notion paragraph blocks

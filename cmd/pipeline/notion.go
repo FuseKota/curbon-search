@@ -83,12 +83,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 					},
 				},
 			},
-			"Excerpt": notionapi.RichTextPropertyConfig{
-				Type: notionapi.PropertyConfigTypeRichText,
-			},
-			"Content": notionapi.RichTextPropertyConfig{
-				Type: notionapi.PropertyConfigTypeRichText,
-			},
 			"AI Summary": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
@@ -157,19 +151,8 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		},
 	}
 
-	// Add excerpt if available (truncated to Notion property limit)
+	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 	if h.Excerpt != "" {
-		properties["Excerpt"] = notionapi.RichTextProperty{
-			Type: notionapi.PropertyTypeRichText,
-			RichText: []notionapi.RichText{
-				{
-					Text: &notionapi.Text{
-						Content: truncateText(h.Excerpt, 2000), // Notion property limit
-					},
-				},
-			},
-		}
-		// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 		properties["AI Summary"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: splitIntoRichTextBlocks(h.Excerpt),
@@ -248,19 +231,8 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 		},
 	}
 
-	// Add excerpt if available (truncated to Notion property limit)
+	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 	if rf.Excerpt != "" {
-		properties["Excerpt"] = notionapi.RichTextProperty{
-			Type: notionapi.PropertyTypeRichText,
-			RichText: []notionapi.RichText{
-				{
-					Text: &notionapi.Text{
-						Content: truncateText(rf.Excerpt, 2000), // Notion property limit
-					},
-				},
-			},
-		}
-		// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 		properties["AI Summary"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: splitIntoRichTextBlocks(rf.Excerpt),
@@ -311,14 +283,6 @@ func (nc *NotionClipper) ClipHeadlineWithRelated(ctx context.Context, h Headline
 	}
 
 	return nil
-}
-
-// truncateText truncates text to maxLen characters
-func truncateText(text string, maxLen int) string {
-	if len(text) <= maxLen {
-		return text
-	}
-	return text[:maxLen-3] + "..."
 }
 
 // splitIntoRichTextBlocks splits long text into multiple RichText blocks

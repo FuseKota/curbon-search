@@ -579,11 +579,12 @@ func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Hea
 		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
-			Source:     "CarbonCredits.jp",
-			Title:      title,
-			URL:        p.Link,
-			Excerpt:    content, // Store full content in Excerpt field for free articles
-			IsHeadline: true,
+			Source:      "CarbonCredits.jp",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			Excerpt:     content, // Store full content in Excerpt field for free articles
+			IsHeadline:  true,
 		})
 	}
 
@@ -660,11 +661,12 @@ func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headli
 		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
-			Source:     "Carbon Herald",
-			Title:      title,
-			URL:        p.Link,
-			Excerpt:    content, // Store full content in Excerpt field for free articles
-			IsHeadline: true,
+			Source:      "Carbon Herald",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			Excerpt:     content, // Store full content in Excerpt field for free articles
+			IsHeadline:  true,
 		})
 	}
 
@@ -731,11 +733,12 @@ func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Hea
 		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
-			Source:     "Climate Home News",
-			Title:      title,
-			URL:        p.Link,
-			Excerpt:    content, // Store full content in Excerpt field for free articles
-			IsHeadline: true,
+			Source:      "Climate Home News",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			Excerpt:     content, // Store full content in Excerpt field for free articles
+			IsHeadline:  true,
 		})
 	}
 
@@ -802,11 +805,12 @@ func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]He
 		content = strings.TrimSpace(content)
 
 		out = append(out, Headline{
-			Source:     "CarbonCredits.com",
-			Title:      title,
-			URL:        p.Link,
-			Excerpt:    content, // Store full content in Excerpt field for free articles
-			IsHeadline: true,
+			Source:      "CarbonCredits.com",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			Excerpt:     content, // Store full content in Excerpt field for free articles
+			IsHeadline:  true,
 		})
 	}
 

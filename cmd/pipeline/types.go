@@ -6,6 +6,7 @@ type Headline struct {
 	Source        string        `json:"source"`
 	Title         string        `json:"title"`
 	URL           string        `json:"url"`
+	PublishedAt   string        `json:"publishedAt,omitempty"` // RFC3339 format
 	Excerpt       string        `json:"excerpt,omitempty"`     // Free preview text visible without subscription
 	IsHeadline    bool          `json:"isHeadline,omitempty"`
 	SearchQueries []string      `json:"searchQueries,omitempty"`

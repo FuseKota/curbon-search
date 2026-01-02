@@ -101,6 +101,9 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 					Format: notionapi.FormatNumber,
 				},
 			},
+			"Published Date": notionapi.DatePropertyConfig{
+				Type: notionapi.PropertyConfigTypeDate,
+			},
 		},
 	}
 
@@ -149,6 +152,21 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 				Name: "Headline",
 			},
 		},
+	}
+
+	// Add Published Date if available
+	if h.PublishedAt != "" {
+		publishedTime, err := parsePublishedDate(h.PublishedAt)
+		if err == nil {
+			properties["Published Date"] = notionapi.DateProperty{
+				Type: notionapi.PropertyTypeDate,
+				Date: &notionapi.DateObject{
+					Start: (*notionapi.Date)(&publishedTime),
+				},
+			}
+		} else if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse PublishedAt '%s': %v\n", h.PublishedAt, err)
+		}
 	}
 
 	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
@@ -229,6 +247,21 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 			Type:   notionapi.PropertyTypeNumber,
 			Number: rf.Score,
 		},
+	}
+
+	// Add Published Date if available
+	if rf.PublishedAt != "" {
+		publishedTime, err := parsePublishedDate(rf.PublishedAt)
+		if err == nil {
+			properties["Published Date"] = notionapi.DateProperty{
+				Type: notionapi.PropertyTypeDate,
+				Date: &notionapi.DateObject{
+					Start: (*notionapi.Date)(&publishedTime),
+				},
+			}
+		} else if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse PublishedAt '%s': %v\n", rf.PublishedAt, err)
+		}
 	}
 
 	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
@@ -382,6 +415,32 @@ func createContentBlocks(content string) notionapi.Blocks {
 	}
 
 	return blocks
+}
+
+// parsePublishedDate parses published date from various formats
+// WordPress API may return dates without timezone, so we try multiple formats
+func parsePublishedDate(dateStr string) (time.Time, error) {
+	// Try RFC3339 format first (with timezone)
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err == nil {
+		return t, nil
+	}
+
+	// Try format without timezone (assume UTC)
+	// WordPress often returns: "2025-12-26T14:42:50"
+	t, err = time.Parse("2006-01-02T15:04:05", dateStr)
+	if err == nil {
+		// Treat as UTC since no timezone info
+		return t.UTC(), nil
+	}
+
+	// Try ISO 8601 date-only format
+	t, err = time.Parse("2006-01-02", dateStr)
+	if err == nil {
+		return t.UTC(), nil
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
 }
 
 // FetchRecentHeadlines fetches headlines from Notion database

@@ -23,7 +23,7 @@ func main() {
 	var (
 		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 		outFile       = flag.String("out", "", "optional: write matched output JSON to this path (default: stdout)")
-		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com", "sources to scrape when --headlines is empty")
+		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief", "sources to scrape when --headlines is empty")
 		perSource     = flag.Int("perSource", 30, "max headlines to collect per source")
 
 		searchPerHeadline = flag.Int("searchPerHeadline", 25, "max candidate results kept per headline")
@@ -120,6 +120,27 @@ func main() {
 			hs, err := collectHeadlinesCarbonCreditscom(*perSource, cfg)
 			if err != nil {
 				fatalf("ERROR collecting CarbonCredits.com headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["sandbag"] {
+			hs, err := collectHeadlinesSandbag(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Sandbag headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["ecosystem-marketplace"] {
+			hs, err := collectHeadlinesEcosystemMarketplace(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Ecosystem Marketplace headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carbon-brief"] {
+			hs, err := collectHeadlinesCarbonBrief(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Carbon Brief headlines: %v", err)
 			}
 			headlines = append(headlines, hs...)
 		}

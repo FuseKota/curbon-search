@@ -820,3 +820,207 @@ func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]He
 
 	return out, nil
 }
+
+// collectHeadlinesSandbag fetches articles from Sandbag using WordPress REST API
+func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://sandbag.be/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body failed: %w", err)
+	}
+
+	type WPPost struct {
+		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
+		Link    string                                      `json:"link"`
+		Date    string                                      `json:"date"`
+		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("json decode failed: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+
+		// Skip posts without proper title
+		if title == "" {
+			continue
+		}
+
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		out = append(out, Headline{
+			Source:      "Sandbag",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Sandbag: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesEcosystemMarketplace fetches articles from Ecosystem Marketplace using WordPress REST API
+func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://www.ecosystemmarketplace.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body failed: %w", err)
+	}
+
+	type WPPost struct {
+		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
+		Link    string                                      `json:"link"`
+		Date    string                                      `json:"date"`
+		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("json decode failed: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+
+		// Skip posts without proper title
+		if title == "" {
+			continue
+		}
+
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		out = append(out, Headline{
+			Source:      "Ecosystem Marketplace",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Ecosystem Marketplace: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API
+func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	apiURL := fmt.Sprintf("https://www.carbonbrief.org/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body failed: %w", err)
+	}
+
+	type WPPost struct {
+		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
+		Link    string                                      `json:"link"`
+		Date    string                                      `json:"date"`
+		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
+	}
+
+	var posts []WPPost
+	if err := json.Unmarshal(body, &posts); err != nil {
+		return nil, fmt.Errorf("json decode failed: %w", err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+
+		// Skip posts without proper title
+		if title == "" {
+			continue
+		}
+
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		out = append(out, Headline{
+			Source:      "Carbon Brief",
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Carbon Brief: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}

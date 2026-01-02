@@ -23,7 +23,7 @@ func main() {
 	var (
 		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 		outFile       = flag.String("out", "", "optional: write matched output JSON to this path (default: stdout)")
-		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta", "sources to scrape when --headlines is empty")
+		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor", "sources to scrape when --headlines is empty")
 		perSource     = flag.Int("perSource", 30, "max headlines to collect per source")
 
 		searchPerHeadline = flag.Int("searchPerHeadline", 25, "max candidate results kept per headline")
@@ -155,6 +155,13 @@ func main() {
 			hs, err := collectHeadlinesIETA(*perSource, cfg)
 			if err != nil {
 				fatalf("ERROR collecting IETA headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["energy-monitor"] {
+			hs, err := collectHeadlinesEnergyMonitor(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Energy Monitor headlines: %v", err)
 			}
 			headlines = append(headlines, hs...)
 		}

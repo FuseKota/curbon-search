@@ -1230,3 +1230,104 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 
 	return out, nil
 }
+
+// collectHeadlinesEnergyMonitor fetches articles from Energy Monitor using HTML scraping
+func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://www.energymonitor.ai/news/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	// Find article items
+	doc.Find("article").Each(func(_ int, article *goquery.Selection) {
+		if limit > 0 && len(out) >= limit {
+			return
+		}
+
+		// Extract title and URL from h3 > a
+		linkElem := article.Find("h3 a")
+		title := strings.TrimSpace(linkElem.Text())
+		if title == "" {
+			return
+		}
+
+		href, exists := linkElem.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		// Fetch full article content
+		content := ""
+		publishedAt := ""
+		if articleURL != "" {
+			articleReq, err := http.NewRequest("GET", articleURL, nil)
+			if err == nil {
+				articleReq.Header.Set("User-Agent", cfg.UserAgent)
+				articleResp, err := client.Do(articleReq)
+				if err == nil && articleResp.StatusCode == http.StatusOK {
+					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+					articleResp.Body.Close()
+					if err == nil {
+						// Try to find content
+						bodyElem := articleDoc.Find("article .entry-content, article .article-content, .post-content, .content").First()
+						content = strings.TrimSpace(bodyElem.Text())
+
+						// Try to find published date
+						timeElem := articleDoc.Find("time")
+						datetime, exists := timeElem.Attr("datetime")
+						if exists {
+							publishedAt = datetime
+						}
+					}
+				}
+			}
+		}
+
+		out = append(out, Headline{
+			Source:      "Energy Monitor",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: publishedAt,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Energy Monitor headlines found")
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Energy Monitor: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}

@@ -1024,3 +1024,209 @@ func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headlin
 
 	return out, nil
 }
+
+// collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
+func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://icapcarbonaction.com/en/news"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article.news-embed-grid").Each(func(_ int, article *goquery.Selection) {
+		if limit > 0 && len(out) >= limit {
+			return
+		}
+
+		// Extract title
+		titleElem := article.Find("h3.content-title a.link-title span")
+		title := strings.TrimSpace(titleElem.Text())
+		if title == "" {
+			return
+		}
+
+		// Extract URL
+		linkElem := article.Find("a.link-title")
+		href, exists := linkElem.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		// Extract date
+		timeElem := article.Find("time")
+		datetime, _ := timeElem.Attr("datetime")
+
+		// Fetch full article content
+		content := ""
+		if articleURL != "" {
+			articleReq, err := http.NewRequest("GET", articleURL, nil)
+			if err == nil {
+				articleReq.Header.Set("User-Agent", cfg.UserAgent)
+				articleResp, err := client.Do(articleReq)
+				if err == nil && articleResp.StatusCode == http.StatusOK {
+					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+					articleResp.Body.Close()
+					if err == nil {
+						bodyElem := articleDoc.Find("div.field-body")
+						content = strings.TrimSpace(bodyElem.Text())
+					}
+				}
+			}
+		}
+
+		out = append(out, Headline{
+			Source:      "ICAP",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: datetime,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no ICAP headlines found")
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] ICAP: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesIETA fetches articles from IETA using HTML scraping
+func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	homeURL := "https://www.ieta.org/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", homeURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	// Find news items - look for card-body containers
+	doc.Find("div.card-body").Each(func(_ int, cardBody *goquery.Selection) {
+		if limit > 0 && len(out) >= limit {
+			return
+		}
+
+		// Extract title
+		titleElem := cardBody.Find("h3.news-title")
+		title := strings.TrimSpace(titleElem.Text())
+		if title == "" {
+			return
+		}
+
+		// Extract date (within the same card-body)
+		dateElem := cardBody.Find("div.resource-date")
+		dateStr := strings.TrimSpace(dateElem.Text())
+
+		// Extract URL (sibling a.link-cover - need to go up to parent container)
+		parent := cardBody.Parent()
+		linkElem := parent.Find("a.link-cover")
+		href, exists := linkElem.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(homeURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		// Parse date to RFC3339 format
+		publishedAt := ""
+		if dateStr != "" {
+			// Try to parse "Dec 18, 2025" format
+			t, err := time.Parse("Jan 2, 2006", dateStr)
+			if err == nil {
+				publishedAt = t.Format(time.RFC3339)
+			}
+		}
+
+		// Fetch full article content
+		content := ""
+		if articleURL != "" {
+			articleReq, err := http.NewRequest("GET", articleURL, nil)
+			if err == nil {
+				articleReq.Header.Set("User-Agent", cfg.UserAgent)
+				articleResp, err := client.Do(articleReq)
+				if err == nil && articleResp.StatusCode == http.StatusOK {
+					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+					articleResp.Body.Close()
+					if err == nil {
+						// Try common content selectors
+						bodyElem := articleDoc.Find("article, .content, .post-content, .entry-content").First()
+						content = strings.TrimSpace(bodyElem.Text())
+					}
+				}
+			}
+		}
+
+		out = append(out, Headline{
+			Source:      "IETA",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: publishedAt,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no IETA headlines found")
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] IETA: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}

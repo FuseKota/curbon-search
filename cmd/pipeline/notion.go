@@ -81,6 +81,8 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 						{Name: "Sandbag", Color: notionapi.ColorBlue},
 						{Name: "Ecosystem Marketplace", Color: notionapi.ColorGreen},
 						{Name: "Carbon Brief", Color: notionapi.ColorPurple},
+						{Name: "ICAP", Color: notionapi.ColorRed},
+						{Name: "IETA", Color: notionapi.ColorBrown},
 						{Name: "OpenAI(text_extract)", Color: notionapi.ColorGray},
 						{Name: "Free Article", Color: notionapi.ColorDefault},
 					},

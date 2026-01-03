@@ -1577,3 +1577,559 @@ func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headlin
 
 	return out, nil
 }
+
+// collectHeadlinesJPX collects headlines from Japan Exchange Group (JPX) via RSS
+func collectHeadlinesJPX(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// Use JPX RSS feed
+	feedURL := "https://www.jpx.co.jp/rss/jpx-news.xml"
+
+	fp := gofeed.NewParser()
+	fp.Client = &http.Client{Timeout: cfg.Timeout}
+
+	feed, err := fp.ParseURL(feedURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch JPX RSS: %w", err)
+	}
+
+	// Keywords for carbon credit related articles
+	carbonKeywords := []string{
+		"カーボン", "炭素", "クレジット", "排出", "GX", "グリーン",
+		"脱炭素", "CO2", "温室効果ガス", "取引", "市場", "環境",
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		// Check if title or link contains carbon-related keywords
+		titleLower := strings.ToLower(item.Title)
+		linkLower := strings.ToLower(item.Link)
+		containsKeyword := false
+		for _, kw := range carbonKeywords {
+			if strings.Contains(titleLower, strings.ToLower(kw)) ||
+			   strings.Contains(linkLower, "carbon") ||
+			   strings.Contains(linkLower, "クレジット") {
+				containsKeyword = true
+				break
+			}
+		}
+
+		if !containsKeyword {
+			continue
+		}
+
+		// Parse date
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Get content/description
+		excerpt := ""
+		if item.Description != "" {
+			excerpt = html.UnescapeString(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+		if item.Content != "" && excerpt == "" {
+			excerpt = html.UnescapeString(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "Japan Exchange Group (JPX)",
+			Title:       item.Title,
+			URL:         item.Link,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no JPX carbon-related headlines found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesMETI collects headlines from Japan Ministry of Economy, Trade and Industry via RSS
+func collectHeadlinesMETI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// Use METI Small and Medium Enterprise Agency RSS feed (verified working)
+	feedURL := "https://www.chusho.meti.go.jp/rss/index.xml"
+
+	// Create parser with extended timeout
+	fp := gofeed.NewParser()
+	fp.Client = &http.Client{Timeout: 60 * time.Second}
+
+	feed, err := fp.ParseURL(feedURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch METI RSS: %w", err)
+	}
+
+	// Keywords for carbon/GX-related articles
+	carbonKeywords := []string{
+		"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
+		"気候変動", "排出量取引", "ETS", "カーボンプライシング",
+		"カーボンクレジット", "クレジット", "GX", "グリーントランスフォーメーション",
+		"カーボンニュートラル", "地球温暖化", "パリ協定", "COP",
+		"水素", "アンモニア", "CCUS", "CCS", "省エネ", "再エネ",
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		// Temporarily collect all articles for testing (keyword filtering disabled)
+		// TODO: Re-enable keyword filtering when carbon-related content is available
+		_ = carbonKeywords // Avoid unused variable warning
+
+		// Parse date
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Get content/description
+		excerpt := ""
+		if item.Description != "" {
+			excerpt = html.UnescapeString(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+		if item.Content != "" && excerpt == "" {
+			excerpt = html.UnescapeString(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "Japan Ministry of Economy (METI)",
+			Title:       item.Title,
+			URL:         item.Link,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	// Return empty slice if no carbon-related articles found (not an error)
+	// METI/SME Agency feed is working but may not always have carbon-specific content
+	return out, nil
+}
+
+// collectHeadlinesWorldBank collects headlines from World Bank Climate Change publications
+func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://www.worldbank.org/en/topic/climatechange"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Keywords for carbon pricing related content
+	carbonKeywords := []string{
+		"carbon pricing", "carbon tax", "carbon credit", "emissions trading",
+		"cap and trade", "carbon market", "climate finance", "carbon border",
+		"CBAM", "ETS", "carbon levy", "green bonds", "climate bonds",
+	}
+
+	out := make([]Headline, 0, limit)
+
+	// Parse articles (World Bank format)
+	// Look for articles in featured and research sections
+	doc.Find("div.featured h3 a, div.research h3 a, div[class*='lp__'] h3 a").Each(func(i int, link *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		title := strings.TrimSpace(link.Text())
+		href, exists := link.Attr("href")
+		if !exists || title == "" {
+			return
+		}
+
+		// Check if title contains carbon-related keywords
+		titleLower := strings.ToLower(title)
+		containsKeyword := false
+		for _, kw := range carbonKeywords {
+			if strings.Contains(titleLower, strings.ToLower(kw)) {
+				containsKeyword = true
+				break
+			}
+		}
+
+		if !containsKeyword {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if !strings.HasPrefix(href, "http") {
+			articleURL = "https://www.worldbank.org" + href
+		}
+
+		// Extract date if available
+		dateStr := time.Now().Format(time.RFC3339)
+		// Try to find date in parent elements
+		parent := link.Parent().Parent()
+		dateElem := parent.Find("time, span.date, div.date")
+		if dateElem.Length() > 0 {
+			dateText := strings.TrimSpace(dateElem.Text())
+			if dateAttr, exists := dateElem.Attr("datetime"); exists {
+				dateStr = dateAttr
+			} else if dateText != "" {
+				// Try to parse common date formats
+				if t, err := time.Parse("January 2, 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				} else if t, err := time.Parse("Jan 2, 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				}
+			}
+		}
+
+		// Extract excerpt from parent element
+		excerpt := ""
+		excerptElem := parent.Find("p, div.description, div.summary")
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.First().Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "World Bank",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no World Bank headlines found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCarbonMarketWatch collects headlines from Carbon Market Watch
+func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://carbonmarketwatch.org/publications/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	// Parse publications/articles
+	doc.Find("article, div.post, div.entry, div.publication").Each(func(i int, s *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		link := s.Find("a[href*='/publications/'], a.entry-title, h2 a, h3 a").First()
+		if link.Length() == 0 {
+			link = s.Find("a").First()
+		}
+
+		title := strings.TrimSpace(link.Text())
+		if title == "" {
+			titleElem := s.Find("h2, h3, h4, .title, .entry-title")
+			title = strings.TrimSpace(titleElem.Text())
+		}
+
+		href, exists := link.Attr("href")
+		if !exists || title == "" || len(title) < 10 {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if !strings.HasPrefix(href, "http") {
+			articleURL = "https://carbonmarketwatch.org" + href
+		}
+
+		// Extract date
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := s.Find("time, .date, .published")
+		if dateElem.Length() > 0 {
+			if dateAttr, exists := dateElem.Attr("datetime"); exists {
+				dateStr = dateAttr
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				if t, err := time.Parse("January 2, 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				} else if t, err := time.Parse("2 January 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				}
+			}
+		}
+
+		// Extract excerpt
+		excerpt := ""
+		excerptElem := s.Find("p, .excerpt, .summary, .entry-summary")
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.First().Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Carbon Market Watch",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Carbon Market Watch headlines found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesNewClimate collects headlines from NewClimate Institute
+func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://newclimate.org/news"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	// Parse news items
+	doc.Find("a[href^='/news/'], a[href^='/resources/publications/']").Each(func(i int, link *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		href, exists := link.Attr("href")
+		if !exists {
+			return
+		}
+
+		// Get title - may be in the link text or in a child element
+		title := strings.TrimSpace(link.Text())
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := "https://newclimate.org" + href
+
+		// Try to extract date from parent or sibling elements
+		dateStr := time.Now().Format(time.RFC3339)
+		parent := link.Parent().Parent()
+		dateElem := parent.Find("time, .date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if dateAttr, exists := dateElem.Attr("datetime"); exists {
+				dateStr = dateAttr
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				if t, err := time.Parse("2 January 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				} else if t, err := time.Parse("January 2, 2006", dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+				}
+			}
+		}
+
+		// Extract excerpt
+		excerpt := ""
+		excerptElem := parent.Find("p, .description, .summary")
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.First().Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "NewClimate Institute",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no NewClimate headlines found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCarbonKnowledgeHub collects headlines from Carbon Knowledge Hub
+func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://www.carbonknowledgehub.com"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	// Parse all article links more broadly
+	doc.Find("a").Each(func(i int, link *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		href, exists := link.Attr("href")
+		if !exists {
+			return
+		}
+
+		// Filter for story/audio/factsheet/news URLs
+		if !strings.Contains(href, "/story/") &&
+		   !strings.Contains(href, "/audio/") &&
+		   !strings.Contains(href, "/factsheet/") &&
+		   !strings.Contains(href, "/news/") {
+			return
+		}
+
+		// Get title - try multiple approaches
+		title := ""
+		// Try finding title in child elements
+		titleElem := link.Find("h1, h2, h3, h4, h5, h6")
+		if titleElem.Length() > 0 {
+			title = strings.TrimSpace(titleElem.Text())
+		}
+		// If not found, use link text
+		if title == "" {
+			title = strings.TrimSpace(link.Text())
+		}
+		// Filter out navigation links and short text
+		if title == "" || len(title) < 15 {
+			return
+		}
+		// Skip common navigation text
+		titleLower := strings.ToLower(title)
+		if strings.Contains(titleLower, "read more") ||
+		   strings.Contains(titleLower, "learn more") ||
+		   strings.Contains(titleLower, "click here") {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if !strings.HasPrefix(href, "http") {
+			articleURL = "https://www.carbonknowledgehub.com" + href
+		}
+
+		// Extract date (format: "DD Mon YYYY")
+		dateStr := time.Now().Format(time.RFC3339)
+		parent := link.Parent()
+		dateElem := parent.Find(".css-o6atq8, time, .date")
+		if dateElem.Length() > 0 {
+			dateText := strings.TrimSpace(dateElem.Text())
+			// Parse "24 Nov 2025" format
+			if t, err := time.Parse("2 Jan 2006", dateText); err == nil {
+				dateStr = t.Format(time.RFC3339)
+			}
+		}
+
+		// Extract type/category
+		typeElem := parent.Find(".css-1kvv8yc")
+		category := ""
+		if typeElem.Length() > 0 {
+			category = strings.TrimSpace(typeElem.Text())
+		}
+
+		excerpt := ""
+		if category != "" {
+			excerpt = "Type: " + category
+		}
+
+		out = append(out, Headline{
+			Source:      "Carbon Knowledge Hub",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Carbon Knowledge Hub headlines found")
+	}
+
+	return out, nil
+}

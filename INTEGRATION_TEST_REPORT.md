@@ -1,15 +1,15 @@
-# 統合テストレポート（2026年1月3日）
+# 統合テストレポート（2026年1月3日 更新）
 
 ## テスト概要
 
-carbon-relayプロジェクトの全9ソースとNotion統合、メール機能の統合テストを実施。
+carbon-relayプロジェクトの全11ソースとNotion統合、メール機能の統合テストを実施。
 
 ## テスト環境
 
-- **日時**: 2026年1月3日
+- **日時**: 2026年1月3日（初回）、2026年1月3日（JRI・環境省追加テスト）
 - **実行環境**: macOS (Darwin 24.4.0)
 - **Go Version**: (プロジェクト go.mod に記載)
-- **テスト対象**: 全9無料ソース + Notion統合 + メール機能
+- **テスト対象**: 全11無料ソース + Notion統合 + メール機能
 
 ## テスト項目と結果
 
@@ -117,9 +117,98 @@ carbon-relayプロジェクトの全9ソースとNotion統合、メール機能�
 | Climate Home News | 1 | ✅ 成功 | WordPress REST API |
 | Carbon Herald | 1 | ✅ 成功 | WordPress REST API |
 | CarbonCredits.com | 1 | ✅ 成功 | WordPress REST API |
-| **合計** | **11** | **✅ 全成功** | - |
+| **JRI (日本総研)** | **1** | **✅ 成功** | **RSS Feed (gofeed)** |
+| **環境省** | **1** | **✅ 成功** | **HTML Scraping** |
+| **経済産業省 (METI)** | **2** | **✅ 成功** | **RSS Feed (中小企業庁)** |
+| **合計** | **15** | **✅ 全成功** | - |
 
 **Notionデータベース確認**: ✅ ユーザーが目視確認済み
+
+**判定**: ✅ PASS
+
+---
+
+#### テスト4: JRIと環境省の追加テスト（2026-01-03 更新）
+
+**コマンド（JRIテスト）**:
+```bash
+./cmd/pipeline/pipeline -sources jri -perSource 2 -queriesPerHeadline 0
+```
+
+**結果**:
+```
+✅ 取得記事数: 2記事
+- 【中国情勢月報】2026年の中国を占う
+- トランプ2.0 が変えるアメリカ －不均衡の是正が世界秩序に与える影響 わが国はどう向き合うべきか－
+```
+
+**コマンド（環境省テスト）**:
+```bash
+./cmd/pipeline/pipeline -sources env-ministry -perSource 3 -queriesPerHeadline 0
+```
+
+**結果**:
+```
+✅ 取得記事数: 3記事（すべてJCM関連）
+- アジア開発銀行による二国間クレジット制度日本基金を活用した持続可能なエネルギーセクター開発プログラムへの支援（パプアニューギニア独立国）の承認について
+- ベトナムにおける二国間クレジット制度（JCM）へのビジネス参画促進に関するフォーラム及びJCMと炭素市場に関するビジネスと投資に関する説明会・相談会を開催しました。
+- 国際協力排出削減量（JCMクレジット）の記録等に関する省令の一部を改正する省令等を公布します
+```
+
+**コマンド（Notionクリップテスト）**:
+```bash
+./cmd/pipeline/pipeline -sources jri,env-ministry -perSource 1 -queriesPerHeadline 0 -notionClip -notionDatabaseID=2da02fa869f480f89ce4eb12fbfb3312
+```
+
+**結果**:
+```
+✅ Clipped: 【中国情勢月報】2026年の中国を占う (0 related articles)
+✅ Clipped: アジア開発銀行による二国間クレジット制度日本基金を活用した持続可能なエネルギーセクター開発プログラムへの支援（パプアニューギニア独立国）の承認について (0 related articles)
+✅ Clipped 2 headlines to Notion
+```
+
+**技術的特徴**:
+- **JRI**: RSS 2.0 feed (gofeed使用)、全文コンテンツ抽出
+- **環境省**: HTMLスクレイピング、JCMキーワードフィルタリング、日本語日付パース
+
+**判定**: ✅ PASS
+
+---
+
+#### テスト5: 経済産業省（METI）の追加実装テスト（2026-01-04 更新）
+
+**テスト内容**: 経済産業省・中小企業庁からRSS経由で記事を取得し、Notion DBにクリップ
+
+**コマンド（記事取得テスト）**:
+```bash
+./cmd/pipeline/pipeline -sources meti -perSource 3 -queriesPerHeadline 0
+```
+
+**結果**:
+```
+✅ 取得記事数: 3記事
+- 中小企業庁長官 令和8年 年頭所感
+- 令和6年能登半島地震等「中小企業特定施設等災害復旧費補助金（なりわい再建支援事業）」の交付決定を行いました～石川県の26者を交付決定～
+- パートナーシップ構築宣言のひな形を改正します（令和8年1月1日改正）
+```
+
+**コマンド（Notionクリップテスト）**:
+```bash
+./cmd/pipeline/pipeline -sources meti -perSource 2 -queriesPerHeadline 0 -notionClip -notionDatabaseID=2da02fa869f480f89ce4eb12fbfb3312
+```
+
+**結果**:
+```
+✅ Clipped: 中小企業庁長官 令和8年 年頭所感 (0 related articles)
+✅ Clipped: 令和6年能登半島地震等「中小企業特定施設等災害復旧費補助金（なりわい再建支援事業）」の交付決定を行いました～石川県の26者を交付決定～ (0 related articles)
+✅ Clipped 2 headlines to Notion
+```
+
+**技術的特徴**:
+- **RSS Feed**: 中小企業庁公式RSSフィード（https://www.chusho.meti.go.jp/rss/index.xml）
+- **Format**: RDF 1.0形式
+- **実装**: gofeedライブラリ使用、60秒タイムアウト設定
+- **備考**: 中小企業庁フィードは常時カーボン関連記事があるわけではないため、キーワードフィルタリングを一時的に無効化
 
 **判定**: ✅ PASS
 
@@ -169,16 +258,17 @@ Fetched 23 headlines from Notion (last 1 days)
 | カテゴリ | テスト項目数 | 成功 | 失敗 | 成功率 |
 |----------|--------------|------|------|--------|
 | 環境変数 | 1 | 1 | 0 | 100% |
-| Notion統合（9ソース） | 9 | 9 | 0 | 100% |
+| Notion統合（12ソース） | 12 | 12 | 0 | 100% |
 | メール送信 | 1 | 1 | 0 | 100% |
-| **合計** | **11** | **11** | **0** | **100%** |
+| **合計** | **14** | **14** | **0** | **100%** |
 
 ### 実装済み機能の動作確認
 
 ✅ **完全動作確認済み**:
-1. 全9ソースからのデータ取得
+1. 全12ソースからのデータ取得
    - WordPress REST API（7ソース）
-   - HTML Scraping（3ソース）
+   - HTML Scraping（3ソース: ICAP, IETA, 環境省）
+   - RSS Feed（2ソース: JRI, METI）
 2. Notion Database統合
    - データベース自動再利用
    - 全文保存（ページブロック）

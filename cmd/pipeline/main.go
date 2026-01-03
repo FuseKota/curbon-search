@@ -179,6 +179,48 @@ func main() {
 			}
 			headlines = append(headlines, hs...)
 		}
+		if want["jpx"] {
+			hs, err := collectHeadlinesJPX(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting JPX headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["meti"] {
+			hs, err := collectHeadlinesMETI(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting METI headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["world-bank"] {
+			hs, err := collectHeadlinesWorldBank(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting World Bank headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carbon-market-watch"] {
+			hs, err := collectHeadlinesCarbonMarketWatch(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Carbon Market Watch headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["newclimate"] {
+			hs, err := collectHeadlinesNewClimate(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting NewClimate headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
+		if want["carbon-knowledge-hub"] {
+			hs, err := collectHeadlinesCarbonKnowledgeHub(*perSource, cfg)
+			if err != nil {
+				fatalf("ERROR collecting Carbon Knowledge Hub headlines: %v", err)
+			}
+			headlines = append(headlines, hs...)
+		}
 		headlines = uniqueHeadlinesByURL(headlines)
 	}
 

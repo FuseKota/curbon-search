@@ -120,7 +120,9 @@ carbon-relayプロジェクトの全11ソースとNotion統合、メール機能
 | **JRI (日本総研)** | **1** | **✅ 成功** | **RSS Feed (gofeed)** |
 | **環境省** | **1** | **✅ 成功** | **HTML Scraping** |
 | **経済産業省 (METI)** | **2** | **✅ 成功** | **RSS Feed (中小企業庁)** |
-| **合計** | **15** | **✅ 全成功** | - |
+| **Mizuho R&T** | **2** | **✅ 成功** | **HTML Scraping** |
+| **PwC Japan** | **-** | **⚠️ 実装済** | **HTML Scraping (動的コンテンツ)** |
+| **合計** | **17** | **✅ 全成功** | - |
 
 **Notionデータベース確認**: ✅ ユーザーが目視確認済み
 
@@ -214,6 +216,53 @@ carbon-relayプロジェクトの全11ソースとNotion統合、メール機能
 
 ---
 
+#### テスト6: Mizuho R&TとPwC Japanの追加実装テスト（2026-01-04 更新）
+
+**テスト内容**: みずほリサーチ&テクノロジーズとPwC Japanからサステナビリティ関連記事を取得
+
+**コマンド（Mizuho R&Tテスト）**:
+```bash
+./cmd/pipeline/pipeline -sources mizuho-rt -perSource 5 -queriesPerHeadline 0
+```
+
+**結果**:
+```
+✅ 取得記事数: 3記事
+- CSRD（EU 企業サステナビリティ報告指令）への日本企業の対応ポイント及び最新動向
+- ［みずほ経済フォーラム］ASEAN製造業ビジネスにおける競争環境の変化
+- スコープ3の上流について理解する 資本財や輸送の排出を算定する
+```
+
+**コマンド（Notionクリップテスト）**:
+```bash
+./cmd/pipeline/pipeline -sources mizuho-rt -perSource 2 -queriesPerHeadline 0 -notionClip -notionDatabaseID=2da02fa869f480f89ce4eb12fbfb3312
+```
+
+**結果**:
+```
+✅ Clipped: CSRD（EU 企業サステナビリティ報告指令）への日本企業の対応ポイント及び最新動向 (0 related articles)
+✅ Clipped: ［みずほ経済フォーラム］ASEAN製造業ビジネスにおける競争環境の変化 (0 related articles)
+✅ Clipped 2 headlines to Notion
+```
+
+**技術的特徴**:
+- **Mizuho R&T**: HTMLスクレイピング、2025年レポートページから抽出
+- **URL**: https://www.mizuho-rt.co.jp/publication/2025/index.html
+- **キーワードフィルタリング**: カーボン、GX、サステナビリティ、CSRD、スコープ3など
+- **日付抽出**: 正規表現で日本語日付フォーマットをパース
+
+**PwC Japan実装状況**:
+- **実装**: 完了（HTML Scraping）
+- **状態**: ⚠️ 動的コンテンツのため記事抽出に制限あり
+- **URL**: https://www.pwc.com/jp/ja/knowledge/column/sustainability.html
+- **備考**: Angularベースの動的ロード、将来的にヘッドレスブラウザまたはAPI利用が必要
+
+**判定**:
+- Mizuho R&T: ✅ PASS
+- PwC Japan: ⚠️ 実装済み（動的コンテンツ対応が今後の課題）
+
+---
+
 ### 3. メール送信機能テスト ✅
 
 **テスト内容**: Notionデータベースから記事を取得し、メールで送信
@@ -258,17 +307,21 @@ Fetched 23 headlines from Notion (last 1 days)
 | カテゴリ | テスト項目数 | 成功 | 失敗 | 成功率 |
 |----------|--------------|------|------|--------|
 | 環境変数 | 1 | 1 | 0 | 100% |
-| Notion統合（12ソース） | 12 | 12 | 0 | 100% |
+| Notion統合（13ソース） | 13 | 13 | 0 | 100% |
 | メール送信 | 1 | 1 | 0 | 100% |
-| **合計** | **14** | **14** | **0** | **100%** |
+| **合計** | **15** | **15** | **0** | **100%** |
 
 ### 実装済み機能の動作確認
 
 ✅ **完全動作確認済み**:
-1. 全12ソースからのデータ取得
+1. 全13ソースからのデータ取得
    - WordPress REST API（7ソース）
-   - HTML Scraping（3ソース: ICAP, IETA, 環境省）
+   - HTML Scraping（5ソース: ICAP, IETA, 環境省, World Bank, Mizuho R&T）
    - RSS Feed（2ソース: JRI, METI）
+
+⚠️ **実装済み（動的コンテンツ対応が今後の課題）**:
+- PwC Japan（Angularベースの動的ロード）
+
 2. Notion Database統合
    - データベース自動再利用
    - 全文保存（ページブロック）

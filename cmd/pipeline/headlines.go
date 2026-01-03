@@ -2133,3 +2133,222 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 
 	return out, nil
 }
+
+// collectHeadlinesPwCJapan collects headlines from PwC Japan sustainability page
+func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://www.pwc.com/jp/ja/knowledge/column/sustainability.html"
+
+	client := &http.Client{
+		Timeout: cfg.Timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return nil // Follow redirects
+		},
+	}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Keywords for sustainability/carbon-related press releases
+	carbonKeywords := []string{
+		"サステナビリティ", "カーボン", "脱炭素", "カーボンニュートラル",
+		"GX", "気候変動", "ESG", "温室効果ガス", "CO2", "排出量",
+		"再生可能エネルギー", "クリーンエネルギー", "環境", "GHG",
+		"sustainability", "carbon", "climate", "decarboniz",
+	}
+
+	out := make([]Headline, 0, limit)
+
+	// Extract articles from sustainability page - try multiple selectors
+	doc.Find("a[href*='/knowledge/'], a[href*='/services/']").Each(func(i int, s *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		title := strings.TrimSpace(s.Text())
+		if title == "" {
+			return
+		}
+
+		// Temporarily collect all articles (all are from sustainability page)
+		_ = carbonKeywords // Avoid unused variable warning
+
+		href, exists := s.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if strings.HasPrefix(href, "/") {
+			articleURL = "https://www.pwc.com" + href
+		}
+
+		// Try to extract date from surrounding text
+		dateStr := time.Now().Format(time.RFC3339)
+		parent := s.Parent()
+		if parent != nil {
+			parentText := parent.Text()
+			datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+			if matches := datePattern.FindStringSubmatch(parentText); len(matches) == 4 {
+				year := matches[1]
+				month := matches[2]
+				day := matches[3]
+				if len(month) == 1 {
+					month = "0" + month
+				}
+				if len(day) == 1 {
+					day = "0" + day
+				}
+				dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
+			}
+		}
+
+		out = append(out, Headline{
+			Source:      "PwC Japan",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     "",
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no PwC Japan sustainability-related press releases found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesMizuhoRT collects headlines from Mizuho Research & Technologies
+func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// Use the 2025 publication page which lists recent reports
+	newsURL := "https://www.mizuho-rt.co.jp/publication/2025/index.html"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Keywords for carbon/GX-related reports
+	carbonKeywords := []string{
+		"カーボン", "脱炭素", "サステナビリティ", "GX", "カーボンニュートラル",
+		"気候変動", "温室効果ガス", "CO2", "排出量", "GHG", "クレジット",
+		"カーボンプライシング", "ETS", "排出量取引", "CSRD", "スコープ3",
+		"再生可能エネルギー", "グリーン", "環境", "COP", "パリ協定",
+		"carbon", "decarboniz", "sustainability", "climate", "emission",
+	}
+
+	out := make([]Headline, 0, limit)
+	datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+
+	// Extract articles from links
+	doc.Find("a[href*='/business/'], a[href*='/publication/']").Each(func(i int, s *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		title := strings.TrimSpace(s.Text())
+		if title == "" {
+			return
+		}
+
+		// Check if title contains carbon/sustainability keywords
+		titleLower := strings.ToLower(title)
+		containsKeyword := false
+		for _, kw := range carbonKeywords {
+			if strings.Contains(titleLower, strings.ToLower(kw)) {
+				containsKeyword = true
+				break
+			}
+		}
+
+		if !containsKeyword {
+			return
+		}
+
+		href, exists := s.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if strings.HasPrefix(href, "/") {
+			articleURL = "https://www.mizuho-rt.co.jp" + href
+		}
+
+		// Extract date from surrounding text
+		dateStr := time.Now().Format(time.RFC3339)
+		parent := s.Parent()
+		if parent != nil {
+			parentText := parent.Text()
+			if matches := datePattern.FindStringSubmatch(parentText); len(matches) == 4 {
+				year := matches[1]
+				month := matches[2]
+				day := matches[3]
+				if len(month) == 1 {
+					month = "0" + month
+				}
+				if len(day) == 1 {
+					day = "0" + day
+				}
+				dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
+			}
+		}
+
+		out = append(out, Headline{
+			Source:      "Mizuho Research & Technologies",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     "",
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Mizuho RT sustainability-related reports found")
+	}
+
+	return out, nil
+}

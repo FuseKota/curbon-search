@@ -92,6 +92,8 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 						{Name: "Carbon Market Watch", Color: notionapi.ColorPurple},
 						{Name: "NewClimate Institute", Color: notionapi.ColorGreen},
 						{Name: "Carbon Knowledge Hub", Color: notionapi.ColorOrange},
+						{Name: "PwC Japan", Color: notionapi.ColorPink},
+						{Name: "Mizuho Research & Technologies", Color: notionapi.ColorBlue},
 						{Name: "OpenAI(text_extract)", Color: notionapi.ColorGray},
 						{Name: "Free Article", Color: notionapi.ColorDefault},
 					},

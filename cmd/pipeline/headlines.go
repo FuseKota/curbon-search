@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mmcdole/gofeed"
 )
 
 func min2(a, b int) int {
@@ -1327,6 +1328,251 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Energy Monitor: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesJRI collects headlines from Japan Research Institute RSS feed
+func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	rssURL := "https://www.jri.co.jp/xml.jsp?id=12966"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", rssURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	// Parse RSS feed
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in RSS feed")
+	}
+
+	// Filter for carbon/climate related articles (optional)
+	carbonKeywords := []string{
+		"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
+		"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
+		"カーボンクレジット", "クレジット市場", "carbon", "climate",
+	}
+
+	out := make([]Headline, 0, limit)
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		// Check if title contains carbon-related keywords
+		title := item.Title
+		_ = carbonKeywords // unused for now
+		// titleLower := strings.ToLower(title)
+		// containsKeyword := false
+		// for _, kw := range carbonKeywords {
+		// 	if strings.Contains(titleLower, strings.ToLower(kw)) {
+		// 		containsKeyword = true
+		// 		break
+		// 	}
+		// }
+
+		// For now, include all articles (filtering can be enabled later)
+		// Uncomment to filter only carbon-related articles:
+		// if !containsKeyword {
+		// 	continue
+		// }
+
+		publishedAt := ""
+		if item.PublishedParsed != nil {
+			publishedAt = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Fetch full article content
+		excerpt := ""
+		if item.Link != "" {
+			contentResp, err := client.Get(item.Link)
+			if err == nil && contentResp.StatusCode == http.StatusOK {
+				defer contentResp.Body.Close()
+				contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
+				if err == nil {
+					// Extract content from article page
+					// JRI uses various selectors for article content
+					contentDoc.Find("div.detail, div.content, div.main-content, article").Each(func(_ int, s *goquery.Selection) {
+						if excerpt == "" {
+							text := strings.TrimSpace(s.Text())
+							if len(text) > 100 { // Only use if substantial content
+								excerpt = text
+							}
+						}
+					})
+				}
+			}
+		}
+
+		// If we couldn't get excerpt, use description from RSS
+		if excerpt == "" && item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+		}
+
+		out = append(out, Headline{
+			Source:      "Japan Research Institute",
+			Title:       title,
+			URL:         item.Link,
+			PublishedAt: publishedAt,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no JRI headlines found")
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesEnvMinistry collects headlines from Japan Environment Ministry press releases
+func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	pressURL := "https://www.env.go.jp/press/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", pressURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Keywords for carbon/climate-related articles
+	carbonKeywords := []string{
+		"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
+		"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
+		"カーボンクレジット", "クレジット市場", "JCM", "二国間クレジット",
+		"カーボンニュートラル", "地球温暖化", "パリ協定", "COP",
+	}
+
+	out := make([]Headline, 0, limit)
+	currentDate := ""
+
+	// Parse press releases
+	doc.Find("span.p-press-release-list__heading, li.c-news-link__item").Each(func(i int, s *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		// Check if this is a date heading
+		if s.Is("span.p-press-release-list__heading") {
+			dateText := strings.TrimSpace(s.Text())
+			// Convert "2025年12月26日発表" to "2025-12-26"
+			dateText = strings.Replace(dateText, "発表", "", 1)
+			dateText = strings.TrimSpace(dateText)
+
+			// Parse Japanese date format
+			var year, month, day int
+			if _, parseErr := fmt.Sscanf(dateText, "%d年%d月%d日", &year, &month, &day); parseErr == nil {
+				currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+			}
+			return
+		}
+
+		// Process article items
+		if !s.Is("li.c-news-link__item") {
+			return
+		}
+
+		// Extract title and URL
+		link := s.Find("a.c-news-link__link")
+		title := strings.TrimSpace(link.Text())
+		href, exists := link.Attr("href")
+		if !exists || title == "" {
+			return
+		}
+
+		// Check if title contains carbon-related keywords
+		titleLower := strings.ToLower(title)
+		containsKeyword := false
+		for _, kw := range carbonKeywords {
+			if strings.Contains(titleLower, strings.ToLower(kw)) {
+				containsKeyword = true
+				break
+			}
+		}
+
+		if !containsKeyword {
+			return
+		}
+
+		// Build absolute URL
+		articleURL := href
+		if !strings.HasPrefix(href, "http") {
+			articleURL = "https://www.env.go.jp" + href
+		}
+
+		// Fetch full article content
+		excerpt := ""
+		contentResp, err := client.Get(articleURL)
+		if err == nil && contentResp.StatusCode == http.StatusOK {
+			defer contentResp.Body.Close()
+			contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
+			if err == nil {
+				// Extract main content from article page
+				contentDoc.Find("div.l-content, div.c-content, article, main").Each(func(_ int, cs *goquery.Selection) {
+					if excerpt == "" {
+						text := strings.TrimSpace(cs.Text())
+						if len(text) > 100 {
+							excerpt = text
+						}
+					}
+				})
+			}
+		}
+
+		// Format published date
+		publishedAt := ""
+		if currentDate != "" {
+			publishedAt = currentDate + "T00:00:00+09:00"
+		}
+
+		out = append(out, Headline{
+			Source:      "Japan Environment Ministry",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: publishedAt,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Environment Ministry headlines found")
 	}
 
 	return out, nil

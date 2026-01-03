@@ -25,7 +25,7 @@
 
 ---
 
-## 現在の実装状態（2025-12-31）
+## 現在の実装状態（2026-01-03）
 
 ### ✅ 実装済み機能
 
@@ -36,13 +36,27 @@
 - QCI のホームページからスクレイピング
 - 無意味なリンクテキスト（"Read more"等）を自動除外
 
-**無料ソース（全文取得）：** 🆕
-- **CarbonCredits.jp**（日本語）- 日本のカーボンクレジット市場ニュース
-- **Carbon Herald** - CDR技術・スタートアップ情報
-- **Climate Home News** - 国際交渉・政策情報
-- **CarbonCredits.com** - 初心者向け解説記事
+**無料ソース（全文取得）：** 🆕 **9サイト実装完了**
 
-全ての無料ソースはWordPress REST API経由で全文コンテンツを取得します。
+**日本市場：**
+- **CarbonCredits.jp** - 日本のカーボンクレジット市場ニュース（WordPress REST API）
+
+**欧州・国際：**
+- **Sandbag** - EU排出権取引システム（EU ETS）分析（WordPress REST API）
+- **Ecosystem Marketplace** - 自然ベースソリューション（NbS）市場（WordPress REST API）
+- **Carbon Brief** - 気候科学・政策ニュース（WordPress REST API）
+- **Climate Home News** - 国際交渉・政策情報（WordPress REST API）
+- **ICAP** - 国際炭素行動パートナーシップ（HTML Scraping）
+- **IETA** - 国際排出量取引協会（HTML Scraping）
+
+**グローバルメディア：**
+- **Carbon Herald** - CDR技術・スタートアップ情報（WordPress REST API）
+- **CarbonCredits.com** - 初心者向け解説記事（WordPress REST API）
+- **Energy Monitor** - エネルギー移行ニュース（HTML Scraping）
+
+**技術スタック：**
+- WordPress REST API（7サイト）- 標準化されたJSON endpoint
+- HTML Scraping + goquery（3サイト）- カスタムHTML構造解析
 
 #### 2. OpenAI検索統合 (`cmd/pipeline/search_openai.go`)
 **重要な技術的発見：**
@@ -142,7 +156,7 @@ DEBUG_OPENAI_FULL=1 ./carbon-relay -sources=carbonpulse -perSource=1
 | オプション | デフォルト | 説明 |
 |----------|----------|------|
 | `-headlines` | - | 既存のheadlines.jsonを読み込む（指定しない場合はスクレイピング） |
-| `-sources` | `carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com` | スクレイピング対象（カンマ区切り）<br>**有料:** carbonpulse, qci<br>**無料:** carboncredits.jp, carbonherald, climatehomenews, carboncredits.com |
+| `-sources` | `carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor` | スクレイピング対象（カンマ区切り）<br>**有料:** carbonpulse, qci<br>**無料:** carboncredits.jp, sandbag, ecosystem-marketplace, carbon-brief, climatehomenews, carboncredits.com, icap, ieta, energy-monitor |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
 | `-queriesPerHeadline` | `3` | 見出しごとに発行する検索クエリ数 |
 | `-resultsPerQuery` | `10` | クエリごとの最大結果数 |
@@ -336,9 +350,14 @@ EOF
 - Carbon Pulse（有料見出し）
 - QCI（有料見出し）
 - CarbonCredits.jp（全文）
-- Carbon Herald（全文）
+- Sandbag（全文）
+- Ecosystem Marketplace（全文）
+- Carbon Brief（全文）
 - Climate Home News（全文）
 - CarbonCredits.com（全文）
+- ICAP（全文）
+- IETA（全文）
+- Energy Monitor（全文）
 - OpenAI検索結果（関連記事）
 
 ### 🗂️ Notionデータベーススキーマ
@@ -416,7 +435,23 @@ ERROR: no Carbon Pulse headlines found
 
 ## 開発履歴
 
-### 2025-12-31 🆕
+### 2026-01-03 🆕
+- ✅ **9つの無料ソース実装完了**（18サイト中）
+  - バッチ1（WordPress REST API）: Sandbag, Ecosystem Marketplace, Carbon Brief
+  - バッチ2（HTML Scraping）: ICAP, IETA
+  - バッチ3（HTML Scraping）: Energy Monitor
+- ✅ **実装困難サイトの詳細分析**
+  - 10サイトの技術的課題を文書化
+  - 将来の実装に向けた解決策を整理
+  - プランファイルに完全な分析レポート追加
+- ✅ **カバレッジ達成**
+  - EU ETS分析（Sandbag）
+  - 自然ベースソリューション市場（Ecosystem Marketplace）
+  - 気候科学（Carbon Brief）
+  - 国際機関（ICAP, IETA）
+  - エネルギー移行（Energy Monitor）
+
+### 2025-12-31
 - ✅ **4つの無料ソース追加**
   - CarbonCredits.jp（日本語）
   - Carbon Herald（CDR技術）

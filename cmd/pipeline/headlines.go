@@ -2044,78 +2044,116 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 	}
 
 	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool) // Track seen URLs to avoid duplicates
 
-	// Parse all article links more broadly
-	doc.Find("a").Each(func(i int, link *goquery.Selection) {
+	// Primary selector: links with css-oxwq25 class (main article links)
+	doc.Find("a.css-oxwq25, a[class*='css-']").Each(func(i int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
 		href, exists := link.Attr("href")
-		if !exists {
+		if !exists || href == "" {
 			return
 		}
 
-		// Filter for story/audio/factsheet/news URLs
-		if !strings.Contains(href, "/story/") &&
-		   !strings.Contains(href, "/audio/") &&
-		   !strings.Contains(href, "/factsheet/") &&
-		   !strings.Contains(href, "/news/") {
-			return
-		}
+		// Filter for content URLs
+		// The site uses both singular and plural forms
+		// We need actual article URLs, not category pages, so check for more than one slash
+		isContentURL := (strings.Contains(href, "/factsheet") ||
+			strings.Contains(href, "/story") ||
+			strings.Contains(href, "/stories") ||
+			strings.Contains(href, "/audio") ||
+			strings.Contains(href, "/media") ||
+			strings.Contains(href, "/news")) &&
+			strings.Count(href, "/") > 1 // Ensure it's not just the category page
 
-		// Get title - try multiple approaches
-		title := ""
-		// Try finding title in child elements
-		titleElem := link.Find("h1, h2, h3, h4, h5, h6")
-		if titleElem.Length() > 0 {
-			title = strings.TrimSpace(titleElem.Text())
-		}
-		// If not found, use link text
-		if title == "" {
-			title = strings.TrimSpace(link.Text())
-		}
-		// Filter out navigation links and short text
-		if title == "" || len(title) < 15 {
-			return
-		}
-		// Skip common navigation text
-		titleLower := strings.ToLower(title)
-		if strings.Contains(titleLower, "read more") ||
-		   strings.Contains(titleLower, "learn more") ||
-		   strings.Contains(titleLower, "click here") {
+		if !isContentURL {
 			return
 		}
 
 		// Build absolute URL
 		articleURL := href
 		if !strings.HasPrefix(href, "http") {
-			articleURL = "https://www.carbonknowledgehub.com" + href
-		}
-
-		// Extract date (format: "DD Mon YYYY")
-		dateStr := time.Now().Format(time.RFC3339)
-		parent := link.Parent()
-		dateElem := parent.Find(".css-o6atq8, time, .date")
-		if dateElem.Length() > 0 {
-			dateText := strings.TrimSpace(dateElem.Text())
-			// Parse "24 Nov 2025" format
-			if t, err := time.Parse("2 Jan 2006", dateText); err == nil {
-				dateStr = t.Format(time.RFC3339)
+			if strings.HasPrefix(href, "/") {
+				articleURL = "https://www.carbonknowledgehub.com" + href
+			} else {
+				articleURL = "https://www.carbonknowledgehub.com/" + href
 			}
 		}
 
-		// Extract type/category
-		typeElem := parent.Find(".css-1kvv8yc")
-		category := ""
-		if typeElem.Length() > 0 {
-			category = strings.TrimSpace(typeElem.Text())
+		// Skip if already seen
+		if seen[articleURL] {
+			return
 		}
 
+		// Get title
+		title := strings.TrimSpace(link.Text())
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Skip common navigation text
+		titleLower := strings.ToLower(title)
+		if strings.Contains(titleLower, "read more") ||
+		   strings.Contains(titleLower, "learn more") ||
+		   strings.Contains(titleLower, "click here") ||
+		   strings.Contains(titleLower, "view all") {
+			return
+		}
+
+		// Extract date from parent container
+		dateStr := time.Now().Format(time.RFC3339)
+		container := link.ParentsFiltered("[class*='css-']").First()
+		if container.Length() > 0 {
+			// Look for date element with css-1fr5xea or similar classes
+			dateElem := container.Find("[class*='css-1fr'], time, .date, [class*='date']")
+			if dateElem.Length() > 0 {
+				dateText := strings.TrimSpace(dateElem.First().Text())
+				// Parse "14 Nov 2025" or similar formats
+				for _, format := range []string{"2 Jan 2006", "_2 Jan 2006", "Jan 2, 2006", "2006-01-02"} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		// Extract category/type
+		category := ""
+		if container.Length() > 0 {
+			typeElem := container.Find("[class*='css-3aw'], .type, .category, [class*='tag']")
+			if typeElem.Length() > 0 {
+				category = strings.TrimSpace(typeElem.First().Text())
+			}
+		}
+
+		// Build excerpt
 		excerpt := ""
 		if category != "" {
 			excerpt = "Type: " + category
 		}
+
+		// Determine content type from URL
+		contentType := ""
+		switch {
+		case strings.Contains(href, "/factsheet/"):
+			contentType = "Factsheet"
+		case strings.Contains(href, "/story/"):
+			contentType = "Story"
+		case strings.Contains(href, "/audio/"):
+			contentType = "Audio"
+		case strings.Contains(href, "/news/"):
+			contentType = "News"
+		case strings.Contains(href, "/data-tracker/"):
+			contentType = "Data Tracker"
+		}
+		if contentType != "" && excerpt == "" {
+			excerpt = "Type: " + contentType
+		}
+
+		seen[articleURL] = true
 
 		out = append(out, Headline{
 			Source:      "Carbon Knowledge Hub",
@@ -2151,7 +2189,7 @@ func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	// Do not set Accept-Encoding to receive uncompressed response
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
@@ -2165,78 +2203,126 @@ func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, 
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	// Read the entire HTML content
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
+	bodyStr := string(bodyBytes)
 
-	// Keywords for sustainability/carbon-related press releases
-	carbonKeywords := []string{
-		"サステナビリティ", "カーボン", "脱炭素", "カーボンニュートラル",
-		"GX", "気候変動", "ESG", "温室効果ガス", "CO2", "排出量",
-		"再生可能エネルギー", "クリーンエネルギー", "環境", "GHG",
-		"sustainability", "carbon", "climate", "decarboniz",
-	}
+	// Extract JSON data from angular.loadFacetedNavigation script
+	// Pattern: angular.loadFacetedNavigation(..., "{...}")
+	// The JSON object contains numberHits, elements, selectedTags, filterTags
+	jsonPattern := regexp.MustCompile(`"(\{\\x22numberHits\\x22:\d+,\\x22elements\\x22:.*?\\x22filterTags\\x22:.*?\})"`)
+	matches := jsonPattern.FindAllStringSubmatch(bodyStr, -1)
 
 	out := make([]Headline, 0, limit)
 
-	// Extract articles from sustainability page - try multiple selectors
-	doc.Find("a[href*='/knowledge/'], a[href*='/services/']").Each(func(i int, s *goquery.Selection) {
+	for _, match := range matches {
 		if len(out) >= limit {
-			return
+			break
 		}
 
-		title := strings.TrimSpace(s.Text())
-		if title == "" {
-			return
+		if len(match) < 2 {
+			continue
 		}
 
-		// Temporarily collect all articles (all are from sustainability page)
-		_ = carbonKeywords // Avoid unused variable warning
+		jsonStr := match[1]
 
-		href, exists := s.Attr("href")
-		if !exists || href == "" {
-			return
+		// Unescape hex-encoded quotes (\x22 -> ")
+		jsonStr = strings.ReplaceAll(jsonStr, `\x22`, `"`)
+		// Unescape other common escapes
+		jsonStr = strings.ReplaceAll(jsonStr, `\/`, `/`)
+		jsonStr = strings.ReplaceAll(jsonStr, `\u002D`, `-`)
+
+		// Extract the elements field (it's a string-encoded JSON array)
+		elementsPattern := regexp.MustCompile(`"elements":"(\[.*?\])(?:",|"}|"$)`)
+		elementsMatch := elementsPattern.FindStringSubmatch(jsonStr)
+		if len(elementsMatch) < 2 {
+			continue
 		}
 
-		// Build absolute URL
-		articleURL := href
-		if strings.HasPrefix(href, "/") {
-			articleURL = "https://www.pwc.com" + href
+		elementsStr := elementsMatch[1]
+
+		// Unescape the triple-escaped elements array (needs to be done twice)
+		for i := 0; i < 2; i++ {
+			// Replace \\ with temporary placeholder
+			elementsStr = strings.ReplaceAll(elementsStr, `\\`, "\x00")
+			// Replace \" with "
+			elementsStr = strings.ReplaceAll(elementsStr, `\"`, `"`)
+			// Restore single backslash
+			elementsStr = strings.ReplaceAll(elementsStr, "\x00", `\`)
 		}
 
-		// Try to extract date from surrounding text
-		dateStr := time.Now().Format(time.RFC3339)
-		parent := s.Parent()
-		if parent != nil {
-			parentText := parent.Text()
-			datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-			if matches := datePattern.FindStringSubmatch(parentText); len(matches) == 4 {
-				year := matches[1]
-				month := matches[2]
-				day := matches[3]
-				if len(month) == 1 {
-					month = "0" + month
-				}
-				if len(day) == 1 {
-					day = "0" + day
-				}
-				dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
+		// Parse individual article objects
+		// Look for title, href, and publishDate fields
+		titlePattern := regexp.MustCompile(`"title":"([^"]+)"`)
+		hrefPattern := regexp.MustCompile(`"href":"([^"]+)"`)
+		datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
+
+		// Split by article objects (each starts with {"index":)
+		articles := strings.Split(elementsStr, `{"index":`)
+
+		for _, articleStr := range articles {
+			if len(out) >= limit {
+				break
 			}
-		}
 
-		out = append(out, Headline{
-			Source:      "PwC Japan",
-			Title:       title,
-			URL:         articleURL,
-			PublishedAt: dateStr,
-			Excerpt:     "",
-			IsHeadline:  true,
-		})
-	})
+			if len(articleStr) < 50 {
+				continue
+			}
+
+			// Extract title
+			titleMatches := titlePattern.FindStringSubmatch(articleStr)
+			if len(titleMatches) < 2 {
+				continue
+			}
+			title := titleMatches[1]
+
+			// Extract URL
+			hrefMatches := hrefPattern.FindStringSubmatch(articleStr)
+			if len(hrefMatches) < 2 {
+				continue
+			}
+			url := hrefMatches[1]
+
+			// Extract date
+			dateStr := ""
+			dateMatches := datePattern.FindStringSubmatch(articleStr)
+			if len(dateMatches) >= 2 {
+				dateStr = dateMatches[1]
+			}
+
+			// Build absolute URL
+			articleURL := url
+			if strings.HasPrefix(url, "/") {
+				articleURL = "https://www.pwc.com" + url
+			} else if !strings.HasPrefix(url, "http") {
+				// Sometimes URLs come without leading slash
+				continue
+			}
+
+			// Parse date (format: "YYYY-MM-DD")
+			publishedAt := time.Now().Format(time.RFC3339)
+			if dateStr != "" {
+				if t, err := time.Parse("2006-01-02", dateStr); err == nil {
+					publishedAt = t.Format(time.RFC3339)
+				}
+			}
+
+			out = append(out, Headline{
+				Source:      "PwC Japan",
+				Title:       title,
+				URL:         articleURL,
+				PublishedAt: publishedAt,
+				Excerpt:     "",
+				IsHeadline:  true,
+			})
+		}
+	}
 
 	if len(out) == 0 {
-		return nil, fmt.Errorf("no PwC Japan sustainability-related press releases found")
+		return nil, fmt.Errorf("no PwC Japan sustainability-related articles found in JSON data")
 	}
 
 	return out, nil

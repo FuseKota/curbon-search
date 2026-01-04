@@ -1,3 +1,27 @@
+// search_openai.go
+// OpenAI Responses API を使用したWeb検索統合
+//
+// このモジュールは、OpenAI Responses API（旧 Web Search API）を使用して
+// 有料記事の見出しに関連する無料記事をWeb上から検索します。
+//
+// 主要な機能:
+//   - OpenAI Responses API へのHTTPリクエスト送信
+//   - 3段階のフォールバックでURL抽出:
+//     1. web_search_call.results（通常は空）
+//     2. action.sources（URLのみ）
+//     3. message.content から正規表現でURL抽出（主要手法）
+//   - URLから擬似タイトル生成（マッチング用）
+//   - URL重複排除（global seen map）
+//
+// 重要な実装の詳細:
+//   - OpenAI Responses API は web_search_call.results を返さない（仕様）
+//   - action.sources も通常は空
+//   - そのため、message.content テキストから正規表現でURLを抽出する
+//   - 抽出したURLから generateTitleFromURL() で擬似タイトルを生成
+//
+// デバッグモード:
+//   - DEBUG_OPENAI=1: OpenAI検索のサマリーログ
+//   - DEBUG_OPENAI_FULL=1: 完全なレスポンスJSON
 package main
 
 import (
@@ -14,45 +38,71 @@ import (
 	"time"
 )
 
+// OpenAI Responses API のレスポンス構造体
+
+// openAIResponsesResp は OpenAI Responses API の最上位レスポンス
 type openAIResponsesResp struct {
-	Output []openAIOutputItem `json:"output"`
+	Output []openAIOutputItem `json:"output"`  // アウトプット配列（web_search_call, message等）
 }
 
+// openAIOutputItem は output配列の各要素
 type openAIOutputItem struct {
-	Type    string              `json:"type"`
-	Results []openAIWebResult   `json:"results,omitempty"` // web_search_call に入る
-	Action  *openAIWebAction    `json:"action,omitempty"`  // include した場合に sources が入る
-	Content []openAIContentPart `json:"content,omitempty"` // message の citations fallback 用
+	Type    string              `json:"type"`              // "web_search_call" または "message"
+	Results []openAIWebResult   `json:"results,omitempty"` // web_search_call の結果（通常は空）
+	Action  *openAIWebAction    `json:"action,omitempty"`  // include時のsources（通常は空）
+	Content []openAIContentPart `json:"content,omitempty"` // message のコンテンツ（URL抽出元）
 }
 
+// openAIWebAction は action フィールドの構造
 type openAIWebAction struct {
-	Sources []openAIWebSource `json:"sources,omitempty"`
+	Sources []openAIWebSource `json:"sources,omitempty"`  // ソースURL配列（通常は空）
 }
 
+// openAIWebSource は sources配列の各要素
 type openAIWebSource struct {
-	URL string `json:"url"`
+	URL string `json:"url"`  // ソースURL
 }
 
+// openAIWebResult は results配列の各要素（理想的な形式だが通常は返らない）
 type openAIWebResult struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Snippet string `json:"snippet"`
+	Title   string `json:"title"`    // 記事タイトル
+	URL     string `json:"url"`      // 記事URL
+	Snippet string `json:"snippet"`  // スニペット
 }
 
+// openAIContentPart は message.content の各パート
 type openAIContentPart struct {
-	Type        string             `json:"type"`
-	Text        string             `json:"text,omitempty"`
-	Annotations []openAIAnnotation `json:"annotations,omitempty"`
+	Type        string             `json:"type"`                  // "text"
+	Text        string             `json:"text,omitempty"`        // テキストコンテンツ（URL抽出元）
+	Annotations []openAIAnnotation `json:"annotations,omitempty"` // アノテーション（citations）
 }
 
+// openAIAnnotation は annotations配列の各要素
 type openAIAnnotation struct {
-	Type  string `json:"type"`
-	URL   string `json:"url,omitempty"`
-	Title string `json:"title,omitempty"`
+	Type  string `json:"type"`            // "citation"
+	URL   string `json:"url,omitempty"`   // 引用元URL
+	Title string `json:"title,omitempty"` // 引用元タイトル
 }
 
-// generateTitleFromURL creates a pseudo-title from a URL for matching purposes.
-// Example: "https://carbon-pulse.com/timeline/387850/" → "Carbon Pulse Timeline"
+// generateTitleFromURL は URLから擬似タイトルを生成（マッチング用）
+//
+// OpenAI Responses API は通常タイトルを返さないため、URLから推測する。
+//
+// 例:
+//   "https://carbon-pulse.com/timeline/387850/" → "Carbon Pulse Timeline"
+//   "https://www.gov.uk/climate-policy" → "Gov Uk Climate Policy"
+//
+// 処理:
+//   1. ドメイン名から意味のある部分を抽出（www. は除去）
+//   2. URLパスから意味のある部分を抽出（数字のみのパートは除外）
+//   3. ハイフン/アンダースコアをスペースに変換
+//   4. 各単語の先頭を大文字化
+//
+// 引数:
+//   rawURL: 対象URL
+//
+// 戻り値:
+//   生成された擬似タイトル
 func generateTitleFromURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {

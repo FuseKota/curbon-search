@@ -1,3 +1,25 @@
+// matcher.go
+// IDF（逆文書頻度）ベースのマッチングとスコアリングエンジン
+//
+// このモジュールは、有料記事の見出しと無料記事候補の類似度を計算し、
+// 最も関連性の高い無料記事をマッチングします。
+//
+// 主要な機能:
+//   - トークン化と正規化（ストップワード除去、マーケット/トピックキーワード正規化）
+//   - IDF（逆文書頻度）計算
+//   - シグナル抽出（Markets, Topics, Geos）
+//   - 多次元スコアリング（IDF加重リコール、Jaccard、Market/Topic/Geo一致、新しさ）
+//   - ドメイン品質ブースト（.gov, .pdf, NGOドメイン）
+//   - 厳格フィルタリング（マーケットマッチ必須、地域マッチ必須）
+//
+// スコアリング重み配分:
+//   - IDF加重リコール類似度: 56%
+//   - IDF加重Jaccard類似度: 28%
+//   - マーケットマッチ: 6%
+//   - トピックマッチ: 4%
+//   - 地理的マッチ: 2%
+//   - 新しさ: 4%
+//   - 品質ブースト: 最大+0.18
 package main
 
 import (
@@ -10,11 +32,13 @@ import (
 	"time"
 )
 
-// -------------------- Tokenization / Normalization --------------------
+// -------------------- トークン化 / 正規化 --------------------
 
+// reTok はトークン抽出用の正規表現（英数字とハイフン区切り）
 var reTok = regexp.MustCompile(`[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*`)
 
-// minimum stopwords; add if you find noisy matches
+// stop はストップワード（除外する一般的な単語）のマップ
+// ノイズの多いマッチを避けるため、一般的な冠詞や前置詞を除外
 var stop = map[string]bool{
 	"the": true, "a": true, "an": true,
 	"to": true, "of": true, "in": true, "on": true, "for": true, "with": true, "by": true,
@@ -24,7 +48,17 @@ var stop = map[string]bool{
 	"new": true, "fresh": true, "year": true, "yr": true,
 }
 
-// token normalization for market/topic keywords
+// normToken はマーケット/トピックキーワードの正規化マップ
+//
+// 異なる表記を統一することで、マッチング精度を向上:
+//   - 複数形→単数形（credits→credit, offsets→offset）
+//   - 大文字小文字の統一（EUA→eua, UKA→uka）
+//   - 略語の統一（I-RECs→irec）
+//
+// カバーするカテゴリ:
+//   - カーボン市場: EUA, UKA, RGGI, CCA, ACCU, NZU, I-REC, CORSIA, CCER
+//   - トピック: VCM, CDR, DAC, BECCS, biochar, methane, forest
+//   - 一般用語: credit, offset
 var normToken = map[string]string{
 	"euas": "eua", "eua": "eua",
 	"ukas": "uka", "uka": "uka",

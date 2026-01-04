@@ -1,3 +1,14 @@
+// headlines.go
+// 18のニュースソースから記事見出しと要約を収集するモジュール
+//
+// 実装ソース:
+//   有料ソース（見出しのみ）: Carbon Pulse, QCI
+//   無料ソース（全文取得）: 16ソース
+//
+// スクレイピング手法:
+//   - WordPress REST API（7ソース）
+//   - HTML Scraping + goquery（8ソース）
+//   - RSS Feed + gofeed（3ソース）
 package main
 
 import (
@@ -12,10 +23,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
-	"github.com/mmcdole/gofeed"
+	"github.com/PuerkitoBio/goquery" // HTML解析ライブラリ
+	"github.com/mmcdole/gofeed"      // RSS/Atomフィード解析
 )
 
+// min2 は2つの整数のうち小さい方を返すヘルパー関数
 func min2(a, b int) int {
 	if a < b {
 		return a
@@ -23,40 +35,60 @@ func min2(a, b int) int {
 	return b
 }
 
+// グローバル正規表現パターン
 var (
+	// reCarbonPulseID は Carbon Pulse の記事ID形式をマッチ（例: /12345/）
 	reCarbonPulseID = regexp.MustCompile(`^/\d+/$`)
+
+	// reQCIArticle は QCI の記事URLパターンをマッチ
 	reQCIArticle    = regexp.MustCompile(`/carbon/article/`)
 )
 
+// headlineSourceConfig は見出し収集時の設定を保持
 type headlineSourceConfig struct {
-	CarbonPulseTimelineURL string
-	CarbonPulseNewsletters string
-	QCIHomeURL             string
-	UserAgent              string
-	Timeout                time.Duration
+	CarbonPulseTimelineURL string        // Carbon Pulse タイムラインページURL
+	CarbonPulseNewsletters string        // Carbon Pulse ニュースレターカテゴリURL
+	QCIHomeURL             string        // QCI ホームページURL
+	UserAgent              string        // HTTPリクエスト時のUser-Agentヘッダー
+	Timeout                time.Duration // HTTPリクエストのタイムアウト時間
 }
 
+// defaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func defaultHeadlineConfig() headlineSourceConfig {
 	return headlineSourceConfig{
 		CarbonPulseTimelineURL: "https://carbon-pulse.com/daily-timeline/",
 		CarbonPulseNewsletters: "https://carbon-pulse.com/category/newsletters/",
 		QCIHomeURL:             "https://www.qcintel.com/carbon/",
 		UserAgent:              "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
-		Timeout:                20 * time.Second,
+		Timeout:                20 * time.Second, // デフォルト20秒タイムアウト
 	}
 }
 
+// collectHeadlinesCarbonPulse は Carbon Pulse（有料ソース）から見出しと要約を収集
+//
+// Carbon Pulse は有料サブスクリプションサービスですが、以下のページは無料でアクセス可能：
+//   - トップページ: 記事の要約（excerpt）付き
+//   - デイリータイムライン: 見出しのみ
+//   - ニュースレターカテゴリ: 見出しのみ
+//
+// 引数:
+//   limit: 収集する最大記事数
+//   cfg: スクレイピング設定（タイムアウト、User-Agent等）
+//
+// 戻り値:
+//   収集した見出しのスライス、エラー
 func collectHeadlinesCarbonPulse(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// We try 3 pages that are typically visible without subscription.
-	// The top page has article excerpts in the main content area.
+	// 無料でアクセス可能な3つのページを巡回
+	// トップページのみ記事の要約（excerpt）が取得可能
 	pages := []string{
-		"https://carbon-pulse.com/", // Top page with excerpts
-		cfg.CarbonPulseTimelineURL,
-		cfg.CarbonPulseNewsletters,
+		"https://carbon-pulse.com/",       // トップページ（excerpt付き）
+		cfg.CarbonPulseTimelineURL,        // デイリータイムライン
+		cfg.CarbonPulseNewsletters,        // ニュースレターカテゴリ
 	}
-	out := []Headline{}
-	seen := map[string]bool{}
+	out := []Headline{}              // 収集結果を格納するスライス
+	seen := map[string]bool{}        // URL重複チェック用マップ
 
+	// デバッグモード時: スクレイピング対象ページを出力
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Scraping Carbon Pulse from:\n")
 		for _, p := range pages {
@@ -361,12 +393,24 @@ func collectHeadlinesQCI(limit int, cfg headlineSourceConfig) ([]Headline, error
 	return out, nil
 }
 
+// fetchDoc は指定URLからHTMLドキュメントを取得してgoqueryでパース
+//
+// タイムアウト設定と適切なHTTPヘッダー（User-Agent, Accept）を含めて
+// HTTPリクエストを送信し、レスポンスをgoquery.Documentとして返す
+//
+// 引数:
+//   u: 取得するURL
+//   cfg: タイムアウトとUser-Agent設定
+//
+// 戻り値:
+//   パースされたHTMLドキュメント、エラー
 func fetchDoc(u string, cfg headlineSourceConfig) (*goquery.Document, error) {
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := &http.Client{Timeout: cfg.Timeout}  // タイムアウト付きHTTPクライアント
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
 	}
+	// ブロッキング回避のため、ブラウザ風のヘッダーを設定
 	req.Header.Set("User-Agent", cfg.UserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 
@@ -375,12 +419,25 @@ func fetchDoc(u string, cfg headlineSourceConfig) (*goquery.Document, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// HTTPステータスコードチェック（200番台以外はエラー）
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("GET %s: status %s", u, resp.Status)
 	}
 	return goquery.NewDocumentFromReader(resp.Body)
 }
 
+// resolveURL は相対URLを絶対URLに変換
+//
+// ベースURLと相対URL（href）から完全な絶対URLを生成する。
+// 既に絶対URLの場合はそのまま返す。
+//
+// 引数:
+//   baseURL: 基準となるページのURL
+//   href: 相対または絶対URL
+//
+// 戻り値:
+//   解決された絶対URL（エラー時は空文字列）
 func resolveURL(baseURL, href string) string {
 	href = strings.TrimSpace(href)
 	if href == "" {
@@ -394,11 +451,20 @@ func resolveURL(baseURL, href string) string {
 	if err != nil {
 		return ""
 	}
+	// 相対URLを絶対URLに解決
 	return base.ResolveReference(u).String()
 }
 
-// extractExcerptFromContext extracts text content near a headline link
-// from the timeline/listing page itself, without fetching the article page.
+// extractExcerptFromContext はリンク周辺のテキストから記事要約を抽出
+//
+// 個別の記事ページをフェッチせず、タイムライン/一覧ページ内で
+// リンク要素の周辺にあるテキストコンテンツを要約として抽出する。
+//
+// 引数:
+//   linkSel: 記事リンクのgoquery Selection
+//
+// 戻り値:
+//   抽出された要約テキスト（最大500文字）
 func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	var excerpt strings.Builder
 	maxChars := 500
@@ -1333,9 +1399,22 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 	return out, nil
 }
 
-// collectHeadlinesJRI collects headlines from Japan Research Institute RSS feed
+// collectHeadlinesJRI は JRI（日本総合研究所）の RSSフィードから見出しを収集
+//
+// JRI は日本のシンクタンクで、カーボンニュートラルや気候変動に関する
+// レポートを公開している。RSSフィードから記事を取得し、carbonKeywordsで
+// カーボン関連記事をフィルタリング（現在はフィルタ無効化中）。
+//
+// 手法: RSS Feed (gofeed)
+//
+// 引数:
+//   limit: 収集する最大記事数
+//   cfg: タイムアウトとUser-Agent設定
+//
+// 戻り値:
+//   収集した見出しのスライス、エラー
 func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	rssURL := "https://www.jri.co.jp/xml.jsp?id=12966"
+	rssURL := "https://www.jri.co.jp/xml.jsp?id=12966"  // JRI の RSSフィードURL
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", rssURL, nil)
@@ -1354,7 +1433,7 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Parse RSS feed
+	// RSSフィードをパース（gofeedライブラリを使用）
 	fp := gofeed.NewParser()
 	feed, err := fp.Parse(resp.Body)
 	if err != nil {
@@ -1365,7 +1444,17 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 		return nil, fmt.Errorf("no items in RSS feed")
 	}
 
-	// Filter for carbon/climate related articles (optional)
+	// carbonKeywords: カーボン/気候変動関連記事のフィルタリング用キーワードリスト
+	//
+	// 日本語ソース（JRI、環境省、METI、Mizuho R&T）で使用。
+	// 幅広いトピックをカバーするため、以下のカテゴリを含む：
+	//   - カーボン関連: カーボン、炭素、脱炭素、カーボンニュートラル
+	//   - 温室効果ガス: CO2、温室効果ガス、GHG
+	//   - 市場/取引: 排出量取引、ETS、カーボンプライシング、カーボンクレジット
+	//   - 気候変動: 気候変動、クライメート
+	//   - 英語キーワード: carbon, climate（英語混在記事用）
+	//
+	// 注意: 現在はフィルタリング無効化中（全記事を収集）
 	carbonKeywords := []string{
 		"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
 		"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
@@ -2172,7 +2261,27 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 	return out, nil
 }
 
-// collectHeadlinesPwCJapan collects headlines from PwC Japan sustainability page
+// collectHeadlinesPwCJapan は PwC Japan のサステナビリティページから見出しを収集
+//
+// PwC Japanは最も複雑なスクレイピング実装の1つ。ページ内のJavaScriptから
+// 3重エスケープされたJSONデータを抽出し、複数回のアンエスケープ処理を経て
+// 記事情報をパースする。
+//
+// 実装の特殊性:
+//   1. angular.loadFacetedNavigationスクリプトから埋め込みJSONを抽出
+//   2. 16進エスケープされた引用符（\x22）をアンエスケープ
+//   3. elements配列が3重エスケープされているため、2回のアンエスケープ処理
+//   4. 正規表現で個別の記事オブジェクトを抽出
+//   5. 日付フォーマット: YYYY-MM-DD
+//
+// 手法: HTML Scraping + 複雑なJSON抽出
+//
+// 引数:
+//   limit: 収集する最大記事数
+//   cfg: タイムアウトとUser-Agent設定
+//
+// 戻り値:
+//   収集した見出しのスライス、エラー
 func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.pwc.com/jp/ja/knowledge/column/sustainability.html"
 

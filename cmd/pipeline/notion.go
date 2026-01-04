@@ -1,3 +1,72 @@
+// =============================================================================
+// notion.go - Notion統合モジュール
+// =============================================================================
+//
+// このファイルはNotionデータベースへの記事保存機能を提供します。
+// Carbon Relayのモード2（有料記事マッチング）で使用されます。
+//
+// =============================================================================
+// 【主要な機能】
+// =============================================================================
+//
+// 1. データベース作成
+//    - 新規Notionデータベースの自動作成
+//    - 作成したデータベースIDを.envに自動保存
+//
+// 2. 記事のクリッピング
+//    - 有料記事の見出しをデータベースに保存
+//    - 関連する無料記事も一緒に保存
+//
+// 3. 記事の取得
+//    - Notionデータベースから最近の記事を取得
+//    - メール送信機能で使用
+//
+// =============================================================================
+// 【データベーススキーマ】
+// =============================================================================
+//
+// 以下のプロパティを持つデータベースを作成/使用:
+//
+//   ┌────────────────┬──────────────┬────────────────────────────────┐
+//   │ プロパティ名   │ 型           │ 説明                           │
+//   ├────────────────┼──────────────┼────────────────────────────────┤
+//   │ Title          │ Title        │ 記事タイトル                   │
+//   │ URL            │ URL          │ 記事URL                        │
+//   │ Source         │ Select       │ ソース名（22種類のオプション） │
+//   │ Type           │ Select       │ Headline / Related Free        │
+//   │ AI Summary     │ RichText     │ 記事の要約・本文               │
+//   │ Score          │ Number       │ マッチングスコア（0-1）        │
+//   │ Published Date │ Date         │ 記事の公開日                   │
+//   └────────────────┴──────────────┴────────────────────────────────┘
+//
+// =============================================================================
+// 【Notion API制限への対応】
+// =============================================================================
+//
+// - RichTextプロパティ: 最大2000文字
+//   → splitIntoRichTextBlocks() で分割して対応
+//
+// - ブロックコンテンツ: 最大2000文字/ブロック
+//   → createContentBlocks() で分割して対応
+//
+// =============================================================================
+// 【必要な環境変数】
+// =============================================================================
+//
+//   NOTION_TOKEN     - Notion Integration Token（必須）
+//   NOTION_PAGE_ID   - 新規DB作成時の親ページID
+//   NOTION_DATABASE_ID - 既存DBのID（作成済みの場合）
+//
+// =============================================================================
+// 【初心者向けポイント】
+// =============================================================================
+//
+// - Notion APIはOAuth認証ではなくIntegration Tokenを使用
+// - データベースIDは32文字のハイフン区切り文字列
+// - ページIDはデータベース内の個々のレコードを指す
+// - github.com/jomei/notionapi ライブラリを使用
+//
+// =============================================================================
 package main
 
 import (
@@ -7,20 +76,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jomei/notionapi"
+	"github.com/jomei/notionapi" // Notion API クライアントライブラリ
 )
 
-// NotionClipperConfig holds configuration for Notion integration
+// =============================================================================
+// 設定・構造体
+// =============================================================================
+
+// NotionClipperConfig はNotion統合の設定を保持する
 type NotionClipperConfig struct {
 	Token      string // Notion Integration Token
-	PageID     string // Parent page ID where DB will be created (optional)
-	DatabaseID string // Existing database ID (optional)
+	PageID     string // 新規DB作成時の親ページID（オプション）
+	DatabaseID string // 既存DBのID（オプション）
 }
 
-// NotionClipper handles clipping articles to Notion
+// NotionClipper はNotionへの記事保存を担当する
+//
+// 【使用方法】
+//
+//	clipper, err := NewNotionClipper(token, dbID)
+//	err = clipper.ClipHeadlineWithRelated(ctx, headline)
 type NotionClipper struct {
-	client *notionapi.Client
-	dbID   notionapi.DatabaseID
+	client *notionapi.Client     // Notion APIクライアント
+	dbID   notionapi.DatabaseID // 操作対象のデータベースID
 }
 
 // NewNotionClipper creates a new Notion clipper

@@ -1,27 +1,60 @@
-// search_openai.go
-// OpenAI Responses API を使用したWeb検索統合
+// =============================================================================
+// search_openai.go - OpenAI Web検索統合モジュール
+// =============================================================================
 //
-// このモジュールは、OpenAI Responses API（旧 Web Search API）を使用して
-// 有料記事の見出しに関連する無料記事をWeb上から検索します。
+// このファイルはOpenAI Responses APIを使用して、有料記事の見出しに関連する
+// 無料記事をWeb上から検索します。モード2（有料記事マッチング）で使用されます。
 //
-// 主要な機能:
-//   - OpenAI Responses API へのHTTPリクエスト送信
-//   - 3段階のフォールバックでURL抽出:
-//     1. web_search_call.results（通常は空）
-//     2. action.sources（URLのみ）
-//     3. message.content から正規表現でURL抽出（主要手法）
-//   - URLから擬似タイトル生成（マッチング用）
-//   - URL重複排除（global seen map）
+// =============================================================================
+// 【重要な実装の詳細】
+// =============================================================================
 //
-// 重要な実装の詳細:
-//   - OpenAI Responses API は web_search_call.results を返さない（仕様）
-//   - action.sources も通常は空
-//   - そのため、message.content テキストから正規表現でURLを抽出する
-//   - 抽出したURLから generateTitleFromURL() で擬似タイトルを生成
+// OpenAI Responses APIには以下の癖があります：
 //
-// デバッグモード:
-//   - DEBUG_OPENAI=1: OpenAI検索のサマリーログ
-//   - DEBUG_OPENAI_FULL=1: 完全なレスポンスJSON
+// 1. web_search_call.results は通常空で返される
+//    → 理想的にはここにタイトル・URL・スニペットが入るはずだが、実際には空
+//
+// 2. action.sources も通常空
+//    → include設定をしても結果が得られないことが多い
+//
+// 3. 解決策: message.content.text からURLを正規表現で抽出
+//    → プロンプトで「URLリストのみを返せ」と指示
+//    → 返されたテキストから https://... パターンを抽出
+//    → URLから擬似タイトルを生成（generateTitleFromURL）
+//
+// =============================================================================
+// 【URL抽出の3段階フォールバック】
+// =============================================================================
+//
+// 優先度1: web_search_call.results（理想的だが通常は空）
+//     ↓
+// 優先度2: action.sources（include時、これも通常は空）
+//     ↓
+// 優先度3: message.content.text から正規表現で抽出 ★主要手法★
+//     ↓
+// 優先度4: annotations（url_citation）から抽出
+//
+// =============================================================================
+// 【デバッグ方法】
+// =============================================================================
+//
+// 環境変数でデバッグ情報を出力:
+//   DEBUG_OPENAI=1      - 検索のサマリーログを出力
+//   DEBUG_OPENAI_FULL=1 - 完全なレスポンスJSONを出力
+//
+// 使用例:
+//   DEBUG_OPENAI=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=1
+//
+// =============================================================================
+// 【初心者向けポイント】
+// =============================================================================
+//
+// - 外部APIを呼び出す際は必ずタイムアウトを設定（ここでは60秒）
+// - APIキーは環境変数から取得（OPENAI_API_KEY）
+// - レスポンスのJSON構造を事前に定義（構造体で受け取る）
+// - エラーハンドリングは各段階で行う
+//
+// =============================================================================
 package main
 
 import (
@@ -38,92 +71,124 @@ import (
 	"time"
 )
 
-// OpenAI Responses API のレスポンス構造体
+// =============================================================================
+// OpenAI Responses API レスポンス構造体
+// =============================================================================
+//
+// OpenAI Responses APIのJSONレスポンスをGoの構造体にマッピングします。
+// 各フィールドは json:"xxx" タグでJSONキーと対応付けられています。
+//
 
 // openAIResponsesResp は OpenAI Responses API の最上位レスポンス
+//
+// 【JSON構造】
+//
+//	{
+//	  "output": [
+//	    { "type": "web_search_call", ... },
+//	    { "type": "message", ... }
+//	  ]
+//	}
 type openAIResponsesResp struct {
-	Output []openAIOutputItem `json:"output"`  // アウトプット配列（web_search_call, message等）
+	Output []openAIOutputItem `json:"output"` // 出力アイテムの配列
 }
 
 // openAIOutputItem は output配列の各要素
+//
+// 【Typeの種類】
+//   - "web_search_call": Web検索の結果（通常は空）
+//   - "message": AIの応答メッセージ（URLを抽出する対象）
 type openAIOutputItem struct {
-	Type    string              `json:"type"`              // "web_search_call" または "message"
-	Results []openAIWebResult   `json:"results,omitempty"` // web_search_call の結果（通常は空）
-	Action  *openAIWebAction    `json:"action,omitempty"`  // include時のsources（通常は空）
-	Content []openAIContentPart `json:"content,omitempty"` // message のコンテンツ（URL抽出元）
+	Type    string              `json:"type"`              // アイテムの種類
+	Results []openAIWebResult   `json:"results,omitempty"` // 検索結果（通常は空）
+	Action  *openAIWebAction    `json:"action,omitempty"`  // アクション情報
+	Content []openAIContentPart `json:"content,omitempty"` // メッセージ内容
 }
 
 // openAIWebAction は action フィールドの構造
 type openAIWebAction struct {
-	Sources []openAIWebSource `json:"sources,omitempty"`  // ソースURL配列（通常は空）
+	Sources []openAIWebSource `json:"sources,omitempty"` // ソースURL配列
 }
 
 // openAIWebSource は sources配列の各要素
 type openAIWebSource struct {
-	URL string `json:"url"`  // ソースURL
+	URL string `json:"url"` // ソースURL
 }
 
-// openAIWebResult は results配列の各要素（理想的な形式だが通常は返らない）
+// openAIWebResult は results配列の各要素
+//
+// 【注意】理想的にはここにタイトル・URL・スニペットが入るが、
+// 現在のAPIでは通常空で返される
 type openAIWebResult struct {
-	Title   string `json:"title"`    // 記事タイトル
-	URL     string `json:"url"`      // 記事URL
-	Snippet string `json:"snippet"`  // スニペット
+	Title   string `json:"title"`   // 記事タイトル
+	URL     string `json:"url"`     // 記事URL
+	Snippet string `json:"snippet"` // スニペット（要約）
 }
 
 // openAIContentPart は message.content の各パート
+//
+// 【重要】Textフィールドが主要なURL抽出元
 type openAIContentPart struct {
-	Type        string             `json:"type"`                  // "text"
-	Text        string             `json:"text,omitempty"`        // テキストコンテンツ（URL抽出元）
-	Annotations []openAIAnnotation `json:"annotations,omitempty"` // アノテーション（citations）
+	Type        string             `json:"type"`                  // パートの種類（"text"など）
+	Text        string             `json:"text,omitempty"`        // テキスト内容（URL抽出元）
+	Annotations []openAIAnnotation `json:"annotations,omitempty"` // アノテーション情報
 }
 
 // openAIAnnotation は annotations配列の各要素
+//
+// url_citationタイプの場合、URLとタイトルが含まれる（フォールバック用）
 type openAIAnnotation struct {
-	Type  string `json:"type"`            // "citation"
+	Type  string `json:"type"`            // アノテーションの種類
 	URL   string `json:"url,omitempty"`   // 引用元URL
 	Title string `json:"title,omitempty"` // 引用元タイトル
 }
 
-// generateTitleFromURL は URLから擬似タイトルを生成（マッチング用）
+// =============================================================================
+// ヘルパー関数
+// =============================================================================
+
+// generateTitleFromURL はURLから擬似タイトルを生成する
 //
-// OpenAI Responses API は通常タイトルを返さないため、URLから推測する。
+// OpenAI Responses APIは通常タイトルを返さないため、URLから推測します。
+// マッチングの精度を上げるために、意味のある単語を抽出します。
 //
-// 例:
-//   "https://carbon-pulse.com/timeline/387850/" → "Carbon Pulse Timeline"
-//   "https://www.gov.uk/climate-policy" → "Gov Uk Climate Policy"
+// 【処理の流れ】
+//  1. ドメイン名から www. を除去
+//  2. URLパスを / で分割
+//  3. 数字のみ・短すぎるパートを除外
+//  4. ハイフン/アンダースコアをスペースに変換
+//  5. 各単語の先頭を大文字化
 //
-// 処理:
-//   1. ドメイン名から意味のある部分を抽出（www. は除去）
-//   2. URLパスから意味のある部分を抽出（数字のみのパートは除外）
-//   3. ハイフン/アンダースコアをスペースに変換
-//   4. 各単語の先頭を大文字化
+// 【変換例】
 //
-// 引数:
-//   rawURL: 対象URL
+//	"https://carbon-pulse.com/timeline/387850/"
+//	  → "Carbon Pulse Timeline"
 //
-// 戻り値:
-//   生成された擬似タイトル
+//	"https://www.gov.uk/climate-policy-update"
+//	  → "Gov Uk Climate Policy Update"
 func generateTitleFromURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return rawURL
+		return rawURL // パース失敗時はそのまま返す
 	}
 
-	// ドメイン名から意味のある部分を抽出
+	// ドメイン名から www. を除去して最初の部分を取得
+	// 例: "www.carbon-pulse.com" → "carbon-pulse"
 	host := strings.TrimPrefix(u.Host, "www.")
 	hostParts := strings.Split(host, ".")
 	domain := hostParts[0]
 
-	// パスから意味のある部分を抽出
+	// URLパスを分割して意味のある部分を抽出
+	// 例: "/timeline/387850/" → ["timeline", "387850"]
 	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	var meaningfulParts []string
 
 	for _, part := range pathParts {
-		// 数字だけのパート（IDなど）は除外
+		// 数字だけのパート（記事IDなど）は除外
 		if regexp.MustCompile(`^\d+$`).MatchString(part) {
 			continue
 		}
-		// 短すぎるパートは除外
+		// 短すぎるパートは除外（意味を持たないことが多い）
 		if len(part) < 3 {
 			continue
 		}
@@ -140,7 +205,7 @@ func generateTitleFromURL(rawURL string) string {
 		title = domain + " " + strings.Join(meaningfulParts, " ")
 	}
 
-	// 先頭大文字化
+	// 各単語の先頭を大文字化
 	words := strings.Fields(title)
 	for i, word := range words {
 		if len(word) > 0 {
@@ -151,13 +216,43 @@ func generateTitleFromURL(rawURL string) string {
 	return strings.Join(words, " ")
 }
 
+// =============================================================================
+// メイン関数: OpenAI Web検索
+// =============================================================================
+
+// openaiWebSearch はOpenAI Responses APIを使用してWeb検索を実行する
+//
+// 【処理の流れ】
+//  1. APIキーの確認
+//  2. プロンプトの構築（URLリスト形式で返すよう指示）
+//  3. HTTPリクエストの送信
+//  4. レスポンスのパース
+//  5. 3段階のフォールバックでURL抽出
+//  6. 結果をソートして返す
+//
+// 引数:
+//
+//	query:    検索クエリ
+//	limit:    取得する最大記事数
+//	model:    使用するOpenAIモデル（例: "gpt-4o-mini"）
+//	toolType: ツールタイプ（"web_search" または "web_search_preview"）
+//
+// 戻り値:
+//
+//	検索結果の記事リスト、エラー
 func openaiWebSearch(query string, limit int, model string, toolType string) ([]FreeArticle, error) {
+	// =========================================================================
+	// 1. APIキーの確認
+	// =========================================================================
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY is required")
 	}
 
-	// CRITICAL: OpenAI Responses APIはresultsを構造化して返さないため、
+	// =========================================================================
+	// 2. プロンプトの構築
+	// =========================================================================
+	// 重要: OpenAI Responses APIはresultsを構造化して返さないため、
 	// テキスト形式でURLリストを返させ、後でパースする戦略を取る
 	prompt := fmt.Sprintf(`Search for: %s
 
@@ -167,15 +262,16 @@ URL: https://another.com
 
 Do NOT write explanations. ONLY URLs.`, query)
 
+	// =========================================================================
+	// 3. HTTPリクエストの構築
+	// =========================================================================
 	reqBody := map[string]any{
 		"model": model,
 		"input": prompt,
 		"tools": []map[string]any{
-			{"type": toolType}, // "web_search" or "web_search_preview"
+			{"type": toolType}, // "web_search" または "web_search_preview"
 		},
-		// NOTE: include を指定しない（デフォルトですべて返す）
-		// URLリストを返すために少し余裕を持たせる
-		"max_output_tokens": 500,
+		"max_output_tokens": 500, // URLリストには500トークンで十分
 	}
 
 	b, _ := json.Marshal(reqBody)
@@ -186,29 +282,40 @@ Do NOT write explanations. ONLY URLs.`, query)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	// =========================================================================
+	// 4. HTTPリクエストの送信
+	// =========================================================================
+	client := &http.Client{Timeout: 60 * time.Second} // タイムアウト60秒
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	// レスポンスボディを読み取り
 	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	// HTTPエラーチェック（300番台以上はエラー）
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("openai responses error: %s\n%s", resp.Status, string(bodyBytes))
 	}
 
-	// DEBUG: レスポンス全体を出力
+	// =========================================================================
+	// デバッグ: レスポンス全体を出力
+	// =========================================================================
 	if os.Getenv("DEBUG_OPENAI_FULL") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Full OpenAI response:\n%s\n", string(bodyBytes))
 	}
 
+	// =========================================================================
+	// 5. レスポンスのパース
+	// =========================================================================
 	var r openAIResponsesResp
 	if err := json.Unmarshal(bodyBytes, &r); err != nil {
 		return nil, fmt.Errorf("failed to parse openai response: %w", err)
 	}
 
-	// DEBUG: レスポンスの内容を確認
+	// デバッグ: レスポンスの構造を確認
 	if os.Getenv("DEBUG_OPENAI") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] OpenAI response for query '%s':\n", query)
 		fmt.Fprintf(os.Stderr, "[DEBUG] Output items: %d\n", len(r.Output))
@@ -220,9 +327,17 @@ Do NOT write explanations. ONLY URLs.`, query)
 		}
 	}
 
-	// 1) まず web_search_call.results を拾う（ここが本命）
+	// =========================================================================
+	// 6. URL抽出（3段階フォールバック）
+	// =========================================================================
+
+	// 結果を格納するスライスと重複チェック用マップ
 	cands := make([]FreeArticle, 0, limit)
 	seen := map[string]bool{}
+
+	// -------------------------------------------------------------------------
+	// 優先度1: web_search_call.results から抽出（理想的だが通常は空）
+	// -------------------------------------------------------------------------
 	for _, it := range r.Output {
 		if it.Type != "web_search_call" {
 			continue
@@ -241,7 +356,9 @@ Do NOT write explanations. ONLY URLs.`, query)
 			})
 		}
 
-		// 2) include されていれば action.sources も拾える（タイトル無しなのでURLをタイトルにする）
+		// ---------------------------------------------------------------------
+		// 優先度2: action.sources から抽出（タイトルなし）
+		// ---------------------------------------------------------------------
 		if it.Action != nil {
 			if os.Getenv("DEBUG_OPENAI") != "" {
 				fmt.Fprintf(os.Stderr, "[DEBUG] Processing Action.Sources: %d items\n", len(it.Action.Sources))
@@ -260,7 +377,7 @@ Do NOT write explanations. ONLY URLs.`, query)
 				seen[u] = true
 				cands = append(cands, FreeArticle{
 					Source: "OpenAI(web_search_sources)",
-					Title:  u,
+					Title:  u, // タイトルがないのでURLをそのまま使用
 					URL:    u,
 				})
 				if os.Getenv("DEBUG_OPENAI") != "" {
@@ -274,12 +391,17 @@ Do NOT write explanations. ONLY URLs.`, query)
 		fmt.Fprintf(os.Stderr, "[DEBUG] Total candidates collected: %d\n", len(cands))
 	}
 
-	// 3) web_search_callが結果を返さない場合は、message.content.textからURLを抽出
+	// -------------------------------------------------------------------------
+	// 優先度3: message.content.text から正規表現でURL抽出 ★主要手法★
+	// -------------------------------------------------------------------------
 	if len(cands) == 0 {
 		if os.Getenv("DEBUG_OPENAI") != "" {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Attempting URL extraction from message.content.text\n")
 		}
+
+		// URLを抽出する正規表現パターン
 		reURL := regexp.MustCompile(`https?://[^\s\)]+`)
+
 		for _, it := range r.Output {
 			if it.Type != "message" {
 				continue
@@ -287,23 +409,29 @@ Do NOT write explanations. ONLY URLs.`, query)
 			if os.Getenv("DEBUG_OPENAI") != "" {
 				fmt.Fprintf(os.Stderr, "[DEBUG] Found message item with %d content parts\n", len(it.Content))
 			}
+
 			for _, cp := range it.Content {
-				// まずテキストからURL抽出
+				// テキストからURL抽出
 				if cp.Text != "" {
 					if os.Getenv("DEBUG_OPENAI") != "" {
+						// 先頭200文字のみ表示（長すぎるログを避ける）
 						fmt.Fprintf(os.Stderr, "[DEBUG] Content text: %s\n", cp.Text[:min(200, len(cp.Text))])
 					}
+
 					urls := reURL.FindAllString(cp.Text, -1)
 					if os.Getenv("DEBUG_OPENAI") != "" {
 						fmt.Fprintf(os.Stderr, "[DEBUG] Extracted %d URLs from text\n", len(urls))
 					}
+
 					for _, u := range urls {
+						// 末尾の句読点を除去
 						u = strings.TrimRight(u, ".,;:!?")
 						if u == "" || seen[u] {
 							continue
 						}
 						seen[u] = true
-						// URLから疑似タイトルを生成（マッチング精度向上のため）
+
+						// URLから擬似タイトルを生成（マッチング精度向上のため）
 						title := generateTitleFromURL(u)
 						cands = append(cands, FreeArticle{
 							Source: "OpenAI(text_extract)",
@@ -315,7 +443,10 @@ Do NOT write explanations. ONLY URLs.`, query)
 						}
 					}
 				}
-				// fallback: annotations（url_citation）も拾う
+
+				// -----------------------------------------------------------------
+				// 優先度4: annotations（url_citation）から抽出（フォールバック）
+				// -----------------------------------------------------------------
 				for _, ann := range cp.Annotations {
 					if ann.URL == "" || seen[ann.URL] {
 						continue
@@ -335,11 +466,17 @@ Do NOT write explanations. ONLY URLs.`, query)
 		}
 	}
 
-	// 安定のため URL ソート
+	// =========================================================================
+	// 7. 結果の整形
+	// =========================================================================
+
+	// URLでソート（結果の安定性のため）
 	sort.Slice(cands, func(i, j int) bool { return cands[i].URL < cands[j].URL })
 
+	// 指定された上限で切り詰め
 	if limit > 0 && len(cands) > limit {
 		cands = cands[:limit]
 	}
+
 	return cands, nil
 }

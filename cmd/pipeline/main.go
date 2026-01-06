@@ -138,14 +138,21 @@ func main() {
 		notionDatabaseID = flag.String("notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
 
 		// --- Email integration ---
-		sendEmail      = flag.Bool("sendEmail", false, "send headlines summary via email")
-		emailDaysBack  = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
+		sendEmail       = flag.Bool("sendEmail", false, "send headlines summary via email")
+		sendShortEmail  = flag.Bool("sendShortEmail", false, "send 50-char short headlines digest via email")
+		emailDaysBack   = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
 	)
 	flag.Parse()
 
 	// --- Early exit for email-only mode ---
 	if *sendEmail {
 		handleEmailSend(*emailDaysBack)
+		return
+	}
+
+	// --- Early exit for short email mode ---
+	if *sendShortEmail {
+		handleShortEmailSend(*emailDaysBack)
 		return
 	}
 
@@ -557,6 +564,79 @@ func handleEmailSend(emailDaysBack int) {
 	}
 
 	fmt.Fprintln(os.Stderr, "✅ Email sent successfully")
+	fmt.Fprintf(os.Stderr, "   From: %s\n", emailFrom)
+	fmt.Fprintf(os.Stderr, "   To: %s\n", emailTo)
+	fmt.Fprintln(os.Stderr, "========================================")
+}
+
+// handleShortEmailSend は50文字ヘッドラインダイジェストメールを送信する
+//
+// 【処理の流れ】
+//  1. 環境変数をチェック
+//  2. NotionDBから記事を取得
+//  3. カーボンキーワードでフィルタリング（email.go内で実行）
+//  4. 50文字ヘッドライン + URLのメールを送信
+func handleShortEmailSend(emailDaysBack int) {
+	fmt.Fprintln(os.Stderr, "\n========================================")
+	fmt.Fprintln(os.Stderr, "📧 Sending Short Headlines Digest")
+	fmt.Fprintln(os.Stderr, "========================================")
+
+	// Validate environment variables
+	emailFrom := os.Getenv("EMAIL_FROM")
+	emailPassword := os.Getenv("EMAIL_PASSWORD")
+	emailTo := os.Getenv("EMAIL_TO")
+	notionToken := os.Getenv("NOTION_TOKEN")
+	notionDatabaseID := os.Getenv("NOTION_DATABASE_ID")
+
+	if emailFrom == "" {
+		fatalf("ERROR: EMAIL_FROM environment variable is required for email sending")
+	}
+	if emailPassword == "" {
+		fatalf("ERROR: EMAIL_PASSWORD environment variable is required (use Gmail App Password)")
+	}
+	if emailTo == "" {
+		fatalf("ERROR: EMAIL_TO environment variable is required")
+	}
+	if notionToken == "" {
+		fatalf("ERROR: NOTION_TOKEN environment variable is required to fetch headlines")
+	}
+	if notionDatabaseID == "" {
+		fatalf("ERROR: NOTION_DATABASE_ID environment variable is required (run with -notionClip first to create database)")
+	}
+
+	// Create Notion clipper
+	clipper, err := NewNotionClipper(notionToken, notionDatabaseID)
+	if err != nil {
+		fatalf("ERROR creating Notion clipper: %v", err)
+	}
+
+	// Fetch headlines from Notion DB
+	ctx := context.Background()
+	notionHeadlines, err := clipper.FetchRecentHeadlines(ctx, emailDaysBack)
+	if err != nil {
+		fatalf("ERROR fetching headlines from Notion: %v", err)
+	}
+
+	if len(notionHeadlines) == 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  No headlines found in the last %d days\n", emailDaysBack)
+		fmt.Fprintln(os.Stderr, "========================================")
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "Fetched %d headlines from Notion (last %d days)\n", len(notionHeadlines), emailDaysBack)
+
+	// Create email sender
+	sender, err := NewEmailSender(emailFrom, emailPassword, emailTo)
+	if err != nil {
+		fatalf("ERROR creating email sender: %v", err)
+	}
+
+	// Send short headlines digest email
+	if err := sender.SendShortHeadlinesDigest(ctx, notionHeadlines); err != nil {
+		fatalf("ERROR sending email: %v", err)
+	}
+
+	fmt.Fprintln(os.Stderr, "✅ Short headlines digest email sent successfully")
 	fmt.Fprintf(os.Stderr, "   From: %s\n", emailFrom)
 	fmt.Fprintf(os.Stderr, "   To: %s\n", emailTo)
 	fmt.Fprintln(os.Stderr, "========================================")

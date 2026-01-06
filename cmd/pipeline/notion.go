@@ -97,8 +97,9 @@ type NotionClipperConfig struct {
 //	clipper, err := NewNotionClipper(token, dbID)
 //	err = clipper.ClipHeadlineWithRelated(ctx, headline)
 type NotionClipper struct {
-	client *notionapi.Client     // Notion APIクライアント
-	dbID   notionapi.DatabaseID // 操作対象のデータベースID
+	client                     *notionapi.Client     // Notion APIクライアント
+	dbID                       notionapi.DatabaseID  // 操作対象のデータベースID
+	shortHeadlinePropertyEnsured bool                // ShortHeadlineプロパティ確認済みフラグ
 }
 
 // NewNotionClipper creates a new Notion clipper
@@ -180,6 +181,9 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 			"AI Summary": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
+			"ShortHeadline": notionapi.RichTextPropertyConfig{
+				Type: notionapi.PropertyConfigTypeRichText,
+			},
 			"Type": notionapi.SelectPropertyConfig{
 				Type: notionapi.PropertyConfigTypeSelect,
 				Select: notionapi.Select{
@@ -213,11 +217,71 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 	return string(db.ID), nil
 }
 
+// ensureShortHeadlineProperty は既存のデータベースにShortHeadlineプロパティを追加する
+//
+// 【背景】
+//   - 既存のデータベースにはShortHeadlineプロパティが存在しない場合がある
+//   - この関数はプロパティが存在しない場合のみ追加する
+//   - 既存プロパティのAI機能設定を上書きしないよう、存在確認してから追加
+func (nc *NotionClipper) ensureShortHeadlineProperty(ctx context.Context) error {
+	// 既に確認済みの場合はスキップ
+	if nc.shortHeadlinePropertyEnsured {
+		return nil
+	}
+
+	if nc.dbID == "" {
+		return nil
+	}
+
+	// データベースのスキーマを取得してShortHeadlineプロパティの存在を確認
+	db, err := nc.client.Database.Get(ctx, nc.dbID)
+	if err != nil {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to get database schema: %v\n", err)
+		}
+		nc.shortHeadlinePropertyEnsured = true
+		return nil
+	}
+
+	// ShortHeadlineプロパティが既に存在する場合はスキップ（AI機能設定を保持）
+	if _, exists := db.Properties["ShortHeadline"]; exists {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] ShortHeadline property already exists, skipping update\n")
+		}
+		nc.shortHeadlinePropertyEnsured = true
+		return nil
+	}
+
+	// ShortHeadlineプロパティが存在しない場合のみ追加
+	_, err = nc.client.Database.Update(ctx, nc.dbID, &notionapi.DatabaseUpdateRequest{
+		Properties: notionapi.PropertyConfigs{
+			"ShortHeadline": notionapi.RichTextPropertyConfig{
+				Type: notionapi.PropertyConfigTypeRichText,
+			},
+		},
+	})
+	if err != nil {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to add ShortHeadline property: %v\n", err)
+		}
+	} else {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] ShortHeadline property added to database\n")
+		}
+	}
+
+	nc.shortHeadlinePropertyEnsured = true
+	return nil
+}
+
 // ClipHeadline clips a headline to Notion
 func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	if nc.dbID == "" {
 		return fmt.Errorf("database ID not set")
 	}
+
+	// 既存DBにShortHeadlineプロパティがない場合に追加
+	nc.ensureShortHeadlineProperty(ctx)
 
 	properties := notionapi.Properties{
 		"Title": notionapi.TitleProperty{
@@ -263,15 +327,21 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		}
 	}
 
-	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
+	// Add full content to AI Summary and ShortHeadline fields
+	// (split into multiple RichText blocks if needed due to 2000 char limit)
 	if h.Excerpt != "" {
+		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
 		properties["AI Summary"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
-			RichText: splitIntoRichTextBlocks(h.Excerpt),
+			RichText: richTextBlocks,
+		}
+		properties["ShortHeadline"] = notionapi.RichTextProperty{
+			Type:     notionapi.PropertyTypeRichText,
+			RichText: richTextBlocks,
 		}
 	}
 
-	// Create page request (without content blocks - will add separately)
+	// ページ作成
 	pageRequest := &notionapi.PageCreateRequest{
 		Parent: notionapi.Parent{
 			Type:       notionapi.ParentTypeDatabaseID,
@@ -609,15 +679,24 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				}
 			}
 
+			// Extract ShortHeadline (50文字ヘッドライン)
+			shortHeadline := ""
+			if shortProp, ok := page.Properties["ShortHeadline"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
+				for _, rt := range shortProp.RichText {
+					shortHeadline += rt.PlainText
+				}
+			}
+
 			// Extract Created time
 			createdAt := page.CreatedTime.Format(time.RFC3339)
 
 			allHeadlines = append(allHeadlines, NotionHeadline{
-				Title:      title,
-				URL:        url,
-				Source:     source,
-				AISummary:  aiSummary,
-				CreatedAt:  createdAt,
+				Title:         title,
+				URL:           url,
+				Source:        source,
+				AISummary:     aiSummary,
+				ShortHeadline: shortHeadline,
+				CreatedAt:     createdAt,
 			})
 		}
 

@@ -90,13 +90,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"              // CLIフラグ解析
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/joho/godotenv"  // .env ファイル読み込み
+	"github.com/joho/godotenv" // .env ファイル読み込み
 )
 
 // main はパイプライン全体の制御フロー
@@ -113,61 +111,25 @@ func main() {
 		warnf(".env file not loaded: %v (using environment variables only)", err)
 	}
 
-	var (
-		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
-		outFile       = flag.String("out", "", "optional: write matched output JSON to this path (default: stdout)")
-		sources       = flag.String("sources", "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor,jri,env-ministry,pwc-japan,mizuho-rt", "sources to scrape when --headlines is empty")
-		perSource     = flag.Int("perSource", 30, "max headlines to collect per source")
+	// CLIフラグを解析（config.goのParseFlags）
+	cfg := ParseFlags()
 
-		searchPerHeadline = flag.Int("searchPerHeadline", 25, "max candidate results kept per headline")
-		queriesPerHead    = flag.Int("queriesPerHeadline", 3, "max queries to issue per headline")
-		resultsPerQuery   = flag.Int("resultsPerQuery", 10, "results per query")
-
-		daysBack     = flag.Int("daysBack", 60, "recency window in days (0 disables)")
-		topK         = flag.Int("topK", 3, "max relatedFree per headline")
-		minScore     = flag.Float64("minScore", 0.32, "minimum score threshold")
-		strictMarket = flag.Bool("strictMarket", true, "require market match if headline has market signal")
-
-		saveFree = flag.String("saveFree", "", "optional: write pooled free candidates to file")
-		// --- new flags for OpenAI ---
-		searchProvider = flag.String("searchProvider", "openai", "search provider: openai|brave")
-		openaiModel    = flag.String("openaiModel", "gpt-4o-mini", "OpenAI model to use")
-		// openaiModel = flag.String("openaiModel", "gpt-5.1", "OpenAI model to use")
-		openaiTool = flag.String("openaiTool", "web_search", "OpenAI tool type: web_search|web_search_preview")
-
-		// --- Notion integration ---
-		notionClip       = flag.Bool("notionClip", false, "clip articles to Notion database")
-		notionPageID     = flag.String("notionPageID", "", "parent page ID for creating new Notion database (required for new DB)")
-		notionDatabaseID = flag.String("notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
-
-		// --- Email integration ---
-		sendEmail          = flag.Bool("sendEmail", false, "send headlines summary via email")
-		sendShortEmail     = flag.Bool("sendShortEmail", false, "send 50-char short headlines digest via email")
-		listShortHeadlines = flag.Bool("listShortHeadlines", false, "list ShortHeadline values from NotionDB (diagnostic)")
-		emailDaysBack      = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
-	)
-	flag.Parse()
-
-	// --- Early exit for email-only mode ---
-	if *sendEmail {
-		handleEmailSend(*emailDaysBack)
+	// --- Early exit for email-only modes ---
+	if cfg.Email.SendEmail {
+		handleEmailSend(cfg.Email.DaysBack)
 		return
 	}
-
-	// --- Early exit for short email mode ---
-	if *sendShortEmail {
-		handleShortEmailSend(*emailDaysBack)
+	if cfg.Email.SendShortEmail {
+		handleShortEmailSend(cfg.Email.DaysBack)
 		return
 	}
-
-	// --- Early exit for listing ShortHeadlines (diagnostic) ---
-	if *listShortHeadlines {
-		handleListShortHeadlines(*emailDaysBack)
+	if cfg.Email.ListShortHeadlines {
+		handleListShortHeadlines(cfg.Email.DaysBack)
 		return
 	}
 
 	// OpenAI API key check (only if search is enabled)
-	if *queriesPerHead > 0 && os.Getenv("OPENAI_API_KEY") == "" {
+	if cfg.Search.IsEnabled() && os.Getenv("OPENAI_API_KEY") == "" {
 		errorf("set OPENAI_API_KEY (OpenAI API key) in your environment")
 		infof("To skip search and only collect headlines, use -queriesPerHeadline=0")
 		os.Exit(1)
@@ -175,27 +137,18 @@ func main() {
 
 	// --- 1) Collect or read headlines ---
 	var headlines []Headline
-	if *headlinesFile != "" {
-		if err := readJSONFile(*headlinesFile, &headlines); err != nil {
-			fatalf("ERROR reading headlines: %v", err)
+	if cfg.Input.HeadlinesFile != "" {
+		if err := readJSONFile(cfg.Input.HeadlinesFile, &headlines); err != nil {
+			fatalf("reading headlines: %v", err)
 		}
 	} else {
-		cfg := defaultHeadlineConfig()
-
-		// ソースリストをパース（カンマ区切り → スライス）
-		var sourceList []string
-		for _, s := range strings.Split(*sources, ",") {
-			s = strings.TrimSpace(strings.ToLower(s))
-			if s != "" {
-				sourceList = append(sourceList, s)
-			}
-		}
+		headlineCfg := defaultHeadlineConfig()
 
 		// ソースレジストリを使用して収集（headlines.goのCollectFromSourcesを呼び出し）
 		var err error
-		headlines, err = CollectFromSources(sourceList, *perSource, cfg)
+		headlines, err = CollectFromSources(cfg.Input.Sources(), cfg.Input.PerSource, headlineCfg)
 		if err != nil {
-			fatalf("ERROR collecting headlines: %v", err)
+			fatalf("collecting headlines: %v", err)
 		}
 	}
 
@@ -207,10 +160,10 @@ func main() {
 	now := time.Now()
 	candsByIdx := make([][]FreeArticle, len(headlines))
 	globalSeen := map[string]bool{}
-	globalPool := make([]FreeArticle, 0, len(headlines)*(*searchPerHeadline))
+	globalPool := make([]FreeArticle, 0, len(headlines)*cfg.Search.SearchPerHeadline)
 
-	if *queriesPerHead == 0 {
-		fmt.Fprintln(os.Stderr, "INFO: Search disabled (queriesPerHeadline=0), skipping web search phase")
+	if !cfg.Search.IsEnabled() {
+		infof("Search disabled (queriesPerHeadline=0), skipping web search phase")
 	}
 
 	for i, h := range headlines {
@@ -218,8 +171,8 @@ func main() {
 		if len(queries) == 0 {
 			queries = buildSearchQueries(h.Title, h.Excerpt)
 		}
-		if len(queries) > *queriesPerHead {
-			queries = queries[:*queriesPerHead]
+		if len(queries) > cfg.Search.QueriesPerHeadline {
+			queries = queries[:cfg.Search.QueriesPerHeadline]
 		}
 
 		merged := map[string]FreeArticle{}
@@ -227,11 +180,11 @@ func main() {
 			var res []FreeArticle
 			var err error
 
-			switch *searchProvider {
+			switch cfg.Search.Provider {
 			case "openai":
-				res, err = openaiWebSearch(q, *resultsPerQuery, *openaiModel, *openaiTool)
+				res, err = openaiWebSearch(q, cfg.Search.ResultsPerQuery, cfg.Search.OpenAIModel, cfg.Search.OpenAITool)
 			default:
-				err = fmt.Errorf("unsupported searchProvider: %s", *searchProvider)
+				err = fmt.Errorf("unsupported searchProvider: %s", cfg.Search.Provider)
 			}
 
 			if err != nil {
@@ -243,11 +196,11 @@ func main() {
 					continue
 				}
 				merged[a.URL] = a
-				if len(merged) >= *searchPerHeadline {
+				if len(merged) >= cfg.Search.SearchPerHeadline {
 					break
 				}
 			}
-			if len(merged) >= *searchPerHeadline {
+			if len(merged) >= cfg.Search.SearchPerHeadline {
 				break
 			}
 		}
@@ -283,23 +236,23 @@ func main() {
 			candsByIdx[i],
 			idf,
 			now,
-			*daysBack,
-			*strictMarket,
-			*topK,
-			*minScore,
+			cfg.Matching.DaysBack,
+			cfg.Matching.StrictMarket,
+			cfg.Matching.TopK,
+			cfg.Matching.MinScore,
 		)
 	}
 
 	// --- 5) Save results ---
-	if *saveFree != "" {
-		if err := writeJSONFile(*saveFree, globalPool); err != nil {
-			fatalf("ERROR writing free pool: %v", err)
+	if cfg.Output.SaveFree != "" {
+		if err := writeJSONFile(cfg.Output.SaveFree, globalPool); err != nil {
+			fatalf("writing free pool: %v", err)
 		}
 	}
 
-	if *outFile != "" {
-		if err := writeJSONFile(*outFile, headlines); err != nil {
-			fatalf("ERROR writing output: %v", err)
+	if cfg.Output.OutFile != "" {
+		if err := writeJSONFile(cfg.Output.OutFile, headlines); err != nil {
+			fatalf("writing output: %v", err)
 		}
 	} else {
 		enc := json.NewEncoder(os.Stdout)
@@ -308,32 +261,32 @@ func main() {
 	}
 
 	// --- 6) Clip to Notion (if enabled) ---
-	if *notionClip {
+	if cfg.Output.NotionClip {
 		fmt.Fprintln(os.Stderr, "\n========================================")
 		fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
 		fmt.Fprintln(os.Stderr, "========================================")
 
 		notionToken := os.Getenv("NOTION_TOKEN")
 		if notionToken == "" {
-			fatalf("ERROR: NOTION_TOKEN environment variable is required for Notion integration")
+			fatalf("NOTION_TOKEN environment variable is required for Notion integration")
 		}
 
-		clipper, err := NewNotionClipper(notionToken, *notionDatabaseID)
+		clipper, err := NewNotionClipper(notionToken, cfg.Output.NotionDatabaseID)
 		if err != nil {
-			fatalf("ERROR creating Notion clipper: %v", err)
+			fatalf("creating Notion clipper: %v", err)
 		}
 
 		ctx := context.Background()
 
 		// Create database if needed
-		if *notionDatabaseID == "" {
-			if *notionPageID == "" {
-				fatalf("ERROR: -notionPageID is required when creating a new Notion database")
+		if cfg.Output.NotionDatabaseID == "" {
+			if cfg.Output.NotionPageID == "" {
+				fatalf("-notionPageID is required when creating a new Notion database")
 			}
 			fmt.Fprintln(os.Stderr, "Creating new Notion database...")
-			dbID, err := clipper.CreateDatabase(ctx, *notionPageID)
+			dbID, err := clipper.CreateDatabase(ctx, cfg.Output.NotionPageID)
 			if err != nil {
-				fatalf("ERROR creating Notion database: %v", err)
+				fatalf("creating Notion database: %v", err)
 			}
 
 			// Save database ID to .env file for future use
@@ -344,7 +297,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "✅ Database ID saved to .env file\n")
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "Using existing Notion database: %s\n", *notionDatabaseID)
+			fmt.Fprintf(os.Stderr, "Using existing Notion database: %s\n", cfg.Output.NotionDatabaseID)
 		}
 
 		// Clip all headlines and their related articles
@@ -363,7 +316,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
 		fmt.Fprintln(os.Stderr, "========================================")
 	}
-
 }
 
 // Handlers are defined in handlers.go:

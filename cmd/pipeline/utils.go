@@ -190,6 +190,16 @@ func infof(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "INFO: "+format+"\n", args...)
 }
 
+// errorf はエラーメッセージを標準エラー出力に書き出す
+//
+// フォーマット: "ERROR: メッセージ\n"
+//
+// 【注意】この関数はログ出力のみでプログラムは終了しない
+// プログラムを終了させる場合は fatalf() を使用する
+func errorf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "ERROR: "+format+"\n", args...)
+}
+
 // -----------------------------------------------------------------------------
 // HTTP操作関数
 // -----------------------------------------------------------------------------

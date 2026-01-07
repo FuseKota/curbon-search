@@ -474,7 +474,7 @@ func (nc *NotionClipper) ClipHeadlineWithRelated(ctx context.Context, h Headline
 	// Clip all related free articles
 	for _, rf := range h.RelatedFree {
 		if err := nc.ClipRelatedFree(ctx, rf); err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: failed to clip related article %s: %v\n", rf.URL, err)
+			warnf("failed to clip related article %s: %v", rf.URL, err)
 			// Continue with other articles even if one fails
 		}
 	}

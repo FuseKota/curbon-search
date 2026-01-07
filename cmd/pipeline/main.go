@@ -107,8 +107,11 @@ import (
 //   3. IDF（逆文書頻度）ベースでスコアリングし、relatedFree リンクを付与
 //   4. 結果をJSON出力、Notionクリップ、またはメール送信
 func main() {
-	// .env ファイルから環境変数を読み込み（存在しない場合は無視）
-	_ = godotenv.Load()
+	// .env ファイルから環境変数を読み込み
+	// ファイルが存在しない場合はログを出力するが、処理は続行する
+	if err := godotenv.Load(); err != nil {
+		warnf(".env file not loaded: %v (using environment variables only)", err)
+	}
 
 	var (
 		headlinesFile = flag.String("headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
@@ -165,8 +168,8 @@ func main() {
 
 	// OpenAI API key check (only if search is enabled)
 	if *queriesPerHead > 0 && os.Getenv("OPENAI_API_KEY") == "" {
-		fmt.Fprintln(os.Stderr, "ERROR: set OPENAI_API_KEY (OpenAI API key) in your environment")
-		fmt.Fprintln(os.Stderr, "NOTE: To skip search and only collect headlines, use -queriesPerHeadline=0")
+		errorf("set OPENAI_API_KEY (OpenAI API key) in your environment")
+		infof("To skip search and only collect headlines, use -queriesPerHeadline=0")
 		os.Exit(1)
 	}
 
@@ -232,7 +235,7 @@ func main() {
 			}
 
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "WARN search:", err)
+				warnf("search: %v", err)
 				continue
 			}
 			for _, a := range res {
@@ -335,7 +338,7 @@ func main() {
 
 			// Save database ID to .env file for future use
 			if err := appendToEnvFile(".env", "NOTION_DATABASE_ID", dbID); err != nil {
-				fmt.Fprintf(os.Stderr, "WARN: Failed to save database ID to .env: %v\n", err)
+				warnf("Failed to save database ID to .env: %v", err)
 				fmt.Fprintf(os.Stderr, "Please manually add to .env:\nNOTION_DATABASE_ID=%s\n", dbID)
 			} else {
 				fmt.Fprintf(os.Stderr, "✅ Database ID saved to .env file\n")
@@ -349,7 +352,7 @@ func main() {
 		clippedCount := 0
 		for _, h := range headlines {
 			if err := clipper.ClipHeadlineWithRelated(ctx, h); err != nil {
-				fmt.Fprintf(os.Stderr, "WARN: failed to clip headline '%s': %v\n", h.Title, err)
+				warnf("failed to clip headline '%s': %v", h.Title, err)
 				continue
 			}
 			clippedCount++

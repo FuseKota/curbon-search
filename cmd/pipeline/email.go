@@ -279,7 +279,7 @@ func (es *EmailSender) sendWithRetry(msg []byte) error {
 		}
 
 		lastErr = err
-		fmt.Fprintf(os.Stderr, "WARN: Email send failed (attempt %d/%d): %v\n", i+1, maxRetries, err)
+		warnf("Email send failed (attempt %d/%d): %v", i+1, maxRetries, err)
 	}
 
 	return fmt.Errorf("failed to send email after %d retries: %w", maxRetries, lastErr)

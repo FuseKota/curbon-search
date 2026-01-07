@@ -138,9 +138,10 @@ func main() {
 		notionDatabaseID = flag.String("notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
 
 		// --- Email integration ---
-		sendEmail       = flag.Bool("sendEmail", false, "send headlines summary via email")
-		sendShortEmail  = flag.Bool("sendShortEmail", false, "send 50-char short headlines digest via email")
-		emailDaysBack   = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
+		sendEmail          = flag.Bool("sendEmail", false, "send headlines summary via email")
+		sendShortEmail     = flag.Bool("sendShortEmail", false, "send 50-char short headlines digest via email")
+		listShortHeadlines = flag.Bool("listShortHeadlines", false, "list ShortHeadline values from NotionDB (diagnostic)")
+		emailDaysBack      = flag.Int("emailDaysBack", 1, "fetch headlines from last N days for email")
 	)
 	flag.Parse()
 
@@ -153,6 +154,12 @@ func main() {
 	// --- Early exit for short email mode ---
 	if *sendShortEmail {
 		handleShortEmailSend(*emailDaysBack)
+		return
+	}
+
+	// --- Early exit for listing ShortHeadlines (diagnostic) ---
+	if *listShortHeadlines {
+		handleListShortHeadlines(*emailDaysBack)
 		return
 	}
 
@@ -640,6 +647,110 @@ func handleShortEmailSend(emailDaysBack int) {
 	fmt.Fprintf(os.Stderr, "   From: %s\n", emailFrom)
 	fmt.Fprintf(os.Stderr, "   To: %s\n", emailTo)
 	fmt.Fprintln(os.Stderr, "========================================")
+}
+
+// handleListShortHeadlines fetches and displays ShortHeadline values from NotionDB
+// This is a diagnostic function to verify Notion AI filtering results
+func handleListShortHeadlines(emailDaysBack int) {
+	fmt.Fprintln(os.Stderr, "\n========================================")
+	fmt.Fprintln(os.Stderr, "📋 Listing ShortHeadline Values from NotionDB")
+	fmt.Fprintln(os.Stderr, "========================================")
+
+	// Validate environment variables
+	notionToken := os.Getenv("NOTION_TOKEN")
+	notionDatabaseID := os.Getenv("NOTION_DATABASE_ID")
+
+	if notionToken == "" {
+		fatalf("ERROR: NOTION_TOKEN environment variable is required")
+	}
+	if notionDatabaseID == "" {
+		fatalf("ERROR: NOTION_DATABASE_ID environment variable is required")
+	}
+
+	// Create Notion clipper
+	clipper, err := NewNotionClipper(notionToken, notionDatabaseID)
+	if err != nil {
+		fatalf("ERROR creating Notion clipper: %v", err)
+	}
+
+	// Fetch headlines from Notion DB
+	ctx := context.Background()
+	notionHeadlines, err := clipper.FetchRecentHeadlines(ctx, emailDaysBack)
+	if err != nil {
+		fatalf("ERROR fetching headlines from Notion: %v", err)
+	}
+
+	if len(notionHeadlines) == 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  No headlines found in the last %d days\n", emailDaysBack)
+		fmt.Fprintln(os.Stderr, "========================================")
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "Found %d headlines (last %d days)\n\n", len(notionHeadlines), emailDaysBack)
+
+	// Group by ShortHeadline status
+	var withSummary, withDash, empty []NotionHeadline
+	for _, h := range notionHeadlines {
+		if h.ShortHeadline == "" {
+			empty = append(empty, h)
+		} else if h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
+			withDash = append(withDash, h)
+		} else {
+			withSummary = append(withSummary, h)
+		}
+	}
+
+	// Display statistics
+	fmt.Fprintf(os.Stderr, "📊 Statistics:\n")
+	fmt.Fprintf(os.Stderr, "   ✅ With Summary: %d\n", len(withSummary))
+	fmt.Fprintf(os.Stderr, "   ❌ Filtered (-): %d\n", len(withDash))
+	fmt.Fprintf(os.Stderr, "   ⏳ Empty:        %d\n", len(empty))
+	fmt.Fprintln(os.Stderr, "")
+
+	// Display headlines with summary
+	if len(withSummary) > 0 {
+		fmt.Fprintln(os.Stderr, "✅ Headlines with Summary:")
+		fmt.Fprintln(os.Stderr, "----------------------------------------")
+		for i, h := range withSummary {
+			fmt.Fprintf(os.Stderr, "[%d] %s\n", i+1, h.Source)
+			fmt.Fprintf(os.Stderr, "    Title: %s\n", truncateString(h.Title, 60))
+			fmt.Fprintf(os.Stderr, "    ShortHeadline: %s\n", h.ShortHeadline)
+			fmt.Fprintln(os.Stderr, "")
+		}
+	}
+
+	// Display filtered headlines
+	if len(withDash) > 0 {
+		fmt.Fprintln(os.Stderr, "❌ Filtered Headlines (-):")
+		fmt.Fprintln(os.Stderr, "----------------------------------------")
+		for i, h := range withDash {
+			fmt.Fprintf(os.Stderr, "[%d] %s\n", i+1, h.Source)
+			fmt.Fprintf(os.Stderr, "    Title: %s\n", truncateString(h.Title, 60))
+			fmt.Fprintln(os.Stderr, "")
+		}
+	}
+
+	// Display empty headlines
+	if len(empty) > 0 {
+		fmt.Fprintln(os.Stderr, "⏳ Headlines without ShortHeadline (need Notion AI processing):")
+		fmt.Fprintln(os.Stderr, "----------------------------------------")
+		for i, h := range empty {
+			fmt.Fprintf(os.Stderr, "[%d] %s\n", i+1, h.Source)
+			fmt.Fprintf(os.Stderr, "    Title: %s\n", truncateString(h.Title, 60))
+			fmt.Fprintln(os.Stderr, "")
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, "========================================")
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func fatalf(format string, args ...any) {

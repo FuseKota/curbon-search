@@ -21,9 +21,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // -----------------------------------------------------------------------------
@@ -186,6 +188,77 @@ func warnf(format string, args ...any) {
 // フォーマット: "INFO: メッセージ\n"
 func infof(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "INFO: "+format+"\n", args...)
+}
+
+// -----------------------------------------------------------------------------
+// HTTP操作関数
+// -----------------------------------------------------------------------------
+
+// httpGet はHTTP GETリクエストを実行する
+//
+// User-Agentヘッダーを設定し、タイムアウト付きでリクエストを送信する。
+// 呼び出し元でresp.Body.Close()を行う必要がある。
+//
+// 引数:
+//
+//	url:       リクエスト先URL
+//	userAgent: User-Agentヘッダーの値
+//	timeout:   リクエストタイムアウト
+//
+// 使用例:
+//
+//	resp, err := httpGet("https://example.com/api", "MyBot/1.0", 20*time.Second)
+//	if err != nil { return err }
+//	defer resp.Body.Close()
+func httpGet(url, userAgent string, timeout time.Duration) (*http.Response, error) {
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	return client.Do(req)
+}
+
+// httpGetWithConfig はheadlineSourceConfigを使用してHTTP GETリクエストを実行する
+//
+// headlineSourceConfigのUserAgentとTimeoutを使用する便利関数。
+//
+// 使用例:
+//
+//	resp, err := httpGetWithConfig("https://example.com/api", cfg)
+//	if err != nil { return err }
+//	defer resp.Body.Close()
+func httpGetWithConfig(url string, cfg headlineSourceConfig) (*http.Response, error) {
+	return httpGet(url, cfg.UserAgent, cfg.Timeout)
+}
+
+// httpGetJSON はHTTP GETリクエストを実行し、JSONレスポンスをデコードする
+//
+// レスポンスボディを自動的にクローズし、指定した型にJSONをデコードする。
+//
+// 引数:
+//
+//	url:       リクエスト先URL
+//	cfg:       headlineSourceConfig（UserAgentとTimeoutを使用）
+//	v:         デコード先の変数（ポインタで渡す）
+//
+// 使用例:
+//
+//	var posts []WPPost
+//	err := httpGetJSON("https://example.com/wp-json/wp/v2/posts", cfg, &posts)
+func httpGetJSON(url string, cfg headlineSourceConfig, v interface{}) error {
+	resp, err := httpGetWithConfig(url, cfg)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 // fatalf はエラーメッセージを出力してプログラムを終了する

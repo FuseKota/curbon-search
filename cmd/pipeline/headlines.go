@@ -687,18 +687,7 @@ func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Hea
 		return nil, err
 	}
 
-	// Parse JSON response
-	type WPPost struct {
-		Title struct {
-			Rendered string `json:"rendered"`
-		} `json:"title"`
-		Link    string `json:"link"`
-		Date    string `json:"date"`
-		Content struct {
-			Rendered string `json:"rendered"`
-		} `json:"content"`
-	}
-
+	// Parse JSON response (WPPost is defined in types.go)
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
@@ -770,17 +759,7 @@ func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headli
 		return nil, err
 	}
 
-	type WPPost struct {
-		Title struct {
-			Rendered string `json:"rendered"`
-		} `json:"title"`
-		Link    string `json:"link"`
-		Date    string `json:"date"`
-		Content struct {
-			Rendered string `json:"rendered"`
-		} `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
@@ -842,17 +821,7 @@ func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Hea
 		return nil, err
 	}
 
-	type WPPost struct {
-		Title struct {
-			Rendered string `json:"rendered"`
-		} `json:"title"`
-		Link    string `json:"link"`
-		Date    string `json:"date"`
-		Content struct {
-			Rendered string `json:"rendered"`
-		} `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
@@ -914,17 +883,7 @@ func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]He
 		return nil, err
 	}
 
-	type WPPost struct {
-		Title struct {
-			Rendered string `json:"rendered"`
-		} `json:"title"`
-		Link    string `json:"link"`
-		Date    string `json:"date"`
-		Content struct {
-			Rendered string `json:"rendered"`
-		} `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
@@ -986,13 +945,7 @@ func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, e
 		return nil, fmt.Errorf("read body failed: %w", err)
 	}
 
-	type WPPost struct {
-		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
-		Link    string                                      `json:"link"`
-		Date    string                                      `json:"date"`
-		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("json decode failed: %w", err)
@@ -1054,13 +1007,7 @@ func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) (
 		return nil, fmt.Errorf("read body failed: %w", err)
 	}
 
-	type WPPost struct {
-		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
-		Link    string                                      `json:"link"`
-		Date    string                                      `json:"date"`
-		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("json decode failed: %w", err)
@@ -1122,13 +1069,7 @@ func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headlin
 		return nil, fmt.Errorf("read body failed: %w", err)
 	}
 
-	type WPPost struct {
-		Title   struct{ Rendered string `json:"rendered"` } `json:"title"`
-		Link    string                                      `json:"link"`
-		Date    string                                      `json:"date"`
-		Content struct{ Rendered string `json:"rendered"` } `json:"content"`
-	}
-
+	// WPPost is defined in types.go
 	var posts []WPPost
 	if err := json.Unmarshal(body, &posts); err != nil {
 		return nil, fmt.Errorf("json decode failed: %w", err)

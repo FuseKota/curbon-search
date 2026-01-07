@@ -109,3 +109,30 @@ type NotionHeadline struct {
 	ShortHeadline string // 50文字ヘッドライン（Notion AIで生成）
 	CreatedAt     string // 作成日時（RFC3339形式）
 }
+
+// -----------------------------------------------------------------------------
+// WPPost - WordPress REST API レスポンス用構造体
+// -----------------------------------------------------------------------------
+//
+// WordPress REST API（/wp-json/wp/v2/posts）から取得した記事データを表します。
+// 複数のWordPressベースのニュースサイトで共通して使用されます。
+//
+// 【使用しているソース】
+//   - CarbonCredits.jp
+//   - Carbon Herald
+//   - Climate Home News
+//   - CarbonCredits.com
+//   - Sandbag
+//   - Ecosystem Marketplace
+//   - Carbon Brief
+//
+// 【WordPress REST API について】
+//   WordPressサイトには標準でREST APIが用意されており、
+//   /wp-json/wp/v2/posts エンドポイントで記事一覧を取得できる
+//
+type WPPost struct {
+	Title   struct{ Rendered string `json:"rendered"` } `json:"title"`   // 記事タイトル（HTMLエンコード済み）
+	Link    string                                      `json:"link"`    // 記事URL
+	Date    string                                      `json:"date"`    // 公開日時
+	Content struct{ Rendered string `json:"rendered"` } `json:"content"` // 記事本文（HTML形式）
+}

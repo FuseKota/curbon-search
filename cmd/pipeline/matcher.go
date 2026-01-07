@@ -90,6 +90,80 @@ import (
 )
 
 // =============================================================================
+// スコアリング定数
+// =============================================================================
+//
+// これらの定数はスコアリングアルゴリズムの重みを定義します。
+// 変更する場合は、ドキュメント先頭のスコアリング重み配分も更新してください。
+//
+// =============================================================================
+
+const (
+	// --- スコアリング重み（合計 1.0）---
+
+	// WeightIDFRecall はIDF加重リコール類似度の重み
+	// 見出しの重要な単語が候補にどれだけ含まれるかを評価
+	WeightIDFRecall = 0.56
+
+	// WeightJaccard はIDF加重Jaccard類似度の重み
+	// 両方のテキストの単語セットの重なり具合を評価
+	WeightJaccard = 0.28
+
+	// WeightMarket はマーケットマッチの重み
+	// カーボン市場（EUA, UKA, RGGI等）の一致を評価
+	WeightMarket = 0.06
+
+	// WeightTopic はトピックマッチの重み
+	// トピック（VCM, CDR, DAC等）の一致を評価
+	WeightTopic = 0.04
+
+	// WeightGeo は地理的マッチの重み
+	// 地域（EU, US, Japan等）の一致を評価
+	WeightGeo = 0.02
+
+	// WeightRecency は新しさ（Recency）の重み
+	// 最近の記事ほど高スコア
+	WeightRecency = 0.04
+
+	// --- 品質ブースト ---
+
+	// QualityBoostGov は政府サイト（.gov）のブースト
+	QualityBoostGov = 0.18
+
+	// QualityBoostPDF はPDFドキュメントのブースト
+	QualityBoostPDF = 0.18
+
+	// QualityBoostEU はEU公式サイトのブースト
+	QualityBoostEU = 0.16
+
+	// QualityBoostNGO はNGO/政策機関のブースト
+	QualityBoostNGO = 0.12
+
+	// QualityBoostIR は企業IRのブースト
+	QualityBoostIR = 0.12
+
+	// QualityBoostPress はプレスリリースのブースト
+	QualityBoostPress = 0.08
+
+	// --- フィルタリング閾値 ---
+
+	// RecencyHalfLifeDays は新しさスコアの半減期（日数）
+	RecencyHalfLifeDays = 14.0
+
+	// MinSharedTokens は最低共有トークン数
+	MinSharedTokens = 2
+
+	// MinTitleSimForLowTokens は共有トークン数が少ない場合の最低タイトル類似度
+	MinTitleSimForLowTokens = 0.90
+
+	// MinOverlapForGeoOnly は地理のみマッチ時の最低オーバーラップ
+	MinOverlapForGeoOnly = 0.50
+
+	// MinTitleSimForGeoOnly は地理のみマッチ時の最低タイトル類似度
+	MinTitleSimForGeoOnly = 0.84
+)
+
+// =============================================================================
 // トークン化 / 正規化
 // =============================================================================
 
@@ -621,8 +695,8 @@ func recencyScoreRFC3339(publishedAt string, now time.Time, daysBack int) float6
 	if daysBack > 0 && age > float64(daysBack) {
 		return 0
 	}
-	// 指数関数的減衰（半減期約10日）
-	return clamp01(math.Exp(-age / 14.0))
+	// 指数関数的減衰（半減期約14日）
+	return clamp01(math.Exp(-age / RecencyHalfLifeDays))
 }
 
 // =============================================================================
@@ -652,30 +726,30 @@ func sourceQualityBoost(u string) float64 {
 
 	// PDF文書（公式レポート、規制文書等）
 	if strings.HasSuffix(path, ".pdf") {
-		return 0.18
+		return QualityBoostPDF
 	}
 
 	// 政府 / 規制当局
 	if strings.HasSuffix(host, ".gov") || strings.HasSuffix(host, ".gov.uk") ||
 		strings.HasSuffix(host, ".gouv.fr") || strings.HasSuffix(host, ".go.jp") {
-		return 0.18
+		return QualityBoostGov
 	}
 
 	// EU公式サイト
 	if strings.Contains(host, "europa.eu") {
-		return 0.16
+		return QualityBoostEU
 	}
 
 	// 米国政府機関
 	if strings.Contains(host, "sec.gov") || strings.Contains(host, "epa.gov") ||
 		strings.Contains(host, "energy.gov") || strings.Contains(host, "ec.europa.eu") {
-		return 0.18
+		return QualityBoostGov
 	}
 
 	// 企業IR（投資家向け情報）
 	if strings.Contains(path, "/investor") || strings.Contains(path, "/investors") ||
 		strings.Contains(path, "/ir") || strings.Contains(host, "investor") {
-		return 0.12
+		return QualityBoostIR
 	}
 
 	// NGO / 政策機関
@@ -689,7 +763,7 @@ func sourceQualityBoost(u string) float64 {
 	}
 	for _, d := range ngos {
 		if strings.HasSuffix(host, d) {
-			return 0.12
+			return QualityBoostNGO
 		}
 	}
 
@@ -697,7 +771,7 @@ func sourceQualityBoost(u string) float64 {
 	pr := []string{"prnewswire.com", "businesswire.com", "globenewswire.com"}
 	for _, d := range pr {
 		if strings.HasSuffix(host, d) {
-			return 0.08
+			return QualityBoostPress
 		}
 	}
 
@@ -763,12 +837,12 @@ func scoreHeadlineCandidate(h Headline, cand FreeArticle, idf map[string]float64
 	}
 
 	// 広い地域のみでマッチし、語彙的重複が少ない場合は除外
-	if marketMatch == 0 && topicMatch == 0 && geoMatch > 0 && overlap < 0.50 && titleSim < 0.84 {
+	if marketMatch == 0 && topicMatch == 0 && geoMatch > 0 && overlap < MinOverlapForGeoOnly && titleSim < MinTitleSimForGeoOnly {
 		return scored{}, false
 	}
 
-	// 共有トークンが2未満かつタイトル類似度0.90未満の場合は除外
-	if sharedTokens < 2 && titleSim < 0.90 {
+	// 共有トークンが少なくタイトル類似度も低い場合は除外
+	if sharedTokens < MinSharedTokens && titleSim < MinTitleSimForLowTokens {
 		return scored{}, false
 	}
 
@@ -779,7 +853,7 @@ func scoreHeadlineCandidate(h Headline, cand FreeArticle, idf map[string]float64
 	// 最終スコア計算
 	// =========================================================================
 	// 類似度重視、シグナル + 品質は補助的
-	score := 0.56*overlap + 0.28*titleSim + 0.06*marketMatch + 0.04*topicMatch + 0.02*geoMatch + 0.04*rec + qBoost
+	score := WeightIDFRecall*overlap + WeightJaccard*titleSim + WeightMarket*marketMatch + WeightTopic*topicMatch + WeightGeo*geoMatch + WeightRecency*rec + qBoost
 
 	if score < minScore {
 		return scored{}, false

@@ -178,168 +178,22 @@ func main() {
 		}
 	} else {
 		cfg := defaultHeadlineConfig()
-		want := map[string]bool{}
+
+		// ソースリストをパース（カンマ区切り → スライス）
+		var sourceList []string
 		for _, s := range strings.Split(*sources, ",") {
 			s = strings.TrimSpace(strings.ToLower(s))
 			if s != "" {
-				want[s] = true
+				sourceList = append(sourceList, s)
 			}
 		}
-		if want["carbonpulse"] {
-			hs, err := collectHeadlinesCarbonPulse(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Carbon Pulse headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
+
+		// ソースレジストリを使用して収集（headlines.goのCollectFromSourcesを呼び出し）
+		var err error
+		headlines, err = CollectFromSources(sourceList, *perSource, cfg)
+		if err != nil {
+			fatalf("ERROR collecting headlines: %v", err)
 		}
-		if want["qci"] {
-			hs, err := collectHeadlinesQCI(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting QCI headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carboncredits.jp"] {
-			hs, err := collectHeadlinesCarbonCreditsJP(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting CarbonCredits.jp headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carbonherald"] {
-			hs, err := collectHeadlinesCarbonHerald(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Carbon Herald headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["climatehomenews"] {
-			hs, err := collectHeadlinesClimateHomeNews(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Climate Home News headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carboncredits.com"] {
-			hs, err := collectHeadlinesCarbonCreditscom(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting CarbonCredits.com headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["sandbag"] {
-			hs, err := collectHeadlinesSandbag(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Sandbag headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["ecosystem-marketplace"] {
-			hs, err := collectHeadlinesEcosystemMarketplace(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Ecosystem Marketplace headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carbon-brief"] {
-			hs, err := collectHeadlinesCarbonBrief(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Carbon Brief headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["icap"] {
-			hs, err := collectHeadlinesICAP(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting ICAP headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["ieta"] {
-			hs, err := collectHeadlinesIETA(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting IETA headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["energy-monitor"] {
-			hs, err := collectHeadlinesEnergyMonitor(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Energy Monitor headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["jri"] {
-			hs, err := collectHeadlinesJRI(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting JRI headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["env-ministry"] {
-			hs, err := collectHeadlinesEnvMinistry(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Environment Ministry headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["jpx"] {
-			hs, err := collectHeadlinesJPX(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting JPX headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["meti"] {
-			hs, err := collectHeadlinesMETI(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting METI headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["world-bank"] {
-			hs, err := collectHeadlinesWorldBank(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting World Bank headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carbon-market-watch"] {
-			hs, err := collectHeadlinesCarbonMarketWatch(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Carbon Market Watch headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["newclimate"] {
-			hs, err := collectHeadlinesNewClimate(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting NewClimate headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["carbon-knowledge-hub"] {
-			hs, err := collectHeadlinesCarbonKnowledgeHub(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Carbon Knowledge Hub headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["pwc-japan"] {
-			hs, err := collectHeadlinesPwCJapan(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting PwC Japan headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		if want["mizuho-rt"] {
-			hs, err := collectHeadlinesMizuhoRT(*perSource, cfg)
-			if err != nil {
-				fatalf("ERROR collecting Mizuho R&T headlines: %v", err)
-			}
-			headlines = append(headlines, hs...)
-		}
-		headlines = uniqueHeadlinesByURL(headlines)
 	}
 
 	if len(headlines) == 0 {

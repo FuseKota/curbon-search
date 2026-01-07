@@ -99,6 +99,102 @@ import (
 	"github.com/mmcdole/gofeed"      // RSS/Atomフィード解析
 )
 
+// =============================================================================
+// ソースレジストリ（Source Registry）
+// =============================================================================
+//
+// 各ソースの収集関数をマップで管理することで、main.goのif文を削減し、
+// 新規ソース追加時の変更を最小化します。
+//
+// 【使用方法】
+//
+//	collector, ok := sourceCollectors["carbonpulse"]
+//	if ok {
+//	    headlines, err := collector(10, cfg)
+//	}
+//
+// =============================================================================
+
+// HeadlineCollector は見出し収集関数のシグネチャを定義する型
+//
+// 全てのcollectHeadlines*関数はこのシグネチャに従う:
+//   - limit: 取得する記事の最大数
+//   - cfg:   HTTP設定（User-Agent、タイムアウト）
+//   - 戻り値: 収集した見出しとエラー
+type HeadlineCollector func(limit int, cfg headlineSourceConfig) ([]Headline, error)
+
+// sourceCollectors は全ソースの収集関数を格納するレジストリ
+//
+// キー: ソース識別子（CLIの-sourcesで指定する文字列）
+// 値:  対応する収集関数
+var sourceCollectors = map[string]HeadlineCollector{
+	// 有料ソース（見出しのみ）
+	"carbonpulse": collectHeadlinesCarbonPulse,
+	"qci":         collectHeadlinesQCI,
+
+	// WordPress REST APIソース
+	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
+	"carbonherald":          collectHeadlinesCarbonHerald,
+	"climatehomenews":       collectHeadlinesClimateHomeNews,
+	"carboncredits.com":     collectHeadlinesCarbonCreditscom,
+	"sandbag":               collectHeadlinesSandbag,
+	"ecosystem-marketplace": collectHeadlinesEcosystemMarketplace,
+	"carbon-brief":          collectHeadlinesCarbonBrief,
+
+	// HTMLスクレイピングソース
+	"icap":                collectHeadlinesICAP,
+	"ieta":                collectHeadlinesIETA,
+	"energy-monitor":      collectHeadlinesEnergyMonitor,
+	"world-bank":          collectHeadlinesWorldBank,
+	"carbon-market-watch": collectHeadlinesCarbonMarketWatch,
+	"newclimate":          collectHeadlinesNewClimate,
+	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
+
+	// 日本語ソース
+	"jri":          collectHeadlinesJRI,
+	"env-ministry": collectHeadlinesEnvMinistry,
+	"meti":         collectHeadlinesMETI,
+	"pwc-japan":    collectHeadlinesPwCJapan,
+	"mizuho-rt":    collectHeadlinesMizuhoRT,
+
+	// その他
+	"jpx": collectHeadlinesJPX,
+}
+
+// CollectFromSources は指定されたソースから見出しを収集する
+//
+// 【引数】
+//   - sources:   収集するソースのリスト（例: ["carbonpulse", "qci"]）
+//   - perSource: ソースあたりの最大記事数
+//   - cfg:       HTTP設定
+//
+// 【戻り値】
+//   - 収集した見出し（重複除去済み）
+//   - エラー（未知のソースが指定された場合など）
+//
+// 【使用例】
+//
+//	headlines, err := CollectFromSources([]string{"carbonherald", "carbon-brief"}, 10, cfg)
+func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfig) ([]Headline, error) {
+	var headlines []Headline
+
+	for _, src := range sources {
+		collector, ok := sourceCollectors[src]
+		if !ok {
+			return nil, fmt.Errorf("unknown source: %s", src)
+		}
+
+		hs, err := collector(perSource, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("collecting %s: %w", src, err)
+		}
+
+		headlines = append(headlines, hs...)
+	}
+
+	return uniqueHeadlinesByURL(headlines), nil
+}
+
 // min2 は2つの整数のうち小さい方を返すヘルパー関数
 func min2(a, b int) int {
 	if a < b {

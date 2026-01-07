@@ -84,7 +84,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -193,6 +192,70 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 	}
 
 	return uniqueHeadlinesByURL(headlines), nil
+}
+
+// =============================================================================
+// WordPress REST API 共通処理
+// =============================================================================
+//
+// WordPress REST APIを使用するソース（7ソース）の共通処理を提供します。
+//
+// =============================================================================
+
+// collectWordPressHeadlines はWordPress REST APIから記事を収集する共通関数
+//
+// 【引数】
+//   - baseURL:    WordPressサイトのベースURL（例: "https://carbonherald.com"）
+//   - sourceName: ソース名（例: "Carbon Herald"）
+//   - limit:      取得する記事の最大数
+//   - cfg:        HTTP設定
+//
+// 【使用例】
+//
+//	headlines, err := collectWordPressHeadlines(
+//	    "https://carbonherald.com",
+//	    "Carbon Herald",
+//	    10,
+//	    cfg,
+//	)
+func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// WordPress REST API endpoint - get full content for free articles
+	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", baseURL, limit)
+
+	// httpGetJSON is defined in utils.go
+	var posts []WPPost
+	if err := httpGetJSON(apiURL, cfg, &posts); err != nil {
+		return nil, fmt.Errorf("failed to fetch %s API: %w", sourceName, err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		// Clean up HTML entities from title
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		// Clean up HTML from full content (free article)
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		out = append(out, Headline{
+			Source:      sourceName,
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			Excerpt:     content, // Store full content in Excerpt field for free articles
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] %s: collected %d headlines\n", sourceName, len(out))
+	}
+
+	return out, nil
 }
 
 // min2 は2つの整数のうち小さい方を返すヘルパー関数
@@ -758,65 +821,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 
 // collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
 func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// WordPress REST API endpoint - get full content for free articles
-	apiURL := fmt.Sprintf("https://carboncredits.jp/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch carboncredits.jp API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("carboncredits.jp API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse JSON response (WPPost is defined in types.go)
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		// Clean up HTML entities from title
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-		if title == "" {
-			continue
-		}
-
-		// Clean up HTML from full content (free article)
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "CarbonCredits.jp",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
-			Excerpt:     content, // Store full content in Excerpt field for free articles
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] CarbonCredits.jp: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://carboncredits.jp", "CarbonCredits.jp", limit, cfg)
 }
 
 // cleanHTMLTags removes HTML tags and decodes HTML entities
@@ -831,374 +836,32 @@ func cleanHTMLTags(htmlStr string) string {
 
 // collectHeadlinesCarbonHerald collects headlines from carbonherald.com using WordPress REST API
 func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://carbonherald.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch carbonherald.com API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("carbonherald.com API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		// Clean up HTML entities from title
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-		if title == "" {
-			continue
-		}
-
-		// Clean up HTML from full content (free article)
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "Carbon Herald",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
-			Excerpt:     content, // Store full content in Excerpt field for free articles
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Carbon Herald: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://carbonherald.com", "Carbon Herald", limit, cfg)
 }
 
 // collectHeadlinesClimateHomeNews collects headlines from climatechangenews.com using WordPress REST API
 func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://www.climatechangenews.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch climatechangenews.com API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("climatechangenews.com API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		// Clean up HTML entities from title
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-		if title == "" {
-			continue
-		}
-
-		// Clean up HTML from full content (free article)
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "Climate Home News",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
-			Excerpt:     content, // Store full content in Excerpt field for free articles
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Climate Home News: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://www.climatechangenews.com", "Climate Home News", limit, cfg)
 }
 
 // collectHeadlinesCarbonCreditscom collects headlines from carboncredits.com using WordPress REST API
 func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://carboncredits.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch carboncredits.com API: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("carboncredits.com API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		// Clean up HTML entities from title
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-		if title == "" {
-			continue
-		}
-
-		// Clean up HTML from full content (free article)
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "CarbonCredits.com",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
-			Excerpt:     content, // Store full content in Excerpt field for free articles
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] CarbonCredits.com: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://carboncredits.com", "CarbonCredits.com", limit, cfg)
 }
 
 // collectHeadlinesSandbag fetches articles from Sandbag using WordPress REST API
 func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://sandbag.be/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read body failed: %w", err)
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("json decode failed: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-
-		// Skip posts without proper title
-		if title == "" {
-			continue
-		}
-
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "Sandbag",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date,
-			Excerpt:     content,
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Sandbag: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://sandbag.be", "Sandbag", limit, cfg)
 }
 
 // collectHeadlinesEcosystemMarketplace fetches articles from Ecosystem Marketplace using WordPress REST API
 func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://www.ecosystemmarketplace.com/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read body failed: %w", err)
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("json decode failed: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-
-		// Skip posts without proper title
-		if title == "" {
-			continue
-		}
-
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "Ecosystem Marketplace",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date,
-			Excerpt:     content,
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Ecosystem Marketplace: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://www.ecosystemmarketplace.com", "Ecosystem Marketplace", limit, cfg)
 }
 
 // collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API
 func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	apiURL := fmt.Sprintf("https://www.carbonbrief.org/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", limit)
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read body failed: %w", err)
-	}
-
-	// WPPost is defined in types.go
-	var posts []WPPost
-	if err := json.Unmarshal(body, &posts); err != nil {
-		return nil, fmt.Errorf("json decode failed: %w", err)
-	}
-
-	out := make([]Headline, 0, len(posts))
-	for _, p := range posts {
-		title := cleanHTMLTags(p.Title.Rendered)
-		title = strings.TrimSpace(title)
-
-		// Skip posts without proper title
-		if title == "" {
-			continue
-		}
-
-		content := cleanHTMLTags(p.Content.Rendered)
-		content = strings.TrimSpace(content)
-
-		out = append(out, Headline{
-			Source:      "Carbon Brief",
-			Title:       title,
-			URL:         p.Link,
-			PublishedAt: p.Date,
-			Excerpt:     content,
-			IsHeadline:  true,
-		})
-	}
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Carbon Brief: collected %d headlines\n", len(out))
-	}
-
-	return out, nil
+	return collectWordPressHeadlines("https://www.carbonbrief.org", "Carbon Brief", limit, cfg)
 }
 
 // collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping

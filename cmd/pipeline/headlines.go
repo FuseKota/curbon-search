@@ -819,11 +819,6 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	return result
 }
 
-// collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
-func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://carboncredits.jp", "CarbonCredits.jp", limit, cfg)
-}
-
 // cleanHTMLTags removes HTML tags and decodes HTML entities
 func cleanHTMLTags(htmlStr string) string {
 	// Remove HTML tags
@@ -834,35 +829,14 @@ func cleanHTMLTags(htmlStr string) string {
 	return text
 }
 
-// collectHeadlinesCarbonHerald collects headlines from carbonherald.com using WordPress REST API
-func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://carbonherald.com", "Carbon Herald", limit, cfg)
-}
-
-// collectHeadlinesClimateHomeNews collects headlines from climatechangenews.com using WordPress REST API
-func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://www.climatechangenews.com", "Climate Home News", limit, cfg)
-}
-
-// collectHeadlinesCarbonCreditscom collects headlines from carboncredits.com using WordPress REST API
-func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://carboncredits.com", "CarbonCredits.com", limit, cfg)
-}
-
-// collectHeadlinesSandbag fetches articles from Sandbag using WordPress REST API
-func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://sandbag.be", "Sandbag", limit, cfg)
-}
-
-// collectHeadlinesEcosystemMarketplace fetches articles from Ecosystem Marketplace using WordPress REST API
-func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://www.ecosystemmarketplace.com", "Ecosystem Marketplace", limit, cfg)
-}
-
-// collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API
-func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://www.carbonbrief.org", "Carbon Brief", limit, cfg)
-}
+// WordPress sources are defined in sources_wordpress.go:
+// - collectHeadlinesCarbonCreditsJP
+// - collectHeadlinesCarbonHerald
+// - collectHeadlinesClimateHomeNews
+// - collectHeadlinesCarbonCreditscom
+// - collectHeadlinesSandbag
+// - collectHeadlinesEcosystemMarketplace
+// - collectHeadlinesCarbonBrief
 
 // collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
 func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {

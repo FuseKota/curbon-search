@@ -709,3 +709,58 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 	return allHeadlines, nil
 }
+
+// =============================================================================
+// 環境変数ファイル操作
+// =============================================================================
+
+// appendToEnvFile は.envファイルにキーと値のペアを追加または更新する
+//
+// キーが既に存在する場合は値を更新、存在しない場合は末尾に追加する。
+// コメントアウトされたキー（#KEY=value）も検出して上書きする。
+//
+// 【使用場面】
+//
+//	新しいNotionデータベースを作成した際に、NOTION_DATABASE_IDを
+//	.envファイルに自動保存する
+//
+// 引数:
+//
+//	filename: .envファイルのパス
+//	key:      環境変数名（例: "NOTION_DATABASE_ID"）
+//	value:    設定する値
+func appendToEnvFile(filename, key, value string) error {
+	// 既存の.envファイルを読み込む（存在しない場合は空文字）
+	content := ""
+	data, err := os.ReadFile(filename)
+	if err == nil {
+		content = string(data)
+	}
+
+	// キーが既に存在するかチェック
+	lines := strings.Split(content, "\n")
+	keyExists := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, key+"=") || strings.HasPrefix(line, "#"+key+"=") {
+			lines[i] = key + "=" + value
+			keyExists = true
+			break
+		}
+	}
+
+	// キーが存在しない場合は末尾に追加
+	if !keyExists {
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		lines = append(lines, key+"="+value)
+	}
+
+	// ファイルに書き戻す
+	newContent := strings.Join(lines, "\n")
+	if err := os.WriteFile(filename, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .env file: %w", err)
+	}
+
+	return nil
+}

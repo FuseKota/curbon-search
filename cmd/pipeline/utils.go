@@ -187,3 +187,32 @@ func warnf(format string, args ...any) {
 func infof(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "INFO: "+format+"\n", args...)
 }
+
+// fatalf はエラーメッセージを出力してプログラムを終了する
+//
+// フォーマット: "メッセージ\n" の後にos.Exit(1)で終了
+//
+// 【使用場面】
+//
+//	致命的なエラーが発生し、処理を継続できない場合
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}
+
+// truncateString は文字列を指定した長さに切り詰める
+//
+// maxLen文字を超える場合、末尾に"..."を付けて切り詰める
+// 日本語などのマルチバイト文字も正しく処理する（runeを使用）
+//
+// 使用例:
+//
+//	truncateString("Hello World", 8)  // "Hello..."
+//	truncateString("短い", 10)        // "短い"（そのまま）
+func truncateString(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-3]) + "..."
+}

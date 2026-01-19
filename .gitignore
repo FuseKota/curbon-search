@@ -1,6 +1,11 @@
 # Binaries
 carbon-relay
 /pipeline
+/collect
+/email
+
+# Build artifacts
+/dist/
 
 # Test outputs
 *_test.json

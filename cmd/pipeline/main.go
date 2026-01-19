@@ -88,11 +88,7 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"os"
-	"time"
 
 	"github.com/joho/godotenv" // .env ファイル読み込み
 )
@@ -157,164 +153,18 @@ func main() {
 	}
 
 	// --- 2) For each headline, perform web search ---
-	now := time.Now()
-	candsByIdx := make([][]FreeArticle, len(headlines))
-	globalSeen := map[string]bool{}
-	globalPool := make([]FreeArticle, 0, len(headlines)*cfg.Search.SearchPerHeadline)
+	searchResult := SearchForHeadlines(headlines, &cfg.Search)
 
-	if !cfg.Search.IsEnabled() {
-		infof("Search disabled (queriesPerHeadline=0), skipping web search phase")
-	}
+	// --- 3) Match / score ---
+	headlines = MatchHeadlinesWithCandidates(headlines, searchResult.CandsByIdx, searchResult.GlobalPool, &cfg.Matching)
 
-	for i, h := range headlines {
-		queries := h.SearchQueries
-		if len(queries) == 0 {
-			queries = buildSearchQueries(h.Title, h.Excerpt)
-		}
-		if len(queries) > cfg.Search.QueriesPerHeadline {
-			queries = queries[:cfg.Search.QueriesPerHeadline]
-		}
+	// --- 4) Save results ---
+	handleSaveFreePool(searchResult.GlobalPool, &cfg.Output)
+	handleJSONOutput(headlines, &cfg.Output)
 
-		merged := map[string]FreeArticle{}
-		for _, q := range queries {
-			var res []FreeArticle
-			var err error
-
-			switch cfg.Search.Provider {
-			case "openai":
-				res, err = openaiWebSearch(q, cfg.Search.ResultsPerQuery, cfg.Search.OpenAIModel, cfg.Search.OpenAITool)
-			default:
-				err = fmt.Errorf("unsupported searchProvider: %s", cfg.Search.Provider)
-			}
-
-			if err != nil {
-				warnf("search: %v", err)
-				continue
-			}
-			for _, a := range res {
-				if a.URL == "" || a.Title == "" {
-					continue
-				}
-				merged[a.URL] = a
-				if len(merged) >= cfg.Search.SearchPerHeadline {
-					break
-				}
-			}
-			if len(merged) >= cfg.Search.SearchPerHeadline {
-				break
-			}
-		}
-
-		// flatten and dedupe
-		cands := make([]FreeArticle, 0, len(merged))
-		for _, a := range merged {
-			cands = append(cands, a)
-			if !globalSeen[a.URL] {
-				globalSeen[a.URL] = true
-				globalPool = append(globalPool, a)
-			}
-		}
-		candsByIdx[i] = cands
-	}
-
-	// --- 3) Build IDF corpus (headlines + all candidates) ---
-	docs := make([][]string, 0, len(headlines)+len(globalPool))
-	for _, h := range headlines {
-		docs = append(docs, tokenize(h.Title))
-	}
-	for _, a := range globalPool {
-		docs = append(docs, tokenize(a.Title))
-	}
-	idf := buildIDF(docs)
-
-	// --- 4) Match / score ---
-	for i := range headlines {
-		headlines[i].IsHeadline = true
-		headlines[i].SearchQueries = nil // compact output
-		headlines[i].RelatedFree = topKRelated(
-			headlines[i],
-			candsByIdx[i],
-			idf,
-			now,
-			cfg.Matching.DaysBack,
-			cfg.Matching.StrictMarket,
-			cfg.Matching.TopK,
-			cfg.Matching.MinScore,
-		)
-	}
-
-	// --- 5) Save results ---
-	if cfg.Output.SaveFree != "" {
-		if err := writeJSONFile(cfg.Output.SaveFree, globalPool); err != nil {
-			fatalf("writing free pool: %v", err)
-		}
-	}
-
-	if cfg.Output.OutFile != "" {
-		if err := writeJSONFile(cfg.Output.OutFile, headlines); err != nil {
-			fatalf("writing output: %v", err)
-		}
-	} else {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(headlines)
-	}
-
-	// --- 6) Clip to Notion (if enabled) ---
+	// --- 5) Clip to Notion (if enabled) ---
 	if cfg.Output.NotionClip {
-		fmt.Fprintln(os.Stderr, "\n========================================")
-		fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
-		fmt.Fprintln(os.Stderr, "========================================")
-
-		notionToken := os.Getenv("NOTION_TOKEN")
-		if notionToken == "" {
-			fatalf("NOTION_TOKEN environment variable is required for Notion integration")
-		}
-
-		clipper, err := NewNotionClipper(notionToken, cfg.Output.NotionDatabaseID)
-		if err != nil {
-			fatalf("creating Notion clipper: %v", err)
-		}
-
-		ctx := context.Background()
-
-		// Create database if needed
-		if cfg.Output.NotionDatabaseID == "" {
-			if cfg.Output.NotionPageID == "" {
-				fatalf("-notionPageID is required when creating a new Notion database")
-			}
-			fmt.Fprintln(os.Stderr, "Creating new Notion database...")
-			dbID, err := clipper.CreateDatabase(ctx, cfg.Output.NotionPageID)
-			if err != nil {
-				fatalf("creating Notion database: %v", err)
-			}
-
-			// Save database ID to .env file for future use
-			if err := appendToEnvFile(".env", "NOTION_DATABASE_ID", dbID); err != nil {
-				warnf("Failed to save database ID to .env: %v", err)
-				fmt.Fprintf(os.Stderr, "Please manually add to .env:\nNOTION_DATABASE_ID=%s\n", dbID)
-			} else {
-				fmt.Fprintf(os.Stderr, "✅ Database ID saved to .env file\n")
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "Using existing Notion database: %s\n", cfg.Output.NotionDatabaseID)
-		}
-
-		// Clip all headlines and their related articles
-		fmt.Fprintln(os.Stderr, "\nClipping articles...")
-		clippedCount := 0
-		for _, h := range headlines {
-			if err := clipper.ClipHeadlineWithRelated(ctx, h); err != nil {
-				warnf("failed to clip headline '%s': %v", h.Title, err)
-				continue
-			}
-			clippedCount++
-			fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s (%d related articles)\n", h.Title, len(h.RelatedFree))
-		}
-
-		fmt.Fprintln(os.Stderr, "========================================")
-		fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
-		fmt.Fprintln(os.Stderr, "========================================")
+		handleNotionClip(headlines, &cfg.Output)
 	}
 }
 

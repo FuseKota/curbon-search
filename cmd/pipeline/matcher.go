@@ -932,3 +932,56 @@ func clamp01(x float64) float64 {
 	}
 	return x
 }
+
+// =============================================================================
+// MatchHeadlinesWithCandidates - 見出しと候補記事をマッチング
+// =============================================================================
+
+// MatchHeadlinesWithCandidates は見出しと候補記事をマッチングし、関連記事を付与する
+//
+// 【処理の流れ】
+//  1. 見出し + 候補からIDFコーパスを構築
+//  2. 各見出しに対して候補をスコアリング
+//  3. 上位K件の関連記事を付与
+//
+// 引数:
+//
+//	headlines:  マッチング対象の見出しリスト
+//	candsByIdx: 各見出しに対応する候補記事リスト
+//	globalPool: 全候補のプール（IDF計算用）
+//	cfg:        マッチング設定
+//
+// 戻り値:
+//
+//	関連記事が付与された見出しリスト
+func MatchHeadlinesWithCandidates(headlines []Headline, candsByIdx [][]FreeArticle, globalPool []FreeArticle, cfg *MatchingConfig) []Headline {
+	now := time.Now()
+
+	// IDFコーパスを構築（見出し + 全候補）
+	docs := make([][]string, 0, len(headlines)+len(globalPool))
+	for _, h := range headlines {
+		docs = append(docs, tokenize(h.Title))
+	}
+	for _, a := range globalPool {
+		docs = append(docs, tokenize(a.Title))
+	}
+	idf := buildIDF(docs)
+
+	// 各見出しに関連記事を付与
+	for i := range headlines {
+		headlines[i].IsHeadline = true
+		headlines[i].SearchQueries = nil // compact output
+		headlines[i].RelatedFree = topKRelated(
+			headlines[i],
+			candsByIdx[i],
+			idf,
+			now,
+			cfg.DaysBack,
+			cfg.StrictMarket,
+			cfg.TopK,
+			cfg.MinScore,
+		)
+	}
+
+	return headlines
+}

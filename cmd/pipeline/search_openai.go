@@ -480,3 +480,100 @@ Do NOT write explanations. ONLY URLs.`, query)
 
 	return cands, nil
 }
+
+// =============================================================================
+// SearchResult - 検索結果を保持する構造体
+// =============================================================================
+
+// SearchResult は SearchForHeadlines の結果を保持する
+type SearchResult struct {
+	CandsByIdx [][]FreeArticle // 各見出しに対応する候補記事
+	GlobalPool []FreeArticle   // 全候補のプール（重複除去済み）
+}
+
+// =============================================================================
+// SearchForHeadlines - 見出しに対してWeb検索を実行
+// =============================================================================
+
+// SearchForHeadlines は各見出しに対してWeb検索を実行し、候補記事を収集する
+//
+// 【処理の流れ】
+//  1. 各見出しから検索クエリを生成
+//  2. OpenAI Web検索を実行
+//  3. 結果を重複除去しながらマージ
+//  4. 見出しごとの候補とグローバルプールを返す
+//
+// 引数:
+//
+//	headlines: 検索対象の見出しリスト
+//	cfg:       検索設定
+//
+// 戻り値:
+//
+//	SearchResult: 検索結果（見出しごとの候補 + グローバルプール）
+func SearchForHeadlines(headlines []Headline, cfg *SearchConfig) SearchResult {
+	candsByIdx := make([][]FreeArticle, len(headlines))
+	globalSeen := map[string]bool{}
+	globalPool := make([]FreeArticle, 0, len(headlines)*cfg.SearchPerHeadline)
+
+	if !cfg.IsEnabled() {
+		infof("Search disabled (queriesPerHeadline=0), skipping web search phase")
+		return SearchResult{CandsByIdx: candsByIdx, GlobalPool: globalPool}
+	}
+
+	for i, h := range headlines {
+		// クエリを生成
+		queries := h.SearchQueries
+		if len(queries) == 0 {
+			queries = buildSearchQueries(h.Title, h.Excerpt)
+		}
+		if len(queries) > cfg.QueriesPerHeadline {
+			queries = queries[:cfg.QueriesPerHeadline]
+		}
+
+		// 各クエリで検索してマージ
+		merged := map[string]FreeArticle{}
+		for _, q := range queries {
+			var res []FreeArticle
+			var err error
+
+			switch cfg.Provider {
+			case "openai":
+				res, err = openaiWebSearch(q, cfg.ResultsPerQuery, cfg.OpenAIModel, cfg.OpenAITool)
+			default:
+				err = fmt.Errorf("unsupported searchProvider: %s", cfg.Provider)
+			}
+
+			if err != nil {
+				warnf("search: %v", err)
+				continue
+			}
+
+			for _, a := range res {
+				if a.URL == "" || a.Title == "" {
+					continue
+				}
+				merged[a.URL] = a
+				if len(merged) >= cfg.SearchPerHeadline {
+					break
+				}
+			}
+			if len(merged) >= cfg.SearchPerHeadline {
+				break
+			}
+		}
+
+		// 重複除去してグローバルプールに追加
+		cands := make([]FreeArticle, 0, len(merged))
+		for _, a := range merged {
+			cands = append(cands, a)
+			if !globalSeen[a.URL] {
+				globalSeen[a.URL] = true
+				globalPool = append(globalPool, a)
+			}
+		}
+		candsByIdx[i] = cands
+	}
+
+	return SearchResult{CandsByIdx: candsByIdx, GlobalPool: globalPool}
+}

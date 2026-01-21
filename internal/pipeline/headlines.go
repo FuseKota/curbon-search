@@ -145,7 +145,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"ieta":                collectHeadlinesIETA,
 	"energy-monitor":      collectHeadlinesEnergyMonitor,
 	"world-bank":          collectHeadlinesWorldBank,
-	"carbon-market-watch": collectHeadlinesCarbonMarketWatch,
+	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden エラーのため一時無効化
 	"newclimate":          collectHeadlinesNewClimate,
 	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
 
@@ -158,6 +158,9 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 	// その他
 	"jpx": collectHeadlinesJPX,
+
+	// 欧州政策ソース（RSSフィード）
+	"politico-eu": collectHeadlinesPoliticoEU,
 }
 
 // CollectFromSources は指定されたソースから見出しを収集する
@@ -192,6 +195,65 @@ func CollectFromSources(sources []string, perSource int, cfg HeadlineSourceConfi
 	}
 
 	return uniqueHeadlinesByURL(headlines), nil
+}
+
+// FilterHeadlinesByHours は指定された時間以内に公開された記事のみをフィルタリングする
+//
+// 【引数】
+//   - headlines: フィルタリング対象の記事リスト
+//   - hours:     何時間以内の記事を残すか（例: 24 = 過去24時間）
+//
+// 【戻り値】
+//   - 指定時間以内に公開された記事のリスト
+//
+// 【注意】
+//   - PublishedAtが空または解析できない記事は除外される
+//   - PublishedAtはRFC3339形式を想定（例: "2026-01-05T12:00:00Z"）
+//
+// 【使用例】
+//
+//	headlines, _ := CollectFromSources(sources, perSource, cfg)
+//	filtered := FilterHeadlinesByHours(headlines, 24) // 過去24時間の記事のみ
+func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
+	if hours <= 0 {
+		return headlines // 0以下の場合はフィルタリングしない
+	}
+
+	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour)
+	var filtered []Headline
+
+	for _, h := range headlines {
+		if h.PublishedAt == "" {
+			continue // 日付がない記事は除外
+		}
+
+		// RFC3339形式でパース試行
+		pubTime, err := time.Parse(time.RFC3339, h.PublishedAt)
+		if err != nil {
+			// RFC3339以外の形式も試行（例: "2006-01-02T15:04:05"）
+			pubTime, err = time.Parse("2006-01-02T15:04:05", h.PublishedAt)
+			if err != nil {
+				// 日付のみの形式も試行（例: "2006-01-02"）
+				pubTime, err = time.Parse("2006-01-02", h.PublishedAt)
+				if err != nil {
+					if os.Getenv("DEBUG_SCRAPING") != "" {
+						fmt.Fprintf(os.Stderr, "[DEBUG] FilterHeadlinesByHours: cannot parse date '%s' for '%s'\n", h.PublishedAt, h.Title)
+					}
+					continue // パースできない場合は除外
+				}
+			}
+		}
+
+		if pubTime.After(cutoff) {
+			filtered = append(filtered, h)
+		}
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] FilterHeadlinesByHours: %d -> %d headlines (last %d hours)\n", len(headlines), len(filtered), hours)
+	}
+
+	return filtered
 }
 
 // =============================================================================
@@ -1113,11 +1175,26 @@ func collectHeadlinesEnergyMonitor(limit int, cfg HeadlineSourceConfig) ([]Headl
 						bodyElem := articleDoc.Find("article .entry-content, article .article-content, .post-content, .content").First()
 						content = strings.TrimSpace(bodyElem.Text())
 
-						// Try to find published date
-						timeElem := articleDoc.Find("time")
-						datetime, exists := timeElem.Attr("datetime")
-						if exists {
-							publishedAt = datetime
+						// Try to find published date from JSON-LD structured data
+						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							if publishedAt != "" {
+								return
+							}
+							jsonText := script.Text()
+							// Extract datePublished from JSON-LD
+							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+								publishedAt = matches[1]
+							}
+						})
+
+						// Fallback: try time element
+						if publishedAt == "" {
+							timeElem := articleDoc.Find("time")
+							datetime, exists := timeElem.Attr("datetime")
+							if exists {
+								publishedAt = datetime
+							}
 						}
 					}
 				}
@@ -2289,6 +2366,112 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no Mizuho RT sustainability-related reports found")
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// Politico EU - EU政策・エネルギー・気候変動ニュース
+// =============================================================================
+
+// collectHeadlinesPoliticoEU は Politico EU の Energy & Climate セクションから記事を収集
+//
+// Politico EU は欧州の政治・政策ニュースを専門とするメディアで、
+// エネルギー政策、気候変動対策、EU規制などを詳細にカバーしている。
+// RSSフィードからEnergy and Climateセクションの記事を取得。
+//
+// 手法: RSS Feed (gofeed)
+// URL: https://www.politico.eu/section/energy/feed/
+//
+// 引数:
+//
+//	limit: 収集する最大記事数
+//	cfg: タイムアウトとUser-Agent設定
+//
+// 戻り値:
+//
+//	収集した見出しのスライス、エラー
+func collectHeadlinesPoliticoEU(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://www.politico.eu/section/energy/feed/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	// RSSフィードをパース
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Politico EU RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		// URLからトラッキングパラメータを除去
+		articleURL := item.Link
+		if idx := strings.Index(articleURL, "?utm_"); idx > 0 {
+			articleURL = articleURL[:idx]
+		}
+
+		// 日付のパース
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// 記事の全文を取得（content:encoded から、なければ description から）
+		// Notionに保存する際に全文が必要なため、切り詰めない
+		excerpt := ""
+		if item.Content != "" {
+			// content:encoded から全文を取得（HTMLタグを除去）
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			// content がない場合は description を使用
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "Politico EU",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no Politico EU headlines found")
 	}
 
 	return out, nil

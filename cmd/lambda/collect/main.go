@@ -8,7 +8,8 @@
 //   - NOTION_TOKEN:       Notion API Token (必須)
 //   - NOTION_DATABASE_ID: NotionデータベースID (必須)
 //   - SOURCES:            収集するソース (デフォルト: all-free)
-//   - PER_SOURCE:         ソースあたりの記事数 (デフォルト: 30)
+//   - PER_SOURCE:         ソースあたりの記事数 (デフォルト: 100)
+//   - HOURS_BACK:         何時間以内の記事を取得するか (デフォルト: 24、0=フィルタなし)
 //
 // =============================================================================
 package main
@@ -30,6 +31,7 @@ import (
 type LambdaConfig struct {
 	Sources          string
 	PerSource        int
+	HoursBack        int // 何時間以内の記事を取得するか（0=フィルタなし）
 	NotionToken      string
 	NotionDatabaseID string
 }
@@ -57,7 +59,7 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 		return Response{StatusCode: 400, Message: "NOTION_DATABASE_ID is required"}, fmt.Errorf("NOTION_DATABASE_ID is required")
 	}
 
-	log.Printf("Config: sources=%s, perSource=%d", cfg.Sources, cfg.PerSource)
+	log.Printf("Config: sources=%s, perSource=%d, hoursBack=%d", cfg.Sources, cfg.PerSource, cfg.HoursBack)
 
 	// 2. 記事を収集
 	sources := parseSources(cfg.Sources)
@@ -69,7 +71,13 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 		return Response{StatusCode: 500, Message: err.Error()}, err
 	}
 
-	log.Printf("Collected %d headlines", len(headlines))
+	log.Printf("Collected %d headlines (before time filter)", len(headlines))
+
+	// 3. 時間フィルタリング（HOURS_BACK > 0 の場合のみ）
+	if cfg.HoursBack > 0 {
+		headlines = pipeline.FilterHeadlinesByHours(headlines, cfg.HoursBack)
+		log.Printf("After time filter: %d headlines (last %d hours)", len(headlines), cfg.HoursBack)
+	}
 
 	if len(headlines) == 0 {
 		return Response{
@@ -80,7 +88,7 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 		}, nil
 	}
 
-	// 3. Notionに保存
+	// 4. Notionに保存
 	clipper, err := pipeline.NewNotionClipper(cfg.NotionToken, cfg.NotionDatabaseID)
 	if err != nil {
 		log.Printf("Error creating Notion clipper: %v", err)
@@ -108,10 +116,17 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 
 // loadConfig は環境変数から設定を読み込む
 func loadConfig() LambdaConfig {
-	perSource := 30
+	perSource := 100 // デフォルト: 100件（WordPress APIの上限）
 	if ps := os.Getenv("PER_SOURCE"); ps != "" {
 		if val, err := strconv.Atoi(ps); err == nil && val > 0 {
 			perSource = val
+		}
+	}
+
+	hoursBack := 24 // デフォルト: 過去24時間
+	if hb := os.Getenv("HOURS_BACK"); hb != "" {
+		if val, err := strconv.Atoi(hb); err == nil && val >= 0 {
+			hoursBack = val
 		}
 	}
 
@@ -123,6 +138,7 @@ func loadConfig() LambdaConfig {
 	return LambdaConfig{
 		Sources:          sources,
 		PerSource:        perSource,
+		HoursBack:        hoursBack,
 		NotionToken:      os.Getenv("NOTION_TOKEN"),
 		NotionDatabaseID: os.Getenv("NOTION_DATABASE_ID"),
 	}

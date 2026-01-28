@@ -16,6 +16,7 @@ package main
 
 import (
 	"flag"
+	"os"
 	"strings"
 )
 
@@ -166,8 +167,8 @@ func ParseFlags() *PipelineConfig {
 	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write matched output JSON to this path (default: stdout)")
 	flag.StringVar(&cfg.Output.SaveFree, "saveFree", "", "optional: write pooled free candidates to file")
 	flag.BoolVar(&cfg.Output.NotionClip, "notionClip", false, "clip articles to Notion database")
-	flag.StringVar(&cfg.Output.NotionPageID, "notionPageID", "", "parent page ID for creating new Notion database (required for new DB)")
-	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
+	flag.StringVar(&cfg.Output.NotionPageID, "notionPageID", os.Getenv("NOTION_PAGE_ID"), "parent page ID for creating new Notion database (required for new DB)")
+	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", os.Getenv("NOTION_DATABASE_ID"), "existing Notion database ID (optional, will create new if empty)")
 
 	// Email flags
 	flag.BoolVar(&cfg.Email.SendEmail, "sendEmail", false, "send headlines summary via email")

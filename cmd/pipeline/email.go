@@ -359,9 +359,13 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 		return fmt.Errorf("no headlines to send")
 	}
 
-	// カーボンキーワードでフィルタリング
+	// カーボンキーワードでフィルタリング + ShortHeadlineが"-"のものを除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
 	for _, h := range headlines {
+		// ShortHeadlineが"-"系の場合は除外（Notion AIが要約できなかった記事）
+		if h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
+			continue
+		}
 		if containsCarbonKeyword(h.Title) || containsCarbonKeyword(h.AISummary) {
 			filtered = append(filtered, h)
 		}

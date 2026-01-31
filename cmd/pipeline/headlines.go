@@ -18,50 +18,52 @@
 // =============================================================================
 //
 // ▼ 有料ソース（見出しのみ取得）- sources_paid.go
-//   1. Carbon Pulse    - カーボン市場専門ニュース（業界最大手）
-//   2. QCI             - Quantum Commodity Intelligence
+//  1. Carbon Pulse    - カーボン市場専門ニュース（業界最大手）
+//  2. QCI             - Quantum Commodity Intelligence
 //
 // ▼ 無料ソース - WordPress REST API（7ソース）- sources_wordpress.go
-//   3. CarbonCredits.jp    - 日本のカーボンクレジット情報
-//   4. Carbon Herald       - CDR技術ニュース
-//   5. Climate Home News   - 国際気候政策
-//   6. CarbonCredits.com   - 教育・啓発コンテンツ
-//   7. Sandbag             - EU ETSアナリスト
-//   8. Ecosystem Marketplace - 自然気候ソリューション
-//   9. Carbon Brief        - 気候科学・政策
+//  3. CarbonCredits.jp    - 日本のカーボンクレジット情報
+//  4. Carbon Herald       - CDR技術ニュース
+//  5. Climate Home News   - 国際気候政策
+//  6. CarbonCredits.com   - 教育・啓発コンテンツ
+//  7. Sandbag             - EU ETSアナリスト
+//  8. Ecosystem Marketplace - 自然気候ソリューション
+//  9. Carbon Brief        - 気候科学・政策
 //
 // ▼ 無料ソース - HTMLスクレイピング（6ソース）- sources_html.go
-//   10. ICAP               - 国際カーボンアクションパートナーシップ
-//   11. IETA               - 国際排出量取引協会
-//   12. Energy Monitor     - エネルギー転換ニュース
-//   13. World Bank         - 世界銀行気候変動
-//   14. Carbon Market Watch - NGO監視団体
-//   15. NewClimate Institute - 気候研究機関
-//   16. Carbon Knowledge Hub - 教育プラットフォーム
+//  10. ICAP               - 国際カーボンアクションパートナーシップ
+//  11. IETA               - 国際排出量取引協会
+//  12. Energy Monitor     - エネルギー転換ニュース
+//  13. World Bank         - 世界銀行気候変動
+//  14. Carbon Market Watch - NGO監視団体
+//  15. NewClimate Institute - 気候研究機関
+//  16. Carbon Knowledge Hub - 教育プラットフォーム
 //
 // ▼ 無料ソース - 日本語ソース（4ソース）- sources_japan.go
-//   17. JRI（日本総研）    - RSSフィード
-//   18. 環境省             - プレスリリース
-//   19. METI（経産省）     - SME Agency RSS
-//   20. PwC Japan          - コンサルティングレポート
-//   21. Mizuho R&T         - 金融調査レポート
+//  17. JRI（日本総研）    - RSSフィード
+//  18. 環境省             - プレスリリース
+//  19. METI（経産省）     - SME Agency RSS
+//  20. PwC Japan          - コンサルティングレポート
+//  21. Mizuho R&T         - 金融調査レポート
 //
 // ▼ その他 - sources_japan.go
-//   22. JPX（日本取引所）  - カーボン関連株式ニュース
+//  22. JPX（日本取引所）  - カーボン関連株式ニュース
 //
 // ▼ 欧州政策ソース - sources_rss.go
-//   23. Politico EU        - EU政策・エネルギー・気候変動ニュース
+//  23. Politico EU        - EU政策・エネルギー・気候変動ニュース
 //
 // =============================================================================
 // 【デバッグ方法】
 // =============================================================================
 //
 // 環境変数でデバッグ情報を出力:
-//   DEBUG_SCRAPING=1  - スクレイピング処理の詳細ログ
-//   DEBUG_HTML=1      - 取得したHTMLの構造を出力
+//
+//	DEBUG_SCRAPING=1  - スクレイピング処理の詳細ログ
+//	DEBUG_HTML=1      - 取得したHTMLの構造を出力
 //
 // 使用例:
-//   DEBUG_SCRAPING=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0
+//
+//	DEBUG_SCRAPING=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0
 //
 // =============================================================================
 package main
@@ -126,9 +128,9 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"ieta":                 collectHeadlinesIETA,
 	"energy-monitor":       collectHeadlinesEnergyMonitor,
 	"world-bank":           collectHeadlinesWorldBank,
-	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden エラーのため一時無効化
 	"newclimate":           collectHeadlinesNewClimate,
 	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
+	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden エラーのため一時無効化
 
 	// 日本語ソース - sources_japan.go
 	"jri":          collectHeadlinesJRI,
@@ -316,7 +318,7 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 			Source:      sourceName,
 			Title:       title,
 			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			PublishedAt: p.Date,  // WordPress API returns RFC3339 format
 			Excerpt:     content, // Store full content in Excerpt field for free articles
 			IsHeadline:  true,
 		})

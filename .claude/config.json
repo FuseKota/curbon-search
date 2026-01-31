@@ -1,0 +1,205 @@
+{
+  "project": {
+    "name": "Carbon Relay",
+    "description": "Go-based carbon news collection and analysis system",
+    "version": "1.0.0",
+    "repository": "https://github.com/FuseKota/curbon-search.git"
+  },
+  "models": {
+    "default": "sonnet",
+    "tasks": {
+      "research": "opus",
+      "codeReview": "opus",
+      "simpleEdits": "haiku",
+      "documentation": "sonnet",
+      "debugging": "sonnet",
+      "testing": "haiku"
+    },
+    "description": "Use Opus for complex analysis tasks, Sonnet for general work, Haiku for simple operations"
+  },
+  "environment": {
+    "required": {
+      "OPENAI_API_KEY": {
+        "description": "OpenAI API key for Mode 2 (paid article matching)",
+        "required_for": "Mode 2 operations with -queriesPerHeadline > 0",
+        "setup_guide": "https://platform.openai.com/api-keys"
+      },
+      "NOTION_API_KEY": {
+        "description": "Notion integration API key",
+        "required_for": "Notion clipping feature",
+        "setup_guide": "https://www.notion.so/my-integrations"
+      },
+      "NOTION_PAGE_ID": {
+        "description": "Notion page ID for creating databases",
+        "required_for": "Initial Notion clipping (auto-saved to .env after first use)",
+        "setup_guide": "Copy from Notion page URL"
+      }
+    },
+    "optional": {
+      "EMAIL_FROM": {
+        "description": "Gmail address for sending email reports",
+        "required_for": "Email distribution feature"
+      },
+      "EMAIL_PASSWORD": {
+        "description": "Gmail app password (not regular password)",
+        "required_for": "Email distribution feature",
+        "setup_guide": "https://support.google.com/accounts/answer/185833"
+      },
+      "EMAIL_TO": {
+        "description": "Recipient email address(es)",
+        "required_for": "Email distribution feature"
+      },
+      "DEBUG_SCRAPING": {
+        "description": "Enable detailed scraping debug output",
+        "default": "0",
+        "values": ["0", "1"]
+      }
+    }
+  },
+  "operationalModes": {
+    "mode1": {
+      "name": "Free Article Collection",
+      "description": "Collect articles from 16 free sources directly",
+      "command_pattern": "./pipeline -sources=all-free -perSource=5 -queriesPerHeadline=0",
+      "requires": [],
+      "output": "Email distribution, JSON export",
+      "cost": "Free (no API calls)",
+      "use_case": "Daily free article review"
+    },
+    "mode2": {
+      "name": "Paid Article Matching",
+      "description": "Find free articles related to paid headlines",
+      "command_pattern": "./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3",
+      "requires": ["OPENAI_API_KEY"],
+      "output": "Notion integration, JSON export",
+      "cost": "OpenAI API usage (~$0.01-0.05 per run)",
+      "use_case": "Weekly paid article deep dive"
+    }
+  },
+  "sources": {
+    "paid": ["carbonpulse", "qci"],
+    "free": [
+      "climatepolicyinitiative",
+      "climatecouncil",
+      "cdp",
+      "wri",
+      "globalccsinstitute",
+      "worldbank",
+      "cleanenergyregulator",
+      "jri",
+      "kankyosho",
+      "meti",
+      "pwcjapan",
+      "mizuhort",
+      "carboncredits",
+      "carboncreditscom",
+      "tnfd",
+      "iso"
+    ],
+    "total": 18,
+    "japanese": ["jri", "kankyosho", "meti", "pwcjapan", "mizuhort"]
+  },
+  "testing": {
+    "quick_test": "./pipeline -sources={source} -perSource=1 -queriesPerHeadline=0",
+    "debug_test": "DEBUG_SCRAPING=1 ./pipeline -sources={source} -perSource=1 -queriesPerHeadline=0",
+    "full_test": "./pipeline -sources={source} -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_{source}.json",
+    "all_sources": "./pipeline -sources=all -perSource=1 -queriesPerHeadline=0 -out=/tmp/test_all.json"
+  },
+  "codingStandards": {
+    "language": "Go",
+    "formatting": "gofmt (auto-applied via hooks)",
+    "naming": {
+      "sourceFunctions": "collectHeadlines{SourceName}()",
+      "errorHandling": "Always wrap errors with context using fmt.Errorf",
+      "variables": "camelCase for local, PascalCase for exported"
+    },
+    "patterns": {
+      "wordPressAPI": "Use JSON unmarshalling with WordPressPost struct",
+      "htmlScraping": "Use goquery with fetchAndParse() helper",
+      "dateFormats": "See COMPLETE_IMPLEMENTATION_GUIDE.md Section 3 for all formats",
+      "errorReturns": "Return ([]Article, error) from all source functions"
+    }
+  },
+  "documentation": {
+    "primary": "docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md",
+    "quickStart": ".claude/PROJECT_CONTEXT.md",
+    "commands": ".claude/COMMANDS.md",
+    "claude": "CLAUDE.md",
+    "scripts": "scripts/README.md"
+  },
+  "workflows": {
+    "addNewSource": [
+      "1. Research with /add-source skill or source-researcher agent",
+      "2. Implement collectHeadlines{Name}() in cmd/pipeline/headlines.go",
+      "3. Add to sourceMap in cmd/pipeline/main.go",
+      "4. Test with /test-source skill",
+      "5. Review with code-reviewer agent",
+      "6. Update documentation",
+      "7. Commit with /commit-pattern skill"
+    ],
+    "fixBug": [
+      "1. Debug with DEBUG_SCRAPING=1",
+      "2. Read relevant code sections",
+      "3. Fix the issue",
+      "4. Test with affected sources",
+      "5. Review changes",
+      "6. Commit with proper message"
+    ],
+    "adjustScoring": [
+      "1. Read current scoring logic in matcher.go",
+      "2. Run baseline test and record scores",
+      "3. Make adjustments",
+      "4. Compare before/after results",
+      "5. Document reasoning in commit message"
+    ]
+  },
+  "bestPractices": {
+    "beforeEditing": [
+      "Always read files before editing",
+      "Understand the 2-mode architecture",
+      "Check existing patterns for similar implementations"
+    ],
+    "testing": [
+      "Start with -perSource=1 for initial tests",
+      "Use debug mode for troubleshooting",
+      "Verify JSON output structure",
+      "Test with both English and Japanese sources if applicable"
+    ],
+    "security": [
+      "Never commit .env file",
+      "Use environment variables for all secrets",
+      "Sanitize user inputs in web scraping",
+      "Handle errors without exposing sensitive data"
+    ],
+    "performance": [
+      "Respect rate limits for web scraping",
+      "Use appropriate timeouts for HTTP requests",
+      "Don't make unnecessary API calls",
+      "Cache data when appropriate"
+    ]
+  },
+  "prohibitedActions": [
+    "Never fetch full text from paid sources (headlines only)",
+    "Never commit API keys or passwords",
+    "Never skip testing before committing source changes",
+    "Never mix Mode 1 and Mode 2 concepts",
+    "Never use git --force on main/master branch"
+  ],
+  "automation": {
+    "hooks": {
+      "env_protection": "Blocks .env editing",
+      "auto_format": "Runs gofmt on Go files",
+      "context_injection": "Re-injects project context after compaction"
+    },
+    "skills": {
+      "test_source": "Test individual sources",
+      "verify_mode": "Verify operational mode",
+      "commit_pattern": "Generate commit messages",
+      "add_source": "Guide for new sources"
+    },
+    "agents": {
+      "source_researcher": "Research new sources before implementation",
+      "code_reviewer": "Review code for quality and compliance"
+    }
+  }
+}

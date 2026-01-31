@@ -38,7 +38,40 @@
 
 ---
 
-### 3. settings.local.json
+### 3. settings.json
+**プロジェクト全体のHooks設定**
+
+内容:
+- .env保護フック（誤編集防止）
+- Go自動フォーマットフック
+- コンテキスト再注入フック
+- モード認識リマインダー
+
+**こんな時に役立つ**:
+- 自動的に動作（手動操作不要）
+- セキュリティとコード品質を自動保証
+
+---
+
+### 4. config.json
+**プロジェクト設定とメタデータ**
+
+内容:
+- 2つの運用モードの詳細
+- 環境変数の説明とセットアップガイド
+- 全18ソースのリスト
+- テストコマンドパターン
+- コーディング規約
+- ワークフロー定義
+
+**こんな時に参照**:
+- プロジェクト全体の構成を理解したい時
+- 環境変数のセットアップ方法を知りたい時
+- ベストプラクティスを確認したい時
+
+---
+
+### 5. settings.local.json
 **Claude Code のローカル設定**
 
 自動生成されるファイル。手動編集は通常不要。
@@ -99,6 +132,44 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesP
 # または、PROJECT_CONTEXT.mdの「よく使うコマンド」セクション
 ```
 
+### パターン4: 新しいニュースソースを追加したい（推奨ワークフロー）
+```bash
+# 1. source-researcherエージェントでソースを調査
+#    Claude Codeで: "Launch source-researcher agent to analyze https://example.com"
+#
+# 2. エージェントが提供するコードテンプレートを実装
+#
+# 3. /test-sourceスキルでテスト
+#    Claude Codeで: /test-source newsource
+#
+# 4. code-reviewerエージェントでレビュー
+#    Claude Codeで: "Launch code-reviewer agent to review my changes"
+#
+# 5. /commit-patternスキルでコミット
+#    Claude Codeで: /commit-pattern "Add new source: Example News"
+```
+
+### パターン5: コード変更をレビューしてほしい
+```bash
+# code-reviewerエージェントを起動
+# Claude Codeで:
+# "Launch code-reviewer agent to review my recent changes"
+#
+# エージェントが以下をチェック:
+# - セキュリティ問題
+# - ベストプラクティス準拠
+# - パフォーマンス問題
+# - Carbon Relay固有パターン
+```
+
+### パターン6: 環境変数の設定方法がわからない
+```bash
+# config.jsonを参照
+# すべての環境変数の説明とセットアップガイドが記載されている
+#
+# または /check-env コマンドで現在の設定を確認
+```
+
 ---
 
 ## 🔄 このディレクトリの更新
@@ -136,6 +207,24 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesP
 - `/build` - パイプラインのビルド
 - `/test-all` - 全ソースのクイックテスト
 - `/check-env` - 環境変数の確認
+
+### Agents（専門タスク）
+- `source-researcher` - 新しいニュースソースの調査・分析
+  - WordPress API vs HTML scraping判定
+  - セレクタ抽出と実装推奨
+  - Goコードテンプレート生成
+- `code-reviewer` - コード変更のレビュー
+  - Carbon Relayベストプラクティスチェック
+  - セキュリティ脆弱性検出
+  - パフォーマンス問題の指摘
+  - アーキテクチャ準拠確認
+
+### Config（プロジェクト設定）
+- `config.json` - プロジェクト全体の設定とメタデータ
+  - 運用モードの定義
+  - 環境変数ガイド
+  - コーディング規約
+  - 推奨ワークフロー
 
 これらの機能は、GitHubからcloneした直後から自動的に利用可能です。
 

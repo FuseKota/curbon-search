@@ -2,7 +2,7 @@
 
 **カーボンニュース収集・分析・配信の自動化システム**
 
-> 🧪 **全機能テスト完了**: [テストレポート](TEST_REPORT.md) | [サマリー](TEST_SUMMARY.md)
+> 🧪 **全機能テスト完了**: [テストレポート](docs/reports/TEST_REPORT.md) | [サマリー](docs/reports/TEST_SUMMARY.md)
 > ✅ 成功率: 92% (11/12機能) - 本番環境使用可能
 
 ## プロジェクトの目的
@@ -134,23 +134,23 @@ go build -o carbon-relay ./cmd/pipeline
   -out=headlines.json
 
 # または専用スクリプトを使用
-./collect_headlines_only.sh
+./scripts/collect_headlines_only.sh
 ```
 
 **✨ 新機能:** トップページから記事の要約（無料で見れる部分）を自動的に取得します
 
-**詳細は [HEADLINES_ONLY.md](HEADLINES_ONLY.md) を参照**
+**詳細は [docs/guides/HEADLINES_ONLY.md](docs/guides/HEADLINES_ONLY.md) を参照**
 
 ### ヘッドライン確認ツール🆕
 ```bash
 # 収集と同時に確認
-./collect_and_view.sh carbonpulse 10
+./scripts/collect_and_view.sh carbonpulse 10
 
 # 既存ファイルを確認
-./view_headlines.sh headlines.json
+./scripts/view_headlines.sh headlines.json
 ```
 
-**詳細は [VIEWING_GUIDE.md](VIEWING_GUIDE.md) を参照**
+**詳細は [docs/guides/VIEWING_GUIDE.md](docs/guides/VIEWING_GUIDE.md) を参照**
 
 ### 基本実行（検索あり）
 ```bash
@@ -258,6 +258,37 @@ DEBUG_SCRAPING=1                  # スクレイピング詳細表示
 
 ---
 
+## 📚 ドキュメント
+
+詳細なドキュメントは [docs/](./docs/) ディレクトリに整理されています：
+
+- **クイックスタート**: [docs/guides/QUICKSTART.md](./docs/guides/QUICKSTART.md)
+- **開発ガイド**: [docs/guides/DEVELOPMENT.md](./docs/guides/DEVELOPMENT.md)
+- **完全実装ガイド**: [docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md](./docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md)
+- **Notion統合**: [docs/guides/NOTION_INTEGRATION.md](./docs/guides/NOTION_INTEGRATION.md)
+
+すべてのドキュメントは [docs/README.md](./docs/README.md) から参照できます。
+
+## 🛠️ スクリプト
+
+便利なスクリプトは [scripts/](./scripts/) ディレクトリにあります：
+
+```bash
+# ヘッドライン収集
+./scripts/collect_headlines_only.sh
+
+# Notionクリッピング
+./scripts/clip_to_notion.sh
+
+# Lambda用ビルド
+./scripts/build_lambda.sh
+
+# フルパイプライン実行
+./scripts/full_pipeline.sh
+```
+
+詳細は [scripts/README.md](./scripts/README.md) を参照してください。
+
 ## ファイル構成
 
 ```
@@ -277,12 +308,20 @@ carbon-relay/
 │   ├── matcher.go           # IDF + 類似度 + シグナルベースマッチング
 │   ├── types.go             # データ型定義
 │   └── utils.go             # ユーティリティ
-├── test-notion.sh           # Notion統合テストスクリプト
-├── clip-all-sources.sh      # 全4無料ソース一括クリッピング
+├── docs/                    # ドキュメント（整理済み）
+│   ├── guides/              # 使い方ガイド
+│   ├── reports/             # テストレポート・ステータス
+│   └── architecture/        # アーキテクチャドキュメント
+├── scripts/                 # スクリプト（整理済み）
+│   ├── collect_headlines_only.sh
+│   ├── clip_to_notion.sh
+│   ├── clip_all_sources.sh
+│   └── build_lambda.sh
 ├── .env                     # 環境変数（自動生成）
 ├── go.mod
 ├── go.sum
-└── README.md
+├── CLAUDE.md                # Claude Code向け指示書
+└── README.md                # このファイル
 ```
 
 ---
@@ -347,10 +386,10 @@ NOTION_PAGE_ID=xxx...
 EOF
 
 # 無料ソースから記事を収集してNotionにクリッピング
-./test-notion.sh
+./scripts/test_notion.sh
 
 # または全4ソースから5記事ずつ収集
-./clip-all-sources.sh
+./scripts/clip_all_sources.sh
 ```
 
 #### 2回目以降（既存データベースに追加）
@@ -359,7 +398,7 @@ EOF
 
 ```bash
 # 同じコマンドを実行するだけ
-./clip-all-sources.sh
+./scripts/clip_all_sources.sh
 # → 既存データベースに自動追加
 ```
 
@@ -406,7 +445,7 @@ EOF
 
 ### 📚 詳細ドキュメント
 
-Notion統合の詳しい使い方は **[NOTION_INTEGRATION.md](NOTION_INTEGRATION.md)** を参照してください。
+Notion統合の詳しい使い方は **[docs/guides/NOTION_INTEGRATION.md](docs/guides/NOTION_INTEGRATION.md)** を参照してください。
 
 ---
 

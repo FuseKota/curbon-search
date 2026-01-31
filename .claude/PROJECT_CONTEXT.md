@@ -179,9 +179,11 @@ EMAIL_TO=recipient@example.com
 
 ## 📚 詳細ドキュメント
 
-- **完全ガイド**: `COMPLETE_IMPLEMENTATION_GUIDE_2026.md` (2,756行)
+- **完全ガイド**: `docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md` (2,756行)
 - **README**: `README.md`
-- **プロジェクト分析**: `PROJECT_COMPREHENSIVE_REPORT_2026.md`
+- **プロジェクト分析**: `docs/architecture/PROJECT_COMPREHENSIVE_REPORT.md`
+- **ドキュメント目次**: `docs/README.md`
+- **スクリプト一覧**: `scripts/README.md`
 
 ## 🔄 最近の重要な変更（2026年1月4日）
 

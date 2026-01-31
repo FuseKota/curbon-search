@@ -67,9 +67,11 @@
 プロジェクトルートにある以下のファイルも参照：
 
 - **CLAUDE.md** - Claude Code向けプロジェクト固有指示
-- **COMPLETE_IMPLEMENTATION_GUIDE_2026.md** - 完全実装ガイド（2,756行）
+- **docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md** - 完全実装ガイド（2,756行）
 - **README.md** - プロジェクト概要
-- **PROJECT_COMPREHENSIVE_REPORT_2026.md** - プロジェクト分析レポート
+- **docs/architecture/PROJECT_COMPREHENSIVE_REPORT.md** - プロジェクト分析レポート
+- **docs/README.md** - ドキュメント目次とナビゲーション
+- **scripts/README.md** - スクリプト一覧と使い方
 
 ---
 
@@ -87,7 +89,7 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesP
 ### パターン2: 新しい機能を追加したい
 ```bash
 # 1. CLAUDE.mdの「よくあるタスクのフロー」を確認
-# 2. COMPLETE_IMPLEMENTATION_GUIDE_2026.mdの該当セクションを詳細に読む
+# 2. docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.mdの該当セクションを詳細に読む
 # 3. 既存の実装パターンを参考にする
 ```
 
@@ -110,4 +112,18 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesP
 
 ---
 
-**最終更新**: 2026年1月4日
+**最終更新**: 2026年1月31日（ディレクトリ構造改善に伴う更新）
+
+---
+
+## 📁 ディレクトリ構造の改善（2026年1月31日）
+
+プロジェクトのディレクトリ構造が整理されました：
+
+- **docs/** - すべてのMarkdownドキュメント
+  - guides/ - 使い方ガイド
+  - reports/ - テストレポート
+  - architecture/ - 実装詳細
+- **scripts/** - すべてのシェルスクリプト
+
+詳細は `docs/README.md` と `scripts/README.md` を参照してください。

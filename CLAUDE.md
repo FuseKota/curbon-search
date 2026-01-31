@@ -30,7 +30,7 @@
 
 作業開始前に以下を参照：
 
-1. **COMPLETE_IMPLEMENTATION_GUIDE_2026.md** (2,756行)
+1. **docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md** (2,756行)
    - セクション1.2: 2つの運用モードの詳細
    - セクション8: 使用方法と実行例
    - 全18ソースの実装詳細
@@ -42,6 +42,10 @@
 
 3. **.claude/COMMANDS.md**
    - コマンドクイックリファレンス
+
+4. **docs/README.md**
+   - ドキュメント目次とナビゲーション
+   - 目的別ガイドへのリンク
 
 ---
 
@@ -181,7 +185,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
    ```
 
 4. **ドキュメント更新**
-   - COMPLETE_IMPLEMENTATION_GUIDE_2026.mdのセクション3に追加
+   - docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.mdのセクション3に追加
    - README.mdのソースリストに追加
 
 ### スコアリングアルゴリズムを調整する場合
@@ -208,7 +212,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 🎓 学習リソース
 
-- **IDF（逆文書頻度）**: COMPLETE_IMPLEMENTATION_GUIDE_2026.md セクション5.2
+- **IDF（逆文書頻度）**: docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md セクション5.2
 - **OpenAI検索の仕様**: セクション9.1（最近の修正）
 - **Notion API制限**: セクション6.3
 - **全18ソースの実装パターン**: セクション3
@@ -268,7 +272,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
    ```
 
 4. **ドキュメントを参照**
-   - トラブルシューティング: COMPLETE_IMPLEMENTATION_GUIDE_2026.md セクション10
+   - トラブルシューティング: docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md セクション10
 
 ---
 
@@ -281,6 +285,32 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ---
 
-**最終更新**: 2026年1月4日
+**最終更新**: 2026年1月31日（ディレクトリ構造改善）
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
+
+---
+
+## 📁 ディレクトリ構造（2026年1月31日改善）
+
+プロジェクトディレクトリは以下のように整理されています：
+
+```
+carbon-relay/
+├── docs/                    # 📚 ドキュメント
+│   ├── README.md           # ドキュメント目次
+│   ├── guides/             # 使い方ガイド
+│   ├── reports/            # テストレポート
+│   └── architecture/       # 実装詳細
+├── scripts/                 # 🛠️ スクリプト
+│   ├── README.md           # スクリプト一覧
+│   └── *.sh                # 各種便利スクリプト
+├── cmd/pipeline/           # Go実装
+├── CLAUDE.md               # このファイル
+└── README.md               # メインREADME
+```
+
+**重要な変更点**:
+- すべてのMarkdownドキュメントは`docs/`配下に移動
+- すべてのシェルスクリプトは`scripts/`配下に移動
+- ルートディレクトリがすっきりして見やすくなった

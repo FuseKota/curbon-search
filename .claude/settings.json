@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "name": "prevent-env-edit",
+        "description": "Prevent accidental .env file edits",
+        "matcher": {
+          "tools": ["Edit", "Write"],
+          "params": {
+            "file_path": ".env"
+          }
+        },
+        "hooks": [
+          {
+            "type": "block",
+            "message": "⚠️ Editing .env is not allowed. Use .env.example as reference and set environment variables manually."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "name": "auto-format-go",
+        "description": "Auto-format Go files after editing",
+        "matcher": {
+          "tools": ["Edit", "Write"],
+          "params": {
+            "file_path": "*.go"
+          }
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gofmt -w {{file_path}}"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "name": "reinject-context",
+        "description": "Re-inject project context after session compaction",
+        "matcher": {
+          "reason": "compact"
+        },
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "IMPORTANT: This is Carbon Relay, a Go-based carbon news collection system. It has TWO operational modes:\n\n🟢 Mode 1: Free Article Collection (-queriesPerHeadline=0) - 16 free sources, no OpenAI API\n🔵 Mode 2: Paid Article Matching (-queriesPerHeadline=3) - OpenAI search + IDF matching\n\nBefore any task, verify which mode it relates to. See CLAUDE.md for full details."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "name": "mode-awareness-reminder",
+        "description": "Remind about 2-mode architecture on first user prompt",
+        "matcher": {
+          "messageCount": 1
+        },
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Remember: Carbon Relay has 2 operational modes. Before implementing features, verify if this relates to Mode 1 (free article collection) or Mode 2 (paid article matching). See CLAUDE.md for details."
+          }
+        ]
+      }
+    ]
+  }
+}

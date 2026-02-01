@@ -590,6 +590,13 @@ func parsePublishedDate(dateStr string) (time.Time, error) {
 		return t, nil
 	}
 
+	// Try ISO 8601 with timezone offset without colon (e.g., +0000)
+	// Gold Standard returns: "2025-12-17T08:00:00+0000"
+	t, err = time.Parse("2006-01-02T15:04:05-0700", dateStr)
+	if err == nil {
+		return t, nil
+	}
+
 	// Try format without timezone (assume UTC)
 	// WordPress often returns: "2025-12-26T14:42:50"
 	t, err = time.Parse("2006-01-02T15:04:05", dateStr)

@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mmcdole/gofeed"
 )
 
 // collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
@@ -796,10 +797,10 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 // Verra manages the Verified Carbon Standard (VCS), the world's most widely
 // used voluntary GHG program.
 func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	newsURL := "https://verra.org/news/"
+	feedURL := "https://verra.org/news/feed/"
 
 	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", newsURL, nil)
+	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
@@ -815,116 +816,69 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("parse HTML failed: %w", err)
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Verra RSS feed")
 	}
 
 	out := make([]Headline, 0, limit)
-	seen := make(map[string]bool)
 
-	// Try multiple selectors for different page structures
-	// Method 1: Find links to verra.org articles
-	doc.Find("a[href*='verra.org/']").Each(func(_ int, link *goquery.Selection) {
+	for _, item := range feed.Items {
 		if len(out) >= limit {
-			return
+			break
 		}
 
-		href, exists := link.Attr("href")
-		if !exists || href == "" {
-			return
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
 		}
 
-		// Skip navigation and non-article links
-		if href == "https://verra.org/news/" || href == "/news/" ||
-			strings.Contains(href, "/page/") || strings.Contains(href, "#") {
-			return
-		}
+		articleURL := item.Link
 
-		// Only process verra.org article URLs (not general pages)
-		if !strings.Contains(href, "verra.org/") {
-			return
-		}
-
-		articleURL := resolveURL(newsURL, href)
-		if articleURL == "" || seen[articleURL] || articleURL == newsURL {
-			return
-		}
-		seen[articleURL] = true
-
-		// Get title from link text or parent heading
-		title := strings.TrimSpace(link.Text())
-		if title == "" || len(title) < 10 {
-			// Try parent h2, h3, h4
-			parent := link.Parent()
-			for i := 0; i < 3; i++ {
-				if parent.Is("h2, h3, h4") {
-					title = strings.TrimSpace(parent.Text())
-					break
-				}
-				parent = parent.Parent()
-			}
-		}
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		// Clean up title
-		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
-		title = strings.TrimSpace(title)
-
-		// Skip common navigation text
-		titleLower := strings.ToLower(title)
-		if strings.Contains(titleLower, "read more") ||
-			strings.Contains(titleLower, "learn more") ||
-			strings.Contains(titleLower, "view all") {
-			return
-		}
-
+		// Parse date
 		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
 
-		// Fetch full article content from individual page
-		content := ""
-		articleReq, err := http.NewRequest("GET", articleURL, nil)
-		if err == nil {
-			articleReq.Header.Set("User-Agent", cfg.UserAgent)
-			articleResp, err := client.Do(articleReq)
-			if err == nil && articleResp.StatusCode == http.StatusOK {
-				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
-				articleResp.Body.Close()
-				if err == nil {
-					// Try multiple content selectors
-					selectors := []string{".entry-content", "article", ".post-content", "main"}
-					for _, sel := range selectors {
-						bodyElem := articleDoc.Find(sel)
-						if bodyElem.Length() > 0 {
-							content = strings.TrimSpace(bodyElem.Text())
-							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
-							if len(content) > 100 {
-								break
+		// Get content from RSS
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		// If RSS content is short, fetch full article
+		if len(excerpt) < 200 {
+			articleReq, err := http.NewRequest("GET", articleURL, nil)
+			if err == nil {
+				articleReq.Header.Set("User-Agent", cfg.UserAgent)
+				articleResp, err := client.Do(articleReq)
+				if err == nil && articleResp.StatusCode == http.StatusOK {
+					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+					articleResp.Body.Close()
+					if err == nil {
+						// Try multiple content selectors
+						selectors := []string{".entry-content", "article", ".post-content", "main"}
+						for _, sel := range selectors {
+							bodyElem := articleDoc.Find(sel)
+							if bodyElem.Length() > 0 {
+								content := strings.TrimSpace(bodyElem.Text())
+								content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+								if len(content) > 100 {
+									excerpt = content
+									break
+								}
 							}
 						}
-					}
-
-					// Try to extract date from article page
-					articleDoc.Find("time").Each(func(_ int, timeElem *goquery.Selection) {
-						if dateStr != time.Now().Format(time.RFC3339) {
-							return
-						}
-						if datetime, exists := timeElem.Attr("datetime"); exists {
-							dateStr = datetime
-						}
-					})
-
-					// Try JSON-LD schema for date
-					if dateStr == time.Now().Format(time.RFC3339) {
-						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
-							jsonText := script.Text()
-							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
-							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
-								dateStr = matches[1]
-							}
-						})
 					}
 				}
 			}
@@ -935,10 +889,10 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     content,
+			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
-	})
+	}
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Verra: collected %d headlines\n", len(out))
@@ -1529,22 +1483,38 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		seen[articleURL] = true
 
 		dateStr := time.Now().Format(time.RFC3339)
+
+		// IISD shows dates in article text like "Event 2 February 2026" or "2 February 2026"
+		// Try to extract date from the full article text
+		articleText := strings.TrimSpace(article.Text())
+
+		// Try various date patterns
+		datePatterns := []struct {
+			regex  string
+			format string
+		}{
+			{`(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})`, "2 January 2006"},
+			{`((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})`, "January 2, 2006"},
+		}
+
+		for _, dp := range datePatterns {
+			re := regexp.MustCompile(dp.regex)
+			if match := re.FindStringSubmatch(articleText); len(match) > 1 {
+				dateText := match[1]
+				// Remove comma if present
+				dateText = strings.ReplaceAll(dateText, ",", "")
+				if t, err := time.Parse(dp.format, dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+					break
+				}
+			}
+		}
+
+		// Also try standard date elements
 		dateElem := article.Find("time, .date, span[class*='date']")
-		if dateElem.Length() > 0 {
+		if dateStr == time.Now().Format(time.RFC3339) && dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {
 				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				for _, format := range []string{
-					"2 January 2006",
-					"January 2, 2006",
-					"2006-01-02",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
-					}
-				}
 			}
 		}
 
@@ -1660,11 +1630,62 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			excerpt = "Category: " + strings.TrimSpace(categoryElem.Text())
 		}
 
+		// Fetch individual article page for date
+		dateStr := time.Now().Format(time.RFC3339)
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Look for date in various locations
+					// 1. Try JSON-LD schema (datePublished)
+					articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+						text := script.Text()
+						// Look for datePublished pattern
+						if strings.Contains(text, "datePublished") {
+							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+							if match := re.FindStringSubmatch(text); len(match) > 1 {
+								dateStr = match[1]
+							}
+						}
+					})
+
+					// 2. Try visible date text "Jan 2026" format
+					if dateStr == time.Now().Format(time.RFC3339) {
+						articleDoc.Find(".date, time, span[class*='date']").Each(func(_ int, elem *goquery.Selection) {
+							text := strings.TrimSpace(elem.Text())
+							// Try "Jan 2026" format (short month + year)
+							re := regexp.MustCompile(`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})`)
+							if match := re.FindStringSubmatch(text); len(match) > 2 {
+								// Parse as first day of month
+								dateText := match[1] + " 1, " + match[2]
+								if t, err := time.Parse("Jan 2, 2006", dateText); err == nil {
+									dateStr = t.Format(time.RFC3339)
+								}
+							}
+						})
+					}
+
+					// 3. Try to get excerpt from article page if not found
+					if excerpt == "" {
+						excerptElem := articleDoc.Find("meta[name='description'], meta[property='og:description']")
+						if excerptElem.Length() > 0 {
+							excerpt, _ = excerptElem.Attr("content")
+							excerpt = strings.TrimSpace(excerpt)
+						}
+					}
+				}
+			}
+		}
+
 		out = append(out, Headline{
 			Source:      "Climate Focus",
 			Title:       title,
 			URL:         articleURL,
-			PublishedAt: time.Now().Format(time.RFC3339),
+			PublishedAt: dateStr,
 			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
@@ -1865,34 +1886,14 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	doc.Find("article, .resource-item, .post, div[class*='resource'], div[class*='card'], a[class*='card']").Each(func(_ int, article *goquery.Selection) {
+	// Isometric structure: <a href="/writing-articles/..."><div class="card-wrapper">...
+	// Inside: <div class="label">Category</div>, <p>Title</p>, <p class="u-text-grey80">Date</p>
+	doc.Find("a[href*='/writing-articles/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Handle both article containers and direct links
-		var titleLink *goquery.Selection
-		if article.Is("a") {
-			titleLink = article
-		} else {
-			titleLink = article.Find("h2 a, h3 a, .title a, a[href*='/resources/']").First()
-		}
-
-		title := strings.TrimSpace(titleLink.Text())
-		if title == "" {
-			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
-		}
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		var href string
-		var exists bool
-		if article.Is("a") {
-			href, exists = article.Attr("href")
-		} else {
-			href, exists = titleLink.Attr("href")
-		}
+		href, exists := link.Attr("href")
 		if !exists || href == "" {
 			return
 		}
@@ -1903,30 +1904,50 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 		}
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := article.Find("time, .date, span[class*='date']")
-		if dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				for _, format := range []string{
-					"2 January 2006",
-					"January 2, 2006",
-					"2006-01-02",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
-					}
-				}
+		// Find title: first <p> without u-text-grey80 class that's not inside author section
+		var title string
+		link.Find("p").Each(func(i int, p *goquery.Selection) {
+			if title != "" {
+				return // Already found
 			}
+			// Skip if has grey class (date) or is inside author div (has img sibling)
+			class, _ := p.Attr("class")
+			if strings.Contains(class, "grey") {
+				return
+			}
+			// Check if parent has an img (author section)
+			parent := p.Parent()
+			if parent.Find("img").Length() > 0 && parent.Children().First().Is("img") {
+				return
+			}
+			text := strings.TrimSpace(p.Text())
+			if len(text) > 15 && len(text) < 200 {
+				title = text
+			}
+		})
+
+		if title == "" || len(title) < 10 {
+			return
 		}
 
-		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .summary, .description").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		// Find date from p.u-text-grey80
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := link.Find("p.u-text-grey80, p[class*='grey']")
+		if dateElem.Length() > 0 {
+			dateText := strings.TrimSpace(dateElem.First().Text())
+			// Format: "Oct 20, 2025" or "Jan 21, 2026"
+			for _, format := range []string{
+				"Jan 2, 2006",
+				"Jan 02, 2006",
+				"January 2, 2006",
+				"2 January 2006",
+				"2006-01-02",
+			} {
+				if t, err := time.Parse(format, dateText); err == nil {
+					dateStr = t.Format(time.RFC3339)
+					break
+				}
+			}
 		}
 
 		out = append(out, Headline{
@@ -1934,7 +1955,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
+			Excerpt:     title, // Use title as excerpt since it's descriptive
 			IsHeadline:  true,
 		})
 	})

@@ -13,6 +13,15 @@
 //   5. Carbon Market Watch - NGO監視団体（一時無効化中）
 //   6. NewClimate         - 気候研究機関
 //   7. Carbon Knowledge Hub - 教育プラットフォーム
+//   8. Verra              - VCS規格運営団体
+//   9. Gold Standard      - 高品質カーボンクレジット規格
+//  10. ACR                - American Carbon Registry
+//  11. CAR                - Climate Action Reserve
+//  12. UNFCCC             - 国連気候変動枠組条約
+//  13. IISD ENB           - 環境交渉速報
+//  14. Climate Focus      - 気候政策コンサルティング
+//  15. Puro.earth         - 炭素除去認証プラットフォーム
+//  16. Isometric          - 炭素除去検証
 //
 // =============================================================================
 package main
@@ -775,6 +784,958 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 	})
 
 	// Return empty slice if no articles found (not an error)
+	return out, nil
+}
+
+// =============================================================================
+// VCM Certification Bodies
+// =============================================================================
+
+// collectHeadlinesVerra fetches news from Verra (VCS standard operator)
+//
+// Verra manages the Verified Carbon Standard (VCS), the world's most widely
+// used voluntary GHG program.
+func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://verra.org/news/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	// Verra uses .verra-post-card containers with h2.post-card-title
+	doc.Find("div.verra-post-card, article, .news-item, .post").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		// For Verra, title is in h2.post-card-title
+		titleElem := article.Find("h2.post-card-title, h2 a, h3 a, .title a").First()
+		title := strings.TrimSpace(titleElem.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Find link - may be on the title or a separate element
+		var href string
+		var exists bool
+		titleLink := titleElem.Find("a").First()
+		if titleLink.Length() > 0 {
+			href, exists = titleLink.Attr("href")
+		}
+		if !exists || href == "" {
+			// Try finding link in parent or article itself
+			articleLink := article.Find("a[href*='/news/'], a[href*='/press-releases/'], a[href]").First()
+			href, exists = articleLink.Attr("href")
+		}
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date'], .info-box-small")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				// Verra uses format like "January 28, 2026"
+				for _, format := range []string{
+					"January 2, 2006",
+					"Jan 2, 2006",
+					"2006-01-02",
+					"02/01/2006",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find(".post-card-body p, p, .excerpt, .summary").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Verra",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Verra: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesGoldStandard fetches news from Gold Standard
+//
+// Gold Standard is a certification standard for carbon offset projects
+// focusing on sustainable development.
+func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://www.goldstandard.org/newsroom"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .post, .blog-card, div[class*='card'], div[class*='article']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, a.card-title").First()
+		if titleLink.Length() == 0 {
+			titleLink = article.Find("a[href*='/blog/'], a[href*='/news/']").First()
+		}
+
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title, .card-title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date'], .meta")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"2 January 2006",
+					"January 2, 2006",
+					"Jan 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .excerpt, .summary, .card-text").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Gold Standard",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Gold Standard: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesACR fetches news from American Carbon Registry
+//
+// ACR is a nonprofit enterprise of Winrock International that operates
+// a voluntary carbon offset program.
+func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://acrcarbon.org/news/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .post, div[class*='news'], div[class*='article']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/news/']").First()
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"January 2, 2006",
+					"Jan 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .excerpt, .summary").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "ACR",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] ACR: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCAR fetches news from Climate Action Reserve
+//
+// Climate Action Reserve is a carbon offset registry for the North American
+// carbon market.
+func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://climateactionreserve.org/updates/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .post, div[class*='news'], div[class*='blog-post']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, .entry-title a").First()
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title, .entry-title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, .entry-date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"January 2, 2006",
+					"Jan 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .excerpt, .entry-summary").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Climate Action Reserve",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Climate Action Reserve: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// International Organizations
+// =============================================================================
+
+// collectHeadlinesUNFCCC fetches news from United Nations Framework Convention on Climate Change
+//
+// UNFCCC is the international treaty on climate change that serves as the foundation
+// for global climate negotiations.
+func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://unfccc.int/news"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .views-row, div[class*='teaser'], div[class*='card']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/news/']").First()
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title, .field--name-title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, .field--name-created, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"2 January 2006",
+					"January 2, 2006",
+					"02/01/2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .field--name-body, .summary").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "UNFCCC",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] UNFCCC: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesIISD fetches news from IISD Earth Negotiations Bulletin
+//
+// IISD ENB provides reporting on international environmental negotiations,
+// including climate change conferences and carbon market discussions.
+func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://enb.iisd.org/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .views-row, div[class*='card'], div[class*='article']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/vol/']").First()
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"2 January 2006",
+					"January 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .summary, .description").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "IISD ENB",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesClimateFocus fetches publications from Climate Focus
+//
+// Climate Focus is a climate policy advisory firm that publishes research
+// on carbon markets and climate finance.
+func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	publicationsURL := "https://climatefocus.com/publications/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", publicationsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	// Climate Focus - find links to publications directly
+	doc.Find("a[href*='/publications/']").Each(func(_ int, link *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		href, exists := link.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		// Skip if this is just the main publications page
+		if href == publicationsURL || href == "https://climatefocus.com/publications/" {
+			return
+		}
+
+		articleURL := resolveURL(publicationsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		// Get title from link text or from image alt
+		title := strings.TrimSpace(link.Text())
+		if title == "" {
+			imgElem := link.Find("img")
+			if imgElem.Length() > 0 {
+				title, _ = imgElem.Attr("alt")
+				title = strings.TrimSpace(title)
+			}
+		}
+
+		// If still no title, extract from URL
+		if title == "" || len(title) < 10 {
+			// Extract title from URL path
+			parts := strings.Split(href, "/")
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i] != "" {
+					title = strings.ReplaceAll(parts[i], "-", " ")
+					title = strings.Title(title)
+					break
+				}
+			}
+		}
+
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Get category from sibling/parent elements
+		excerpt := ""
+		parent := link.Parent()
+		categoryElem := parent.Find(".category")
+		if categoryElem.Length() > 0 {
+			excerpt = "Category: " + strings.TrimSpace(categoryElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Climate Focus",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: time.Now().Format(time.RFC3339),
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Climate Focus: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// Additional Sources (Phase 5)
+// =============================================================================
+
+// collectHeadlinesPuroEarth fetches news from Puro.earth
+//
+// Puro.earth is a carbon removal marketplace that provides certification
+// for carbon removal projects and credits.
+func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	newsURL := "https://puro.earth/puro-earth-in-media"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", newsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .news-item, .post, div[class*='news'], div[class*='card']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/news/']").First()
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := titleLink.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"2 January 2006",
+					"January 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .excerpt, .summary").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Puro.earth",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Puro.earth: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesIsometric fetches resources from Isometric
+//
+// Isometric is a science-based carbon removal verification company
+// that publishes research and resources on carbon removal.
+func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	resourcesURL := "https://isometric.com/writing"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", resourcesURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	doc.Find("article, .resource-item, .post, div[class*='resource'], div[class*='card'], a[class*='card']").Each(func(_ int, article *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		// Handle both article containers and direct links
+		var titleLink *goquery.Selection
+		if article.Is("a") {
+			titleLink = article
+		} else {
+			titleLink = article.Find("h2 a, h3 a, .title a, a[href*='/resources/']").First()
+		}
+
+		title := strings.TrimSpace(titleLink.Text())
+		if title == "" {
+			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		var href string
+		var exists bool
+		if article.Is("a") {
+			href, exists = article.Attr("href")
+		} else {
+			href, exists = titleLink.Attr("href")
+		}
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(resourcesURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+		seen[articleURL] = true
+
+		dateStr := time.Now().Format(time.RFC3339)
+		dateElem := article.Find("time, .date, span[class*='date']")
+		if dateElem.Length() > 0 {
+			if datetime, exists := dateElem.Attr("datetime"); exists {
+				dateStr = datetime
+			} else {
+				dateText := strings.TrimSpace(dateElem.Text())
+				for _, format := range []string{
+					"2 January 2006",
+					"January 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		excerpt := ""
+		excerptElem := article.Find("p, .excerpt, .summary, .description").First()
+		if excerptElem.Length() > 0 {
+			excerpt = strings.TrimSpace(excerptElem.Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "Isometric",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Isometric: collected %d headlines\n", len(out))
+	}
+
 	return out, nil
 }
 

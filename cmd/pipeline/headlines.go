@@ -12,9 +12,11 @@
 //   - sources_html.go             - HTMLスクレイピングソース
 //   - sources_japan.go            - 日本語ソース
 //   - sources_rss.go              - RSSフィードソース
+//   - sources_academic.go         - 学術・研究機関ソース
+//   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】
+// 【実装ソース一覧】（全35ソース、有効32ソース）
 // =============================================================================
 //
 // ▼ 有料ソース（見出しのみ取得）- sources_paid.go
@@ -30,27 +32,51 @@
 //  8. Ecosystem Marketplace - 自然気候ソリューション
 //  9. Carbon Brief        - 気候科学・政策
 //
-// ▼ 無料ソース - HTMLスクレイピング（6ソース）- sources_html.go
+// ▼ 無料ソース - HTMLスクレイピング（12ソース）- sources_html.go
 //  10. ICAP               - 国際カーボンアクションパートナーシップ
 //  11. IETA               - 国際排出量取引協会
 //  12. Energy Monitor     - エネルギー転換ニュース
 //  13. World Bank         - 世界銀行気候変動
-//  14. Carbon Market Watch - NGO監視団体
-//  15. NewClimate Institute - 気候研究機関
-//  16. Carbon Knowledge Hub - 教育プラットフォーム
+//  14. NewClimate Institute - 気候研究機関
+//  15. Carbon Knowledge Hub - 教育プラットフォーム
+//  16. Verra              - VCS規格運営団体
+//  17. Gold Standard      - 高品質カーボンクレジット規格
+//  18. ACR                - American Carbon Registry
+//  19. CAR                - Climate Action Reserve
+//  20. IISD ENB           - 環境交渉速報
+//  21. Climate Focus      - 気候政策コンサルティング
+//  22. Isometric          - 炭素除去検証
 //
-// ▼ 無料ソース - 日本語ソース（4ソース）- sources_japan.go
-//  17. JRI（日本総研）    - RSSフィード
-//  18. 環境省             - プレスリリース
-//  19. METI（経産省）     - SME Agency RSS
-//  20. PwC Japan          - コンサルティングレポート
-//  21. Mizuho R&T         - 金融調査レポート
+// ▼ 無料ソース - 日本語ソース（5ソース）- sources_japan.go
+//  23. JRI（日本総研）    - RSSフィード
+//  24. 環境省             - プレスリリース
+//  25. METI（経産省）     - SME Agency RSS
+//  26. PwC Japan          - コンサルティングレポート
+//  27. Mizuho R&T         - 金融調査レポート
 //
 // ▼ その他 - sources_japan.go
-//  22. JPX（日本取引所）  - カーボン関連株式ニュース
+//  28. JPX（日本取引所）  - カーボン関連株式ニュース
 //
-// ▼ 欧州政策ソース - sources_rss.go
-//  23. Politico EU        - EU政策・エネルギー・気候変動ニュース
+// ▼ RSS/Atomフィードソース（1ソース）- sources_rss.go
+//  29. Politico EU        - EU政策・エネルギー・気候変動ニュース
+//
+// ▼ 学術・研究機関ソース（2ソース）- sources_academic.go
+//  30. arXiv              - プレプリントリポジトリ
+//  31. Nature Communications - 科学ジャーナル（キーワードフィルタ）
+//
+// ▼ 地域ETSソース（4ソース）- sources_regional_ets.go
+//  32. EU ETS             - 欧州委員会ETSニュース
+//  33. California CARB    - カリフォルニア大気資源局
+//  34. RGGI               - 北東部州温室効果ガスイニシアティブ
+//  35. Australia CER      - オーストラリア・クリーンエネルギー規制局
+//
+// ▼ 一時無効化中のソース
+//  - Carbon Market Watch  - 403 Forbiddenエラー
+//  - UNFCCC              - Incapsula保護
+//  - Euractiv            - Cloudflare保護
+//  - UK ETS              - フィードが空
+//  - OIES                - JavaScript描画必須
+//  - Puro.earth          - 構造化ニュースなし
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -144,6 +170,34 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 	// 欧州政策ソース（RSSフィード）- sources_rss.go
 	"politico-eu": collectHeadlinesPoliticoEU,
+	// "euractiv":    collectHeadlinesEuractiv, // 2026-01: Cloudflare protection, temporarily disabled
+	// "uk-ets": collectHeadlinesUKETS, // 2026-01: Feed empty, temporarily disabled
+
+	// 学術・研究機関ソース - sources_academic.go
+	"arxiv":        collectHeadlinesArXiv,
+	"nature-comms": collectHeadlinesNatureComms,
+	// "oies":        collectHeadlinesOIES, // 2026-01: JavaScript rendering required, temporarily disabled
+
+	// VCM認証団体 - sources_html.go
+	"verra":         collectHeadlinesVerra,
+	"gold-standard": collectHeadlinesGoldStandard,
+	"acr":           collectHeadlinesACR,
+	"car":           collectHeadlinesCAR,
+
+	// 国際機関 - sources_html.go
+	// "unfccc":        collectHeadlinesUNFCCC, // 2026-01: Incapsula protection, temporarily disabled
+	"iisd":          collectHeadlinesIISD,
+	"climate-focus": collectHeadlinesClimateFocus,
+
+	// 地域ETS - sources_regional_ets.go
+	"eu-ets":        collectHeadlinesEUETS,
+	"carb":          collectHeadlinesCARB,
+	"rggi":          collectHeadlinesRGGI,
+	"australia-cer": collectHeadlinesAustraliaCER,
+
+	// 追加ソース（CDR関連）- sources_html.go
+	// "puro-earth": collectHeadlinesPuroEarth, // 2026-01: Media page has no structured news
+	"isometric": collectHeadlinesIsometric,
 }
 
 // =============================================================================

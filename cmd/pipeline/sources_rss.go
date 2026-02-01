@@ -7,6 +7,8 @@
 //
 // 【含まれるソース】
 //   1. Politico EU - EU政策・エネルギー・気候変動ニュース
+//   2. Euractiv ETS - EU ETS関連ニュース
+//   3. UK ETS - UK政府ETS関連ニュース（Atom Feed）
 //
 // =============================================================================
 package main
@@ -116,5 +118,162 @@ func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline
 	}
 
 	// Return empty slice if no articles found (not an error)
+	return out, nil
+}
+
+// collectHeadlinesEuractiv fetches articles from Euractiv ETS section RSS feed
+//
+// Euractiv is a European news site focusing on EU policy. The ETS section
+// covers emissions trading scheme news and analysis.
+//
+// URL: https://www.euractiv.com/section/emissions-trading-scheme/feed/
+func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://www.euractiv.com/section/emissions-trading-scheme/feed/"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Euractiv RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		// Remove UTM tracking parameters
+		articleURL := item.Link
+		if idx := strings.Index(articleURL, "?utm_"); idx > 0 {
+			articleURL = articleURL[:idx]
+		}
+
+		// Parse date
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Get content
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "Euractiv",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesUKETS fetches articles from UK Government ETS Atom feed
+//
+// The UK Emissions Trading Scheme page provides official government updates
+// on the UK ETS policy and implementation.
+//
+// URL: https://www.gov.uk/government/publications.atom?topics%5B%5D=uk-emissions-trading-scheme
+func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://www.gov.uk/government/publications.atom?topics%5B%5D=uk-emissions-trading-scheme"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Atom parse failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
+
+		// Get summary/content
+		excerpt := ""
+		if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "UK ETS",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
 	return out, nil
 }

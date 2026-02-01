@@ -1162,17 +1162,28 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
+					// ACR uses WordPress block editor - remove nav/header/footer first
+					articleDoc.Find("header, footer, nav, .site-header, .site-footer, script, style").Remove()
+
 					// ACR uses WordPress with various content selectors
 					// Try multiple selectors in order of preference
-					selectors := []string{".entry-content", ".wp-site-blocks", "article", ".post-content", "main", ".content"}
+					selectors := []string{
+						".entry-content",
+						".wp-block-group",
+						".post-content",
+						"article",
+						"main",
+						".wp-site-blocks",
+						"body",
+					}
 					for _, sel := range selectors {
 						bodyElem := articleDoc.Find(sel)
 						if bodyElem.Length() > 0 {
 							content = strings.TrimSpace(bodyElem.Text())
 							// Clean up content: normalize whitespace
 							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
-							// ACR articles can be short (primarily image-based)
-							if len(content) > 20 {
+							// Need substantial content (at least a sentence)
+							if len(content) > 100 {
 								break
 							}
 						}

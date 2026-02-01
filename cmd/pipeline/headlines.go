@@ -171,7 +171,6 @@ var sourceCollectors = map[string]HeadlineCollector{
 	// 欧州政策ソース（RSSフィード）- sources_rss.go
 	"politico-eu": collectHeadlinesPoliticoEU,
 	// "euractiv":    collectHeadlinesEuractiv, // 2026-01: Cloudflare protection, temporarily disabled
-	// "uk-ets": collectHeadlinesUKETS, // 2026-01: Feed empty, temporarily disabled
 
 	// 学術・研究機関ソース - sources_academic.go
 	"arxiv":        collectHeadlinesArXiv,
@@ -191,6 +190,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 	// 地域ETS - sources_regional_ets.go
 	"eu-ets":        collectHeadlinesEUETS,
+	"uk-ets":        collectHeadlinesUKETSHTML, // HTML scraping version (Atom feed was empty)
 	"carb":          collectHeadlinesCARB,
 	"rggi":          collectHeadlinesRGGI,
 	"australia-cer": collectHeadlinesAustraliaCER,

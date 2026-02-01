@@ -10,6 +10,7 @@
 //   2. California CARB  - California Air Resources Board
 //   3. RGGI             - Regional Greenhouse Gas Initiative
 //   4. Australia CER    - Clean Energy Regulator
+//   5. UK ETS           - UK Government ETS publications (HTML scraping)
 //
 // =============================================================================
 package main
@@ -456,6 +457,128 @@ func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headli
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Australia CER: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// UK ETS Source
+// =============================================================================
+
+// collectHeadlinesUKETSHTML fetches news from UK Government ETS publications
+//
+// The UK Emissions Trading Scheme is managed by the UK ETS Authority
+// (a joint body of UK, Scottish, Welsh governments and NI Executive).
+// This scrapes gov.uk search results for UK ETS related publications.
+func collectHeadlinesUKETSHTML(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// Search gov.uk for UK ETS publications and news
+	searchURL := "https://www.gov.uk/search/all?keywords=%22UK+Emissions+Trading+Scheme%22&order=updated-newest"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	// gov.uk search results use gem-c-document-list__item for each result
+	doc.Find("li.gem-c-document-list__item, .gem-c-document-list__item, div.finder-results li").Each(func(_ int, item *goquery.Selection) {
+		if len(out) >= limit {
+			return
+		}
+
+		// Find title link
+		link := item.Find("a.gem-c-document-list__item-title, a[data-track-category='navFinderLinkClicked']").First()
+		if link.Length() == 0 {
+			link = item.Find("a").First()
+		}
+
+		title := strings.TrimSpace(link.Text())
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		href, exists := link.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		articleURL := resolveURL(searchURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
+		}
+
+		// Filter: only include UK ETS related content
+		titleLower := strings.ToLower(title)
+		if !strings.Contains(titleLower, "ets") &&
+			!strings.Contains(titleLower, "emissions trading") &&
+			!strings.Contains(titleLower, "carbon") {
+			return
+		}
+
+		seen[articleURL] = true
+
+		// Extract date from metadata
+		dateStr := time.Now().Format(time.RFC3339)
+		metaElem := item.Find(".gem-c-document-list__attribute, .document-list-item-metadata")
+		if metaElem.Length() > 0 {
+			metaText := strings.TrimSpace(metaElem.Text())
+			// Look for "Updated: DD Month YYYY" or similar
+			if strings.Contains(metaText, "Updated:") {
+				dateText := strings.TrimPrefix(metaText, "Updated:")
+				dateText = strings.TrimSpace(dateText)
+				for _, format := range []string{
+					"2 January 2006",
+					"02 January 2006",
+					"January 2, 2006",
+					"2006-01-02",
+				} {
+					if t, err := time.Parse(format, dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+						break
+					}
+				}
+			}
+		}
+
+		// Extract description
+		excerpt := ""
+		descElem := item.Find(".gem-c-document-list__item-description, p")
+		if descElem.Length() > 0 {
+			excerpt = strings.TrimSpace(descElem.First().Text())
+		}
+
+		out = append(out, Headline{
+			Source:      "UK ETS",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	})
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] UK ETS: collected %d headlines\n", len(out))
 	}
 
 	return out, nil

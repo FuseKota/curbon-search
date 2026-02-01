@@ -823,70 +823,111 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Verra uses .verra-post-card containers with h2.post-card-title
-	doc.Find("div.verra-post-card, article, .news-item, .post").Each(func(_ int, article *goquery.Selection) {
+	// Try multiple selectors for different page structures
+	// Method 1: Find links to verra.org articles
+	doc.Find("a[href*='verra.org/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// For Verra, title is in h2.post-card-title
-		titleElem := article.Find("h2.post-card-title, h2 a, h3 a, .title a").First()
-		title := strings.TrimSpace(titleElem.Text())
-		if title == "" {
-			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		href, exists := link.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+
+		// Skip navigation and non-article links
+		if href == "https://verra.org/news/" || href == "/news/" ||
+			strings.Contains(href, "/page/") || strings.Contains(href, "#") {
+			return
+		}
+
+		// Only process verra.org article URLs (not general pages)
+		if !strings.Contains(href, "verra.org/") {
+			return
+		}
+
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] || articleURL == newsURL {
+			return
+		}
+		seen[articleURL] = true
+
+		// Get title from link text or parent heading
+		title := strings.TrimSpace(link.Text())
+		if title == "" || len(title) < 10 {
+			// Try parent h2, h3, h4
+			parent := link.Parent()
+			for i := 0; i < 3; i++ {
+				if parent.Is("h2, h3, h4") {
+					title = strings.TrimSpace(parent.Text())
+					break
+				}
+				parent = parent.Parent()
+			}
 		}
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Find link - may be on the title or a separate element
-		var href string
-		var exists bool
-		titleLink := titleElem.Find("a").First()
-		if titleLink.Length() > 0 {
-			href, exists = titleLink.Attr("href")
-		}
-		if !exists || href == "" {
-			// Try finding link in parent or article itself
-			articleLink := article.Find("a[href*='/news/'], a[href*='/press-releases/'], a[href]").First()
-			href, exists = articleLink.Attr("href")
-		}
-		if !exists || href == "" {
-			return
-		}
+		// Clean up title
+		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+		title = strings.TrimSpace(title)
 
-		articleURL := resolveURL(newsURL, href)
-		if articleURL == "" || seen[articleURL] {
+		// Skip common navigation text
+		titleLower := strings.ToLower(title)
+		if strings.Contains(titleLower, "read more") ||
+			strings.Contains(titleLower, "learn more") ||
+			strings.Contains(titleLower, "view all") {
 			return
 		}
-		seen[articleURL] = true
 
 		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := article.Find("time, .date, span[class*='date'], .info-box-small")
-		if dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				// Verra uses format like "January 28, 2026"
-				for _, format := range []string{
-					"January 2, 2006",
-					"Jan 2, 2006",
-					"2006-01-02",
-					"02/01/2006",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
+
+		// Fetch full article content from individual page
+		content := ""
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Try multiple content selectors
+					selectors := []string{".entry-content", "article", ".post-content", "main"}
+					for _, sel := range selectors {
+						bodyElem := articleDoc.Find(sel)
+						if bodyElem.Length() > 0 {
+							content = strings.TrimSpace(bodyElem.Text())
+							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+							if len(content) > 100 {
+								break
+							}
+						}
+					}
+
+					// Try to extract date from article page
+					articleDoc.Find("time").Each(func(_ int, timeElem *goquery.Selection) {
+						if dateStr != time.Now().Format(time.RFC3339) {
+							return
+						}
+						if datetime, exists := timeElem.Attr("datetime"); exists {
+							dateStr = datetime
+						}
+					})
+
+					// Try JSON-LD schema for date
+					if dateStr == time.Now().Format(time.RFC3339) {
+						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							jsonText := script.Text()
+							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+								dateStr = matches[1]
+							}
+						})
 					}
 				}
 			}
-		}
-
-		excerpt := ""
-		excerptElem := article.Find(".post-card-body p, p, .excerpt, .summary").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
 		}
 
 		out = append(out, Headline{
@@ -894,7 +935,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
+			Excerpt:     content,
 			IsHeadline:  true,
 		})
 	})
@@ -938,26 +979,19 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	doc.Find("article, .news-item, .post, .blog-card, div[class*='card'], div[class*='article']").Each(func(_ int, article *goquery.Selection) {
+	// Gold Standard uses h4.title for article titles and time element for dates
+	doc.Find("a[href*='/news/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		titleLink := article.Find("h2 a, h3 a, .title a, a.card-title").First()
-		if titleLink.Length() == 0 {
-			titleLink = article.Find("a[href*='/blog/'], a[href*='/news/']").First()
-		}
-
-		title := strings.TrimSpace(titleLink.Text())
-		if title == "" {
-			title = strings.TrimSpace(article.Find("h2, h3, .title, .card-title").First().Text())
-		}
-		if title == "" || len(title) < 10 {
+		href, exists := link.Attr("href")
+		if !exists || href == "" {
 			return
 		}
 
-		href, exists := titleLink.Attr("href")
-		if !exists || href == "" {
+		// Skip non-article links
+		if href == "/news/" || href == "/newsroom" {
 			return
 		}
 
@@ -965,33 +999,49 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 		if articleURL == "" || seen[articleURL] {
 			return
 		}
-		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := article.Find("time, .date, span[class*='date'], .meta")
-		if dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				for _, format := range []string{
-					"2 January 2006",
-					"January 2, 2006",
-					"Jan 2, 2006",
-					"2006-01-02",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
-					}
-				}
-			}
+		// Find title in h4.title within or near the link
+		titleElem := link.Find("h4.title")
+		title := strings.TrimSpace(titleElem.Text())
+		if title == "" {
+			// Try getting title from link text
+			title = strings.TrimSpace(link.Text())
+		}
+		if title == "" || len(title) < 10 {
+			return
 		}
 
-		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .summary, .card-text").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		seen[articleURL] = true
+
+		// Find date from nearby time element
+		dateStr := time.Now().Format(time.RFC3339)
+		parent := link.Parent()
+		for i := 0; i < 5; i++ {
+			timeElem := parent.Find("time")
+			if timeElem.Length() > 0 {
+				if datetime, exists := timeElem.Attr("datetime"); exists {
+					dateStr = datetime
+					break
+				}
+			}
+			parent = parent.Parent()
+		}
+
+		// Fetch full article content from individual page
+		content := ""
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Gold Standard uses <main> for article body
+					bodyElem := articleDoc.Find("main")
+					content = strings.TrimSpace(bodyElem.Text())
+				}
+			}
 		}
 
 		out = append(out, Headline{
@@ -999,7 +1049,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
+			Excerpt:     content,
 			IsHeadline:  true,
 		})
 	})
@@ -1057,6 +1107,20 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
+		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
+		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+		title = strings.TrimSpace(title)
+
+		// ACR-specific: Remove "PUBLISHED ..." suffix from titles
+		if idx := strings.Index(title, " PUBLISHED"); idx > 0 {
+			title = strings.TrimSpace(title[:idx])
+		}
+		// Also handle "Program Announcements" prefix
+		if strings.HasPrefix(title, "Program Announcements ") {
+			title = strings.TrimPrefix(title, "Program Announcements ")
+			title = strings.TrimSpace(title)
+		}
+
 		href, exists := titleLink.Attr("href")
 		if !exists || href == "" {
 			return
@@ -1088,10 +1152,45 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .summary").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		// Fetch full article content from individual page
+		content := ""
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// ACR uses WordPress with various content selectors
+					// Try multiple selectors in order of preference
+					selectors := []string{".entry-content", ".wp-site-blocks", "article", ".post-content", "main", ".content"}
+					for _, sel := range selectors {
+						bodyElem := articleDoc.Find(sel)
+						if bodyElem.Length() > 0 {
+							content = strings.TrimSpace(bodyElem.Text())
+							// Clean up content: normalize whitespace
+							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+							// ACR articles can be short (primarily image-based)
+							if len(content) > 20 {
+								break
+							}
+						}
+					}
+
+					// Try to extract date from article page if not found
+					if dateStr == time.Now().Format(time.RFC3339) {
+						// Try JSON-LD schema
+						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							jsonText := script.Text()
+							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+								dateStr = matches[1]
+							}
+						})
+					}
+				}
+			}
 		}
 
 		out = append(out, Headline{
@@ -1099,7 +1198,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
+			Excerpt:     content,
 			IsHeadline:  true,
 		})
 	})
@@ -1157,6 +1256,10 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
+		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
+		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+		title = strings.TrimSpace(title)
+
 		href, exists := titleLink.Attr("href")
 		if !exists || href == "" {
 			return
@@ -1166,6 +1269,13 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 		if articleURL == "" || seen[articleURL] {
 			return
 		}
+
+		// CAR-specific: Only allow internal climateactionreserve.org links
+		// Skip external links (zoom.us, youtube.com, etc.)
+		if !strings.Contains(articleURL, "climateactionreserve.org") {
+			return
+		}
+
 		seen[articleURL] = true
 
 		dateStr := time.Now().Format(time.RFC3339)
@@ -1188,10 +1298,44 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .entry-summary").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		// Fetch full article content from individual page
+		content := ""
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// CAR uses WordPress/Elementor with various content selectors
+					// Try multiple selectors in order of preference
+					selectors := []string{".entry-content", ".elementor-widget-theme-post-content", "article", ".post-content", "main"}
+					for _, sel := range selectors {
+						bodyElem := articleDoc.Find(sel)
+						if bodyElem.Length() > 0 {
+							content = strings.TrimSpace(bodyElem.Text())
+							// Clean up content: normalize whitespace
+							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+							if len(content) > 50 {
+								break
+							}
+						}
+					}
+
+					// Try to extract date from article page if not found
+					if dateStr == time.Now().Format(time.RFC3339) {
+						// Try JSON-LD schema
+						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							jsonText := script.Text()
+							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+								dateStr = matches[1]
+							}
+						})
+					}
+				}
+			}
 		}
 
 		out = append(out, Headline{
@@ -1199,7 +1343,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
+			Excerpt:     content,
 			IsHeadline:  true,
 		})
 	})

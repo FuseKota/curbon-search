@@ -196,8 +196,8 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"australia-cer": collectHeadlinesAustraliaCER,
 
 	// 追加ソース（CDR関連）- sources_html.go
-	// "puro-earth": collectHeadlinesPuroEarth, // 2026-01: Media page has no structured news
-	"isometric": collectHeadlinesIsometric,
+	"puro-earth": collectHeadlinesPuroEarth, // Blog page now working
+	"isometric":  collectHeadlinesIsometric,
 }
 
 // =============================================================================

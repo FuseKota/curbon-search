@@ -1681,15 +1681,16 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 // Additional Sources (Phase 5)
 // =============================================================================
 
-// collectHeadlinesPuroEarth fetches news from Puro.earth
+// collectHeadlinesPuroEarth fetches blog articles from Puro.earth
 //
 // Puro.earth is a carbon removal marketplace that provides certification
-// for carbon removal projects and credits.
+// for carbon removal projects and credits. Their blog contains news,
+// methodology updates, and industry insights.
 func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	newsURL := "https://puro.earth/puro-earth-in-media"
+	blogURL := "https://puro.earth/our-blog/"
 
 	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", newsURL, nil)
+	req, err := http.NewRequest("GET", blogURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
@@ -1713,55 +1714,106 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	doc.Find("article, .news-item, .post, div[class*='news'], div[class*='card']").Each(func(_ int, article *goquery.Selection) {
+	// Puro.earth blog uses links with /our-blog/ pattern
+	doc.Find("a[href*='/our-blog/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/news/']").First()
-		title := strings.TrimSpace(titleLink.Text())
-		if title == "" {
-			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
-		}
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		href, exists := titleLink.Attr("href")
+		href, exists := link.Attr("href")
 		if !exists || href == "" {
 			return
 		}
 
-		articleURL := resolveURL(newsURL, href)
+		// Skip main blog page links
+		if href == "/our-blog/" || href == blogURL {
+			return
+		}
+
+		articleURL := resolveURL(blogURL, href)
 		if articleURL == "" || seen[articleURL] {
 			return
 		}
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := article.Find("time, .date, span[class*='date']")
-		if dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				for _, format := range []string{
-					"2 January 2006",
-					"January 2, 2006",
-					"2006-01-02",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
+		// Extract title from link text
+		title := strings.TrimSpace(link.Text())
+
+		// If title is empty, try to extract from URL slug
+		if title == "" || len(title) < 10 {
+			// URL pattern: /our-blog/123-article-title-slug
+			parts := strings.Split(href, "/")
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i] != "" && strings.Contains(parts[i], "-") {
+					// Remove the ID prefix (e.g., "353-")
+					slug := parts[i]
+					if idx := strings.Index(slug, "-"); idx > 0 && idx < 5 {
+						slug = slug[idx+1:]
 					}
+					title = strings.ReplaceAll(slug, "-", " ")
+					// Title case
+					words := strings.Fields(title)
+					for j, word := range words {
+						if len(word) > 0 {
+							words[j] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+						}
+					}
+					title = strings.Join(words, " ")
+					break
 				}
 			}
 		}
 
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Fetch article page to get date and excerpt
+		dateStr := time.Now().Format(time.RFC3339)
 		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .summary").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Look for date in DD/MM/YYYY format in page text
+					pageText := articleDoc.Text()
+					datePatterns := []struct {
+						regex  string
+						format string
+					}{
+						{`\d{2}/\d{2}/\d{4}`, "02/01/2006"},
+						{`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}`, "Jan 2, 2006"},
+						{`\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec),?\s+\d{4}`, "2 Jan, 2006"},
+					}
+					for _, dp := range datePatterns {
+						re := regexp.MustCompile(dp.regex)
+						if match := re.FindString(pageText); match != "" {
+							// Normalize the match
+							match = strings.ReplaceAll(match, ",", "")
+							if t, err := time.Parse(dp.format, match); err == nil {
+								dateStr = t.Format(time.RFC3339)
+								break
+							}
+						}
+					}
+
+					// Get excerpt from article body
+					bodyElem := articleDoc.Find("article, .post-content, .entry-content, main p").First()
+					if bodyElem.Length() > 0 {
+						excerpt = strings.TrimSpace(bodyElem.Text())
+						excerpt = regexp.MustCompile(`\s+`).ReplaceAllString(excerpt, " ")
+						// Limit excerpt length
+						if len(excerpt) > 500 {
+							excerpt = excerpt[:500] + "..."
+						}
+					}
+				}
+			}
 		}
 
 		out = append(out, Headline{

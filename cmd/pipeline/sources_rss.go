@@ -9,6 +9,7 @@
 //   1. Politico EU - EU政策・エネルギー・気候変動ニュース
 //   2. Euractiv ETS - EU ETS関連ニュース
 //   3. UK ETS - UK政府ETS関連ニュース（Atom Feed）
+//   4. UN News Climate - 国連ニュース気候変動セクション
 //
 // =============================================================================
 package main
@@ -267,6 +268,88 @@ func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, err
 
 		out = append(out, Headline{
 			Source:      "UK ETS",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesUNNews fetches articles from UN News Climate Change RSS feed
+//
+// UN News is the official news service of the United Nations, covering
+// global climate change news, UNFCCC meetings, and international climate policy.
+// This serves as an alternative to scraping unfccc.int directly.
+//
+// URL: https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml
+func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml"
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in UN News RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := time.Now().Format(time.RFC3339)
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
+
+		// Get content - UN News usually has good descriptions
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		out = append(out, Headline{
+			Source:      "UN News",
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,

@@ -24,6 +24,10 @@
 - **[TEST_SUMMARY.md](./reports/TEST_SUMMARY.md)** - テスト結果サマリー
 - **[INTEGRATION_TEST_REPORT.md](./reports/INTEGRATION_TEST_REPORT.md)** - 統合テスト結果レポート
 
+#### 実装レポート
+- **[2026-02-02_source_fixes_and_additions.md](./reports/2026-02-02_source_fixes_and_additions.md)** - VCMソース修正・UK ETS/Puro.earth/UN News追加
+- **[2026-01-31_new_sources_implementation.md](./reports/2026-01-31_new_sources_implementation.md)** - 新規ソース追加（Phase 1-5）
+
 ### 🏗️ アーキテクチャ (architecture/)
 
 システムの設計と実装の詳細ドキュメントです。
@@ -87,5 +91,5 @@
 
 ---
 
-**最終更新**: 2026-01-31
+**最終更新**: 2026-02-02
 **ディレクトリ整理**: プロジェクト構造改善の一環として実施

@@ -16,7 +16,7 @@
 //   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】（全35ソース、有効32ソース）
+// 【実装ソース一覧】（全36ソース、有効33ソース）
 // =============================================================================
 //
 // ▼ 有料ソース（見出しのみ取得）- sources_paid.go
@@ -57,8 +57,9 @@
 // ▼ その他 - sources_japan.go
 //  28. JPX（日本取引所）  - カーボン関連株式ニュース
 //
-// ▼ RSS/Atomフィードソース（1ソース）- sources_rss.go
+// ▼ RSS/Atomフィードソース（2ソース）- sources_rss.go
 //  29. Politico EU        - EU政策・エネルギー・気候変動ニュース
+//  36. UN News            - 国連ニュース気候変動セクション（UNFCCC代替）
 //
 // ▼ 学術・研究機関ソース（2ソース）- sources_academic.go
 //  30. arXiv              - プレプリントリポジトリ
@@ -72,11 +73,9 @@
 //
 // ▼ 一時無効化中のソース
 //  - Carbon Market Watch  - 403 Forbiddenエラー
-//  - UNFCCC              - Incapsula保護
+//  - UNFCCC              - Incapsula保護 (UN Newsで代替)
 //  - Euractiv            - Cloudflare保護
-//  - UK ETS              - フィードが空
 //  - OIES                - JavaScript描画必須
-//  - Puro.earth          - 構造化ニュースなし
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -183,8 +182,9 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"acr":           collectHeadlinesACR,
 	"car":           collectHeadlinesCAR,
 
-	// 国際機関 - sources_html.go
+	// 国際機関 - sources_html.go, sources_rss.go
 	// "unfccc":        collectHeadlinesUNFCCC, // 2026-01: Incapsula protection, temporarily disabled
+	"un-news":       collectHeadlinesUNNews, // UN News Climate Change RSS (alternative to UNFCCC)
 	"iisd":          collectHeadlinesIISD,
 	"climate-focus": collectHeadlinesClimateFocus,
 

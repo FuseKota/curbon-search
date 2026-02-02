@@ -58,6 +58,23 @@ type arXivLink struct {
 	Type string `xml:"type,attr"`
 }
 
+// carbonKeywordsArXiv contains keywords for filtering arXiv papers to ensure relevance
+// Using compound phrases to avoid false positives from physics papers
+// (e.g., "emission" alone matches "positron emission", "light emission", etc.)
+var carbonKeywordsArXiv = []string{
+	// Climate-specific compound terms
+	"carbon emission", "carbon dioxide", "co2 emission", "greenhouse gas",
+	"carbon pricing", "carbon tax", "carbon market", "carbon credit",
+	"emissions trading", "cap and trade", "carbon trading",
+	"climate change", "climate policy", "global warming",
+	"decarbonization", "decarbonisation", "net-zero", "net zero", "carbon neutral",
+	"renewable energy", "clean energy", "energy transition",
+	"carbon capture", "carbon storage", "carbon sequestration",
+	"carbon footprint", "carbon intensity",
+	// International agreements
+	"paris agreement", "kyoto protocol",
+}
+
 // collectHeadlinesArXiv fetches carbon-related papers from arXiv using their API
 //
 // API Documentation: https://info.arxiv.org/help/api/index.html
@@ -66,26 +83,29 @@ type arXivLink struct {
 // Search query targets papers in q-fin (Quantitative Finance), econ (Economics),
 // and physics (specifically environmental economics topics)
 func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// Search for carbon pricing, emissions trading, carbon market related papers
-	// Categories: q-fin (quantitative finance), econ (economics), stat (statistics)
-	searchTerms := []string{
-		"carbon+pricing",
-		"emissions+trading",
-		"carbon+market",
-		"cap+and+trade",
-		"carbon+tax",
-		"ETS+emissions",
-	}
+	// Search specifically for climate/carbon economics papers
+	// Using category restrictions to avoid physics papers
+	// Categories:
+	//   econ.GN - Economics (General Economics)
+	//   q-fin.* - Quantitative Finance
+	//   physics.soc-ph - Physics and Society (includes some climate policy papers)
+	//   physics.ao-ph - Atmospheric and Oceanic Physics
+	//   stat.AP - Statistics Applications
 
-	// Build search query - OR all terms together
-	searchQuery := strings.Join(searchTerms, "+OR+")
+	// Build search query with category filter AND keyword filter
+	// Format: (cat:econ.* OR cat:q-fin.*) AND (keyword1 OR keyword2)
+	categories := "cat:econ.GN+OR+cat:q-fin.GN+OR+cat:q-fin.PM+OR+cat:stat.AP"
+	keywords := "carbon+OR+climate+OR+emission+OR+environmental+policy"
+
+	// Combined query: papers in relevant categories that mention carbon/climate terms
+	searchQuery := fmt.Sprintf("(%s)+AND+(%s)", categories, keywords)
 
 	// arXiv API URL with search parameters
 	// max_results limits results, sortBy=submittedDate gets newest first
 	apiURL := fmt.Sprintf(
-		"http://export.arxiv.org/api/query?search_query=all:%s&start=0&max_results=%d&sortBy=submittedDate&sortOrder=descending",
+		"http://export.arxiv.org/api/query?search_query=%s&start=0&max_results=%d&sortBy=submittedDate&sortOrder=descending",
 		searchQuery,
-		limit*2, // Request more to account for filtering
+		limit*10, // Request more to account for keyword filtering
 	)
 
 	client := &http.Client{Timeout: cfg.Timeout}
@@ -127,6 +147,25 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 			continue
 		}
 
+		// Clean summary for keyword check
+		summaryClean := strings.TrimSpace(entry.Summary)
+		summaryClean = strings.ReplaceAll(summaryClean, "\n", " ")
+		summaryClean = strings.Join(strings.Fields(summaryClean), " ")
+
+		// Apply keyword filter to ensure paper is actually about carbon/climate
+		titleLower := strings.ToLower(title)
+		summaryLower := strings.ToLower(summaryClean)
+		hasKeyword := false
+		for _, kw := range carbonKeywordsArXiv {
+			if strings.Contains(titleLower, kw) || strings.Contains(summaryLower, kw) {
+				hasKeyword = true
+				break
+			}
+		}
+		if !hasKeyword {
+			continue
+		}
+
 		// Get the abstract page URL (the ID is the URL)
 		articleURL := entry.ID
 
@@ -144,10 +183,8 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 			dateStr = entry.Updated
 		}
 
-		// Clean and truncate summary
-		summary := strings.TrimSpace(entry.Summary)
-		summary = strings.ReplaceAll(summary, "\n", " ")
-		summary = strings.Join(strings.Fields(summary), " ")
+		// Use already cleaned summary
+		summary := summaryClean
 
 		// Build author string
 		var authors []string

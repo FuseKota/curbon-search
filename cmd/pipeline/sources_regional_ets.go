@@ -223,11 +223,42 @@ func collectHeadlinesCARB(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Extract excerpt
+		// Fetch individual article page for full body content
 		excerpt := ""
-		excerptElem := article.Find("p, .field--name-body, .summary, .teaser").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Remove nav, header, footer, sidebar elements
+					articleDoc.Find("header, footer, nav, aside, .sidebar, script, style, .breadcrumb").Remove()
+
+					// Extract content from main element
+					mainContent := articleDoc.Find("main#main-content, main, article, .content")
+					if mainContent.Length() > 0 {
+						// Get all paragraph text
+						var paragraphs []string
+						mainContent.Find("p").Each(func(_ int, p *goquery.Selection) {
+							text := strings.TrimSpace(p.Text())
+							if len(text) > 20 {
+								paragraphs = append(paragraphs, text)
+							}
+						})
+						excerpt = strings.Join(paragraphs, "\n\n")
+					}
+				}
+			}
+		}
+
+		// Fallback to listing page excerpt if article fetch failed
+		if excerpt == "" {
+			excerptElem := article.Find("p, .field--name-body, .summary, .teaser").First()
+			if excerptElem.Length() > 0 {
+				excerpt = strings.TrimSpace(excerptElem.Text())
+			}
 		}
 
 		out = append(out, Headline{

@@ -1291,9 +1291,13 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
-		// CAR-specific: Only allow internal climateactionreserve.org links
-		// Skip external links (zoom.us, youtube.com, etc.)
+		// CAR-specific: Only allow internal blog posts
+		// Skip external links and non-blog pages (program pages, etc.)
 		if !strings.Contains(articleURL, "climateactionreserve.org") {
+			return
+		}
+		// Only allow blog posts (URLs like /blog/YYYY/MM/DD/...)
+		if !strings.Contains(articleURL, "/blog/") {
 			return
 		}
 

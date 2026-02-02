@@ -1069,10 +1069,19 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 		if idx := strings.Index(title, " PUBLISHED"); idx > 0 {
 			title = strings.TrimSpace(title[:idx])
 		}
-		// Also handle "Program Announcements" prefix
-		if strings.HasPrefix(title, "Program Announcements ") {
-			title = strings.TrimPrefix(title, "Program Announcements ")
-			title = strings.TrimSpace(title)
+		// Remove category prefixes from titles
+		acrPrefixes := []string{
+			"Program Announcements ",
+			"General ",
+			"ACR in the News ",
+			"Op-eds ",
+			"Events ",
+		}
+		for _, prefix := range acrPrefixes {
+			if strings.HasPrefix(title, prefix) {
+				title = strings.TrimPrefix(title, prefix)
+				title = strings.TrimSpace(title)
+			}
 		}
 
 		href, exists := titleLink.Attr("href")
@@ -1086,11 +1095,13 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 		}
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
+		foundDate := false
 		dateElem := article.Find("time, .date, span[class*='date']")
 		if dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {
 				dateStr = datetime
+				foundDate = true
 			} else {
 				dateText := strings.TrimSpace(dateElem.Text())
 				for _, format := range []string{
@@ -1100,6 +1111,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				} {
 					if t, err := time.Parse(format, dateText); err == nil {
 						dateStr = t.Format(time.RFC3339)
+						foundDate = true
 						break
 					}
 				}
@@ -1116,46 +1128,90 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// ACR uses WordPress block editor - remove nav/header/footer first
-					articleDoc.Find("header, footer, nav, .site-header, .site-footer, script, style").Remove()
+					// ACR uses WordPress block editor - remove unwanted sections first
+					articleDoc.Find("header, footer, nav, .site-header, .site-footer, script, style, noscript").Remove()
 
-					// ACR uses WordPress with various content selectors
-					// Try multiple selectors in order of preference
-					selectors := []string{
-						".entry-content",
-						".wp-block-group",
-						".post-content",
-						"article",
-						"main",
-						".wp-site-blocks",
-						"body",
-					}
-					for _, sel := range selectors {
-						bodyElem := articleDoc.Find(sel)
-						if bodyElem.Length() > 0 {
-							content = strings.TrimSpace(bodyElem.Text())
-							// Clean up content: normalize whitespace
-							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
-							// Need substantial content (at least a sentence)
-							if len(content) > 100 {
-								break
+					// Collect all paragraphs from the page and filter for article content
+					var paragraphs []string
+					articleDoc.Find("p").Each(func(_ int, p *goquery.Selection) {
+						text := strings.TrimSpace(p.Text())
+						textLower := strings.ToLower(text)
+
+						// Skip short paragraphs
+						if len(text) < 40 {
+							return
+						}
+
+						// Skip known non-article content patterns
+						skipPatterns := []string{
+							"cookie", "gdpr", "privacy", "accept", "reject",
+							"related news", "published", "home", "news",
+							"we are using", "this website uses", "enable or disable",
+							"strictly necessary", "3rd party", "save changes",
+						}
+						for _, pattern := range skipPatterns {
+							if strings.Contains(textLower, pattern) {
+								return
 							}
+						}
+
+						// Skip if it looks like navigation/breadcrumb
+						if strings.HasPrefix(text, "Home") || strings.HasPrefix(text, "News") {
+							return
+						}
+
+						paragraphs = append(paragraphs, text)
+					})
+
+					if len(paragraphs) > 0 {
+						content = strings.Join(paragraphs, "\n\n")
+					}
+
+					// Fallback: try full text from main content area
+					if content == "" {
+						mainElem := articleDoc.Find("main, article, .content, body")
+						if mainElem.Length() > 0 {
+							content = strings.TrimSpace(mainElem.First().Text())
+							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
 						}
 					}
 
 					// Try to extract date from article page if not found
-					if dateStr == time.Now().Format(time.RFC3339) {
-						// Try JSON-LD schema
+					if !foundDate {
+						// Try JSON-LD schema first
 						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							if foundDate {
+								return
+							}
 							jsonText := script.Text()
 							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
 							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
 								dateStr = matches[1]
+								foundDate = true
 							}
 						})
 					}
+
+					// ACR-specific: Try "PUBLISHED [date]" pattern from article text
+					if !foundDate {
+						articleText := articleDoc.Text()
+						// Match "PUBLISHED January 5, 2026" or "PUBLISHED November 25, 2025"
+						publishedRe := regexp.MustCompile(`PUBLISHED\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})`)
+						if match := publishedRe.FindStringSubmatch(articleText); len(match) > 1 {
+							dateText := strings.ReplaceAll(match[1], ",", "")
+							if t, err := time.Parse("January 2 2006", dateText); err == nil {
+								dateStr = t.Format(time.RFC3339)
+								foundDate = true
+							}
+						}
+					}
 				}
 			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{

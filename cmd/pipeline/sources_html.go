@@ -1303,11 +1303,13 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
+		foundDate := false
 		dateElem := article.Find("time, .date, .entry-date, span[class*='date']")
 		if dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {
 				dateStr = datetime
+				foundDate = true
 			} else {
 				dateText := strings.TrimSpace(dateElem.Text())
 				for _, format := range []string{
@@ -1317,6 +1319,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				} {
 					if t, err := time.Parse(format, dateText); err == nil {
 						dateStr = t.Format(time.RFC3339)
+						foundDate = true
 						break
 					}
 				}
@@ -1349,18 +1352,27 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 					}
 
 					// Try to extract date from article page if not found
-					if dateStr == time.Now().Format(time.RFC3339) {
+					if !foundDate {
 						// Try JSON-LD schema
 						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+							if foundDate {
+								return
+							}
 							jsonText := script.Text()
 							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
 							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
 								dateStr = matches[1]
+								foundDate = true
 							}
 						})
 					}
 				}
 			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{

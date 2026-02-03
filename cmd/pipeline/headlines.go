@@ -61,9 +61,10 @@
 //  29. Politico EU        - EU政策・エネルギー・気候変動ニュース
 //  36. UN News            - 国連ニュース気候変動セクション（UNFCCC代替）
 //
-// ▼ 学術・研究機関ソース（2ソース）- sources_academic.go
+// ▼ 学術・研究機関ソース（3ソース）- sources_academic.go
 //  30. arXiv              - プレプリントリポジトリ
 //  31. Nature Communications - 科学ジャーナル（キーワードフィルタ）
+//  37. OIES               - オックスフォードエネルギー研究所（プログラムページ経由）
 //
 // ▼ 地域ETSソース（4ソース）- sources_regional_ets.go
 //  32. EU ETS             - 欧州委員会ETSニュース
@@ -75,7 +76,6 @@
 //  - Carbon Market Watch  - 403 Forbiddenエラー
 //  - UNFCCC              - Incapsula保護 (UN Newsで代替)
 //  - Euractiv            - Cloudflare保護
-//  - OIES                - JavaScript描画必須
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -169,12 +169,12 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 	// 欧州政策ソース（RSSフィード）- sources_rss.go
 	"politico-eu": collectHeadlinesPoliticoEU,
-	// "euractiv":    collectHeadlinesEuractiv, // 2026-01: Cloudflare protection, temporarily disabled
+	"euractiv":    collectHeadlinesEuractiv,
 
 	// 学術・研究機関ソース - sources_academic.go
 	"arxiv":        collectHeadlinesArXiv,
 	"nature-comms": collectHeadlinesNatureComms,
-	// "oies":        collectHeadlinesOIES, // 2026-01: JavaScript rendering required, temporarily disabled
+	"oies":         collectHeadlinesOIES,
 
 	// VCM認証団体 - sources_html.go
 	"verra":         collectHeadlinesVerra,

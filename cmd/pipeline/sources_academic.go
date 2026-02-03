@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/mmcdole/gofeed"
 )
 
 // =============================================================================
@@ -237,88 +237,19 @@ var carbonKeywordsNature = []string{
 // collectHeadlinesNatureComms fetches climate-related articles from Nature Communications RSS
 //
 // Nature Communications is a peer-reviewed open-access journal covering all areas
-// of natural sciences. We filter for carbon/climate related articles using keywords.
+// of natural sciences. We use the climate-change subject feed which is pre-filtered.
+//
+// NOTE: 2026-02: Nature.com has bot protection that returns HTML challenge pages
+// inconsistently. This source is temporarily disabled pending further investigation.
+//
+// URL: https://www.nature.com/subjects/climate-change/ncomms.rss
 func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	feedURL := "https://www.nature.com/ncomms.rss"
-
-	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", feedURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
-	}
-
-	out := make([]Headline, 0, limit)
-
-	for _, item := range feed.Items {
-		if len(out) >= limit {
-			break
-		}
-
-		title := strings.TrimSpace(item.Title)
-		if title == "" {
-			continue
-		}
-
-		// Apply keyword filter
-		titleLower := strings.ToLower(title)
-		descLower := strings.ToLower(item.Description)
-
-		hasKeyword := false
-		for _, kw := range carbonKeywordsNature {
-			if strings.Contains(titleLower, kw) || strings.Contains(descLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-
-		if !hasKeyword {
-			continue
-		}
-
-		articleURL := item.Link
-
-		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
-		if item.PublishedParsed != nil {
-			dateStr = item.PublishedParsed.Format(time.RFC3339)
-		}
-
-		// Get description/abstract
-		excerpt := cleanHTMLTags(item.Description)
-		excerpt = strings.TrimSpace(excerpt)
-
-		out = append(out, Headline{
-			Source:      "Nature Communications",
-			Title:       title,
-			URL:         articleURL,
-			PublishedAt: dateStr,
-			Excerpt:     excerpt,
-			IsHeadline:  true,
-		})
-	}
-
+	// Temporarily disabled due to bot protection issues
+	// Nature.com returns HTML challenge pages inconsistently
 	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Nature Communications: collected %d headlines (filtered from RSS)\n", len(out))
+		fmt.Fprintf(os.Stderr, "[DEBUG] Nature Communications: temporarily disabled due to bot protection\n")
 	}
-
-	return out, nil
+	return []Headline{}, nil
 }
 
 // =============================================================================
@@ -329,15 +260,141 @@ func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headlin
 //
 // OIES publishes research papers on energy and environmental economics,
 // including carbon markets and climate policy.
+//
+// Strategy: The main /publications/ page uses JavaScript rendering, so we fetch
+// publications from multiple programme pages that render content server-side:
+//   - Carbon Management Programme (primary - carbon/climate focused)
+//   - Energy Transition Research Initiative
+//   - Gas, Electricity, and other programmes
 func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	publicationsURL := "https://www.oxfordenergy.org/publications/"
+	// Programme pages that render publications in HTML (not JavaScript)
+	programmeURLs := []string{
+		"https://www.oxfordenergy.org/carbon-management-programme/",
+		"https://www.oxfordenergy.org/energy-transition-research-initiative/",
+		"https://www.oxfordenergy.org/gas-programme/",
+		"https://www.oxfordenergy.org/electricity-programme/",
+	}
 
 	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", publicationsURL, nil)
+	out := make([]Headline, 0, limit)
+	seen := make(map[string]bool)
+
+	for _, programmeURL := range programmeURLs {
+		if len(out) >= limit {
+			break
+		}
+
+		headlines, err := fetchOIESProgrammePage(client, programmeURL, cfg.UserAgent)
+		if err != nil {
+			if os.Getenv("DEBUG_SCRAPING") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] OIES: error fetching %s: %v\n", programmeURL, err)
+			}
+			continue
+		}
+
+		for _, h := range headlines {
+			if len(out) >= limit {
+				break
+			}
+			if seen[h.URL] {
+				continue
+			}
+			seen[h.URL] = true
+
+			// Fetch article page to get excerpt/content
+			excerpt, date := fetchOIESArticleContent(client, h.URL, cfg.UserAgent)
+			if excerpt != "" {
+				h.Excerpt = excerpt
+			}
+			if date != "" {
+				h.PublishedAt = date
+			}
+
+			out = append(out, h)
+		}
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] OIES: collected %d headlines from %d programmes\n", len(out), len(programmeURLs))
+	}
+
+	return out, nil
+}
+
+// fetchOIESArticleContent fetches the excerpt and date from an individual article page
+func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) (excerpt, date string) {
+	req, err := http.NewRequest("GET", articleURL, nil)
+	if err != nil {
+		return "", ""
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", ""
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", ""
+	}
+
+	// Try to get excerpt from meta description or og:description
+	if metaDesc, exists := doc.Find("meta[name='description']").Attr("content"); exists && metaDesc != "" {
+		excerpt = strings.TrimSpace(metaDesc)
+	}
+	if excerpt == "" {
+		if ogDesc, exists := doc.Find("meta[property='og:description']").Attr("content"); exists && ogDesc != "" {
+			excerpt = strings.TrimSpace(ogDesc)
+		}
+	}
+
+	// Remove truncation markers like "[…]"
+	excerpt = strings.TrimSuffix(excerpt, "[…]")
+	excerpt = strings.TrimSuffix(excerpt, "…")
+	excerpt = strings.TrimSuffix(excerpt, " [")
+	excerpt = strings.TrimSpace(excerpt)
+
+	// If excerpt ends mid-sentence, add "..."
+	if len(excerpt) > 0 {
+		lastChar := excerpt[len(excerpt)-1]
+		if lastChar != '.' && lastChar != '!' && lastChar != '?' && lastChar != '"' && lastChar != '\'' {
+			excerpt = excerpt + "..."
+		}
+	}
+
+	// Truncate very long excerpts
+	if len(excerpt) > 500 {
+		excerpt = excerpt[:497] + "..."
+	}
+
+	// Try to get date from JSON-LD
+	doc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+		text := script.Text()
+		if dateMatch := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`).FindStringSubmatch(text); len(dateMatch) > 1 {
+			if t, err := time.Parse("2006-01-02", dateMatch[1]); err == nil {
+				date = t.Format(time.RFC3339)
+			} else if t, err := time.Parse(time.RFC3339, dateMatch[1]); err == nil {
+				date = t.Format(time.RFC3339)
+			}
+		}
+	})
+
+	return excerpt, date
+}
+
+// fetchOIESProgrammePage extracts publications from a single OIES programme page
+func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string) ([]Headline, error) {
+	req, err := http.NewRequest("GET", programmeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -354,85 +411,95 @@ func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		return nil, fmt.Errorf("parse HTML failed: %w", err)
 	}
 
-	out := make([]Headline, 0, limit)
-	seen := make(map[string]bool)
+	var headlines []Headline
 
-	// OIES uses article cards for publications
-	doc.Find("article, .publication-item, .post, div[class*='publication']").Each(func(_ int, article *goquery.Selection) {
-		if len(out) >= limit {
-			return
-		}
-
-		// Find title and link
-		titleLink := article.Find("h2 a, h3 a, .title a, a.title").First()
-		if titleLink.Length() == 0 {
-			titleLink = article.Find("a[href*='/publications/']").First()
-		}
-
-		title := strings.TrimSpace(titleLink.Text())
-		if title == "" {
-			// Try getting title from heading directly
-			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
-		}
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		href, exists := titleLink.Attr("href")
+	// OIES programme pages list publications as links with dates
+	// Look for links to /publications/ and /research/ URLs
+	doc.Find("a[href*='/publications/'], a[href*='/research/']").Each(func(_ int, link *goquery.Selection) {
+		href, exists := link.Attr("href")
 		if !exists || href == "" {
 			return
 		}
 
-		articleURL := resolveURL(publicationsURL, href)
-		if articleURL == "" || seen[articleURL] {
+		// Skip navigation and category links
+		if strings.Contains(href, "/publication-topic/") ||
+			strings.Contains(href, "/publication-category/") ||
+			strings.HasSuffix(href, "/publications/") ||
+			strings.HasSuffix(href, "/research/") {
 			return
 		}
-		seen[articleURL] = true
 
-		// Extract date
+		articleURL := resolveURL(programmeURL, href)
+		if articleURL == "" {
+			return
+		}
+
+		// Get title from link text
+		title := strings.TrimSpace(link.Text())
+		if title == "" || len(title) < 10 {
+			return
+		}
+
+		// Skip PDF download links (we want the article page)
+		if strings.HasSuffix(strings.ToLower(href), ".pdf") {
+			return
+		}
+
+		// Look for date near the link
+		// OIES uses format like "22.01.26" (DD.MM.YY)
 		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := article.Find("time, .date, .published, span[class*='date']")
-		if dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				// Try various date formats
-				for _, format := range []string{
-					"2 January 2006",
-					"January 2, 2006",
-					"02/01/2006",
-					"2006-01-02",
-					"Jan 2, 2006",
-				} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
-					}
-				}
+
+		// Check parent elements for date
+		parent := link.Parent()
+		for i := 0; i < 3 && parent.Length() > 0; i++ {
+			parentText := parent.Text()
+			if d := parseOIESDate(parentText); d != "" {
+				dateStr = d
+				break
+			}
+			parent = parent.Parent()
+		}
+
+		// Filter out entries older than 2 years
+		if t, err := time.Parse(time.RFC3339, dateStr); err == nil {
+			if time.Since(t) > 2*365*24*time.Hour {
+				return
 			}
 		}
 
-		// Extract excerpt/summary
-		excerpt := ""
-		excerptElem := article.Find("p, .excerpt, .summary, .description").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
-		}
-
-		out = append(out, Headline{
+		headlines = append(headlines, Headline{
 			Source:      "OIES",
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
 	})
 
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] OIES: collected %d headlines\n", len(out))
-	}
+	return headlines, nil
+}
 
-	return out, nil
+// parseOIESDate extracts date from text containing OIES date format (DD.MM.YY)
+func parseOIESDate(text string) string {
+	// OIES uses format like "22.01.26" for 22 January 2026
+	// Look for pattern DD.MM.YY
+	for i := 0; i < len(text)-7; i++ {
+		if text[i] >= '0' && text[i] <= '9' &&
+			text[i+1] >= '0' && text[i+1] <= '9' &&
+			text[i+2] == '.' &&
+			text[i+3] >= '0' && text[i+3] <= '9' &&
+			text[i+4] >= '0' && text[i+4] <= '9' &&
+			text[i+5] == '.' &&
+			text[i+6] >= '0' && text[i+6] <= '9' &&
+			text[i+7] >= '0' && text[i+7] <= '9' {
+
+			dateCandidate := text[i : i+8]
+			// Parse as DD.MM.YY
+			t, err := time.Parse("02.01.06", dateCandidate)
+			if err == nil {
+				return t.Format(time.RFC3339)
+			}
+		}
+	}
+	return ""
 }

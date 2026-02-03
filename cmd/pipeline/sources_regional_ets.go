@@ -672,11 +672,13 @@ func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headli
 		seen[articleURL] = true
 
 		// Extract date from cer-card__changed
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
+		foundDate := false
 		dateElem := article.Find(".cer-card__changed, time, .date")
 		if dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {
 				dateStr = datetime
+				foundDate = true
 			} else {
 				dateText := strings.TrimSpace(dateElem.Text())
 				for _, format := range []string{
@@ -687,26 +689,92 @@ func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headli
 				} {
 					if t, err := time.Parse(format, dateText); err == nil {
 						dateStr = t.Format(time.RFC3339)
+						foundDate = true
 						break
 					}
 				}
 			}
 		}
 
-		// Extract excerpt from cer-card__body
+		// Fetch full article content from individual page
 		excerpt := ""
-		bodyElem := article.Find(".cer-card__body, p, .summary")
-		if bodyElem.Length() > 0 {
-			excerpt = strings.TrimSpace(bodyElem.First().Text())
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Remove unwanted elements
+					articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar, .related").Remove()
+
+					// Try to extract date from article page if not found
+					if !foundDate {
+						articleDoc.Find("time, .date").Each(func(_ int, elem *goquery.Selection) {
+							if foundDate {
+								return
+							}
+							if datetime, exists := elem.Attr("datetime"); exists {
+								dateStr = datetime
+								foundDate = true
+							}
+						})
+					}
+
+					// Extract content from article body
+					contentSelectors := []string{
+						".field--name-body",
+						".content",
+						"article .body",
+						"main article",
+						".page-content",
+					}
+					for _, sel := range contentSelectors {
+						contentElem := articleDoc.Find(sel)
+						if contentElem.Length() > 0 {
+							var paragraphs []string
+							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+								text := strings.TrimSpace(p.Text())
+								if len(text) > 30 {
+									paragraphs = append(paragraphs, text)
+								}
+							})
+							if len(paragraphs) > 0 {
+								excerpt = strings.Join(paragraphs, "\n\n")
+								break
+							}
+						}
+					}
+
+					// Fallback: try all paragraphs from main
+					if excerpt == "" {
+						var paragraphs []string
+						articleDoc.Find("main p, article p").Each(func(_ int, p *goquery.Selection) {
+							text := strings.TrimSpace(p.Text())
+							if len(text) > 40 {
+								paragraphs = append(paragraphs, text)
+							}
+						})
+						if len(paragraphs) > 0 {
+							excerpt = strings.Join(paragraphs, "\n\n")
+						}
+					}
+				}
+			}
 		}
 
-		// Extract tags
-		tagsElem := article.Find(".cer-card__tags")
-		if tagsElem.Length() > 0 {
-			tags := strings.TrimSpace(tagsElem.Text())
-			if tags != "" && excerpt == "" {
-				excerpt = "Tags: " + tags
+		// Fallback to listing page excerpt if no content found
+		if excerpt == "" {
+			bodyElem := article.Find(".cer-card__body, p, .summary")
+			if bodyElem.Length() > 0 {
+				excerpt = strings.TrimSpace(bodyElem.First().Text())
 			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{

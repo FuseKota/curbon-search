@@ -642,7 +642,8 @@ func collectHeadlinesUKETSHTML(limit int, cfg headlineSourceConfig) ([]Headline,
 		seen[articleURL] = true
 
 		// Extract date from metadata
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
+		foundDate := false
 		metaElem := item.Find(".gem-c-document-list__attribute, .document-list-item-metadata")
 		if metaElem.Length() > 0 {
 			metaText := strings.TrimSpace(metaElem.Text())
@@ -658,17 +659,100 @@ func collectHeadlinesUKETSHTML(limit int, cfg headlineSourceConfig) ([]Headline,
 				} {
 					if t, err := time.Parse(format, dateText); err == nil {
 						dateStr = t.Format(time.RFC3339)
+						foundDate = true
 						break
 					}
 				}
 			}
 		}
 
-		// Extract description
+		// Fetch full article content from individual page
 		excerpt := ""
-		descElem := item.Find(".gem-c-document-list__item-description, p")
-		if descElem.Length() > 0 {
-			excerpt = strings.TrimSpace(descElem.First().Text())
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Remove unwanted elements
+					articleDoc.Find("header, footer, nav, script, style, noscript, .gem-c-contextual-sidebar").Remove()
+
+					// Try to extract date from article page if not found
+					if !foundDate {
+						articleDoc.Find("time, .gem-c-metadata__definition").Each(func(_ int, elem *goquery.Selection) {
+							if foundDate {
+								return
+							}
+							if datetime, exists := elem.Attr("datetime"); exists {
+								dateStr = datetime
+								foundDate = true
+							} else {
+								text := strings.TrimSpace(elem.Text())
+								for _, format := range []string{
+									"2 January 2006",
+									"02 January 2006",
+									"2006-01-02",
+								} {
+									if t, err := time.Parse(format, text); err == nil {
+										dateStr = t.Format(time.RFC3339)
+										foundDate = true
+										break
+									}
+								}
+							}
+						})
+					}
+
+					// Extract content from gov.uk page structure
+					contentSelectors := []string{
+						".gem-c-govspeak",
+						".govuk-govspeak",
+						".publication-content",
+						"main .content",
+						"article",
+					}
+					for _, sel := range contentSelectors {
+						contentElem := articleDoc.Find(sel)
+						if contentElem.Length() > 0 {
+							var paragraphs []string
+							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+								text := strings.TrimSpace(p.Text())
+								if len(text) > 30 {
+									paragraphs = append(paragraphs, text)
+								}
+							})
+							if len(paragraphs) > 0 {
+								excerpt = strings.Join(paragraphs, "\n\n")
+								break
+							}
+						}
+					}
+
+					// Fallback: try meta description
+					if excerpt == "" {
+						metaDesc := articleDoc.Find("meta[name='description']")
+						if metaDesc.Length() > 0 {
+							excerpt, _ = metaDesc.Attr("content")
+							excerpt = strings.TrimSpace(excerpt)
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback to listing page description if no content found
+		if excerpt == "" {
+			descElem := item.Find(".gem-c-document-list__item-description, p")
+			if descElem.Length() > 0 {
+				excerpt = strings.TrimSpace(descElem.First().Text())
+			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{

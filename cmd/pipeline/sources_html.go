@@ -1964,6 +1964,11 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 //
 // Isometric is a science-based carbon removal verification company
 // that publishes research and resources on carbon removal.
+//
+// HTML structure:
+// - Title: p.writing-card-title
+// - Date: div.label-small.cc-date (format: "Oct 20, 2025")
+// - Subtitle: div.u-text-grey80.u-hide
 func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	resourcesURL := "https://isometric.com/writing"
 
@@ -1992,8 +1997,6 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Isometric structure: <a href="/writing-articles/..."><div class="card-wrapper">...
-	// Inside: <div class="label">Category</div>, <p>Title</p>, <p class="u-text-grey80">Date</p>
 	doc.Find("a[href*='/writing-articles/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -2010,35 +2013,16 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 		}
 		seen[articleURL] = true
 
-		// Find title: first <p> without u-text-grey80 class that's not inside author section
-		var title string
-		link.Find("p").Each(func(i int, p *goquery.Selection) {
-			if title != "" {
-				return // Already found
-			}
-			// Skip if has grey class (date) or is inside author div (has img sibling)
-			class, _ := p.Attr("class")
-			if strings.Contains(class, "grey") {
-				return
-			}
-			// Check if parent has an img (author section)
-			parent := p.Parent()
-			if parent.Find("img").Length() > 0 && parent.Children().First().Is("img") {
-				return
-			}
-			text := strings.TrimSpace(p.Text())
-			if len(text) > 15 && len(text) < 200 {
-				title = text
-			}
-		})
-
+		// Find title from p.writing-card-title
+		title := strings.TrimSpace(link.Find("p.writing-card-title").Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Find date from p.u-text-grey80
+		// Find date from div.cc-date
 		dateStr := time.Now().Format(time.RFC3339)
-		dateElem := link.Find("p.u-text-grey80, p[class*='grey']")
+		foundDate := false
+		dateElem := link.Find("div.cc-date, .label-small.cc-date")
 		if dateElem.Length() > 0 {
 			dateText := strings.TrimSpace(dateElem.First().Text())
 			// Format: "Oct 20, 2025" or "Jan 21, 2026"
@@ -2046,14 +2030,83 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 				"Jan 2, 2006",
 				"Jan 02, 2006",
 				"January 2, 2006",
-				"2 January 2006",
-				"2006-01-02",
 			} {
 				if t, err := time.Parse(format, dateText); err == nil {
 					dateStr = t.Format(time.RFC3339)
+					foundDate = true
 					break
 				}
 			}
+		}
+
+		// Get subtitle from listing page as initial excerpt
+		subtitle := strings.TrimSpace(link.Find("div.u-text-grey80").Text())
+
+		// Fetch article page to get full content
+		excerpt := ""
+		articleReq, err := http.NewRequest("GET", articleURL, nil)
+		if err == nil {
+			articleReq.Header.Set("User-Agent", cfg.UserAgent)
+			articleResp, err := client.Do(articleReq)
+			if err == nil && articleResp.StatusCode == http.StatusOK {
+				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+				articleResp.Body.Close()
+				if err == nil {
+					// Try to get date from article page if not found on listing
+					if !foundDate {
+						articleDoc.Find("div.cc-date, .label-small.cc-date, time").Each(func(_ int, dateEl *goquery.Selection) {
+							if foundDate {
+								return
+							}
+							dateText := strings.TrimSpace(dateEl.Text())
+							for _, format := range []string{
+								"Jan 2, 2006",
+								"Jan 02, 2006",
+								"January 2, 2006",
+							} {
+								if t, err := time.Parse(format, dateText); err == nil {
+									dateStr = t.Format(time.RFC3339)
+									foundDate = true
+									break
+								}
+							}
+						})
+					}
+
+					// Extract content from article body
+					contentSelectors := []string{
+						".rich-text",
+						".w-richtext",
+						"article",
+						".article-content",
+						".content",
+					}
+
+					for _, sel := range contentSelectors {
+						contentElem := articleDoc.Find(sel)
+						if contentElem.Length() > 0 {
+							var contentParts []string
+							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+								text := strings.TrimSpace(p.Text())
+								if len(text) > 30 {
+									contentParts = append(contentParts, text)
+								}
+							})
+							if len(contentParts) > 0 {
+								excerpt = strings.Join(contentParts, "\n\n")
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback to subtitle if article fetch failed
+		if excerpt == "" && subtitle != "" {
+			excerpt = subtitle
+		} else if excerpt == "" {
+			excerpt = title
 		}
 
 		out = append(out, Headline{
@@ -2061,7 +2114,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     title, // Use title as excerpt since it's descriptive
+			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
 	})

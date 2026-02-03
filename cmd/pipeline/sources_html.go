@@ -1702,8 +1702,9 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			excerpt = "Category: " + strings.TrimSpace(categoryElem.Text())
 		}
 
-		// Fetch individual article page for date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Fetch individual article page for date and content
+		dateStr := ""
+		foundDate := false
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
 			articleReq.Header.Set("User-Agent", cfg.UserAgent)
@@ -1715,19 +1716,26 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 					// Look for date in various locations
 					// 1. Try JSON-LD schema (datePublished)
 					articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+						if foundDate {
+							return
+						}
 						text := script.Text()
 						// Look for datePublished pattern
 						if strings.Contains(text, "datePublished") {
 							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
 							if match := re.FindStringSubmatch(text); len(match) > 1 {
 								dateStr = match[1]
+								foundDate = true
 							}
 						}
 					})
 
 					// 2. Try visible date text "Jan 2026" format
-					if dateStr == time.Now().Format(time.RFC3339) {
+					if !foundDate {
 						articleDoc.Find(".date, time, span[class*='date']").Each(func(_ int, elem *goquery.Selection) {
+							if foundDate {
+								return
+							}
 							text := strings.TrimSpace(elem.Text())
 							// Try "Jan 2026" format (short month + year)
 							re := regexp.MustCompile(`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})`)
@@ -1736,12 +1744,45 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 								dateText := match[1] + " 1, " + match[2]
 								if t, err := time.Parse("Jan 2, 2006", dateText); err == nil {
 									dateStr = t.Format(time.RFC3339)
+									foundDate = true
 								}
 							}
 						})
 					}
 
-					// 3. Try to get excerpt from article page if not found
+					// 3. Extract full article content from the page
+					// Remove unwanted elements first
+					articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar, .related-posts").Remove()
+
+					// Try to find article content
+					contentSelectors := []string{
+						".entry-content",
+						".article-content",
+						".post-content",
+						".content-area",
+						"article .content",
+						"main article",
+						".elementor-widget-theme-post-content",
+					}
+					for _, sel := range contentSelectors {
+						contentElem := articleDoc.Find(sel)
+						if contentElem.Length() > 0 {
+							// Get text from paragraphs
+							var paragraphs []string
+							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+								text := strings.TrimSpace(p.Text())
+								if len(text) > 30 {
+									paragraphs = append(paragraphs, text)
+								}
+							})
+							if len(paragraphs) > 0 {
+								excerpt = strings.Join(paragraphs, "\n\n")
+								break
+							}
+						}
+					}
+
+					// Fallback to meta description if no content found
 					if excerpt == "" {
 						excerptElem := articleDoc.Find("meta[name='description'], meta[property='og:description']")
 						if excerptElem.Length() > 0 {
@@ -1751,6 +1792,11 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 					}
 				}
 			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{

@@ -722,7 +722,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headli
 						})
 					}
 
-					// Extract content from article body
+					// Extract content from article body (paragraphs and list items)
 					contentSelectors := []string{
 						".field--name-body",
 						".content",
@@ -733,31 +733,39 @@ func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headli
 					for _, sel := range contentSelectors {
 						contentElem := articleDoc.Find(sel)
 						if contentElem.Length() > 0 {
-							var paragraphs []string
-							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
-								text := strings.TrimSpace(p.Text())
-								if len(text) > 30 {
-									paragraphs = append(paragraphs, text)
+							var contentParts []string
+							// Extract paragraphs and list items
+							contentElem.Find("p, li").Each(func(_ int, elem *goquery.Selection) {
+								text := strings.TrimSpace(elem.Text())
+								if len(text) > 20 {
+									// Add bullet for list items
+									if goquery.NodeName(elem) == "li" {
+										text = "• " + text
+									}
+									contentParts = append(contentParts, text)
 								}
 							})
-							if len(paragraphs) > 0 {
-								excerpt = strings.Join(paragraphs, "\n\n")
+							if len(contentParts) > 0 {
+								excerpt = strings.Join(contentParts, "\n\n")
 								break
 							}
 						}
 					}
 
-					// Fallback: try all paragraphs from main
+					// Fallback: try all paragraphs and list items from main
 					if excerpt == "" {
-						var paragraphs []string
-						articleDoc.Find("main p, article p").Each(func(_ int, p *goquery.Selection) {
-							text := strings.TrimSpace(p.Text())
-							if len(text) > 40 {
-								paragraphs = append(paragraphs, text)
+						var contentParts []string
+						articleDoc.Find("main p, main li, article p, article li").Each(func(_ int, elem *goquery.Selection) {
+							text := strings.TrimSpace(elem.Text())
+							if len(text) > 30 {
+								if goquery.NodeName(elem) == "li" {
+									text = "• " + text
+								}
+								contentParts = append(contentParts, text)
 							}
 						})
-						if len(paragraphs) > 0 {
-							excerpt = strings.Join(paragraphs, "\n\n")
+						if len(contentParts) > 0 {
+							excerpt = strings.Join(contentParts, "\n\n")
 						}
 					}
 				}

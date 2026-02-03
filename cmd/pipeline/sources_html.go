@@ -1825,11 +1825,14 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 // Puro.earth is a carbon removal marketplace that provides certification
 // for carbon removal projects and credits. Their blog contains news,
 // methodology updates, and industry insights.
+//
+// 手法: Atom Feed (gofeed) + HTML scraping for full content
+// URL: https://puro.earth/blog/our-blogs-1/feed
 func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	blogURL := "https://puro.earth/our-blog/"
+	feedURL := "https://puro.earth/blog/our-blogs-1/feed"
 
 	client := &http.Client{Timeout: cfg.Timeout}
-	req, err := http.NewRequest("GET", blogURL, nil)
+	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
@@ -1845,72 +1848,39 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("parse HTML failed: %w", err)
+		return nil, fmt.Errorf("Atom parse failed: %w", err)
 	}
 
 	out := make([]Headline, 0, limit)
-	seen := make(map[string]bool)
 
-	// Puro.earth blog uses links with /our-blog/ pattern
-	doc.Find("a[href*='/our-blog/']").Each(func(_ int, link *goquery.Selection) {
+	for _, item := range feed.Items {
 		if len(out) >= limit {
-			return
+			break
 		}
 
-		href, exists := link.Attr("href")
-		if !exists || href == "" {
-			return
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
 		}
 
-		// Skip main blog page links
-		if href == "/our-blog/" || href == blogURL {
-			return
+		articleURL := item.Link
+		if articleURL == "" {
+			continue
 		}
 
-		articleURL := resolveURL(blogURL, href)
-		if articleURL == "" || seen[articleURL] {
-			return
-		}
-		seen[articleURL] = true
-
-		// Extract title from link text
-		title := strings.TrimSpace(link.Text())
-
-		// If title is empty, try to extract from URL slug
-		if title == "" || len(title) < 10 {
-			// URL pattern: /our-blog/123-article-title-slug
-			parts := strings.Split(href, "/")
-			for i := len(parts) - 1; i >= 0; i-- {
-				if parts[i] != "" && strings.Contains(parts[i], "-") {
-					// Remove the ID prefix (e.g., "353-")
-					slug := parts[i]
-					if idx := strings.Index(slug, "-"); idx > 0 && idx < 5 {
-						slug = slug[idx+1:]
-					}
-					title = strings.ReplaceAll(slug, "-", " ")
-					// Title case
-					words := strings.Fields(title)
-					for j, word := range words {
-						if len(word) > 0 {
-							words[j] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
-						}
-					}
-					title = strings.Join(words, " ")
-					break
-				}
-			}
-		}
-
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		// Fetch article page to get date and excerpt
+		// Parse date
 		dateStr := time.Now().Format(time.RFC3339)
-		excerpt := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
 
+		// Fetch article page to get full content
+		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
 			articleReq.Header.Set("User-Agent", cfg.UserAgent)
@@ -1919,40 +1889,58 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Look for date in DD/MM/YYYY format in page text
-					pageText := articleDoc.Text()
-					datePatterns := []struct {
-						regex  string
-						format string
-					}{
-						{`\d{2}/\d{2}/\d{4}`, "02/01/2006"},
-						{`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}`, "Jan 2, 2006"},
-						{`\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec),?\s+\d{4}`, "2 Jan, 2006"},
+					// Puro.earth uses Odoo CMS with specific class names
+					// Content may be in <p> tags or as direct text nodes between <br> tags
+					contentSelectors := []string{
+						".o_wblog_post_content_field",
+						".o_wblog_read_text",
 					}
-					for _, dp := range datePatterns {
-						re := regexp.MustCompile(dp.regex)
-						if match := re.FindString(pageText); match != "" {
-							// Normalize the match
-							match = strings.ReplaceAll(match, ",", "")
-							if t, err := time.Parse(dp.format, match); err == nil {
-								dateStr = t.Format(time.RFC3339)
+
+					for _, sel := range contentSelectors {
+						contentElem := articleDoc.Find(sel)
+						if contentElem.Length() > 0 {
+							// First try to get content from <p> tags
+							var contentParts []string
+							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+								text := strings.TrimSpace(p.Text())
+								if len(text) > 30 {
+									contentParts = append(contentParts, text)
+								}
+							})
+
+							// If <p> tags don't have enough content, get full text
+							// (Puro.earth sometimes uses direct text with <br> separators)
+							if len(strings.Join(contentParts, "")) < 200 {
+								fullText := strings.TrimSpace(contentElem.Text())
+								// Normalize whitespace (multiple spaces/newlines to single newline)
+								fullText = regexp.MustCompile(`[\s]+`).ReplaceAllString(fullText, " ")
+								// Split into paragraphs at logical breaks (sentences ending with period followed by capital)
+								fullText = regexp.MustCompile(`\. ([A-Z])`).ReplaceAllString(fullText, ".\n\n$1")
+								if len(fullText) > 100 {
+									excerpt = fullText
+									break
+								}
+							} else {
+								excerpt = strings.Join(contentParts, "\n\n")
 								break
 							}
 						}
 					}
-
-					// Get excerpt from article body
-					bodyElem := articleDoc.Find("article, .post-content, .entry-content, main p").First()
-					if bodyElem.Length() > 0 {
-						excerpt = strings.TrimSpace(bodyElem.Text())
-						excerpt = regexp.MustCompile(`\s+`).ReplaceAllString(excerpt, " ")
-						// Limit excerpt length
-						if len(excerpt) > 500 {
-							excerpt = excerpt[:500] + "..."
-						}
-					}
 				}
 			}
+		}
+
+		// Fallback to feed description if article fetch failed
+		if excerpt == "" {
+			if item.Description != "" {
+				excerpt = item.Description
+			} else if item.Content != "" {
+				excerpt = item.Content
+			}
+			// Clean up HTML tags
+			excerpt = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(excerpt, "")
+			excerpt = regexp.MustCompile(`\s+`).ReplaceAllString(excerpt, " ")
+			excerpt = strings.TrimSpace(excerpt)
 		}
 
 		out = append(out, Headline{
@@ -1963,7 +1951,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
-	})
+	}
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] Puro.earth: collected %d headlines\n", len(out))

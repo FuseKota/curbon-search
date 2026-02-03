@@ -344,33 +344,68 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 		return "", ""
 	}
 
-	// Try to get excerpt from meta description or og:description
-	if metaDesc, exists := doc.Find("meta[name='description']").Attr("content"); exists && metaDesc != "" {
-		excerpt = strings.TrimSpace(metaDesc)
-	}
-	if excerpt == "" {
-		if ogDesc, exists := doc.Find("meta[property='og:description']").Attr("content"); exists && ogDesc != "" {
-			excerpt = strings.TrimSpace(ogDesc)
+	// Remove noise elements before extracting content
+	doc.Find("nav, header, footer, aside, .sidebar, script, style, .menu, .navigation, form, .related, .related-products, .upsells, section.products").Remove()
+
+	// Collect substantial paragraphs from the page
+	var paragraphs []string
+	doc.Find("p").Each(func(_ int, p *goquery.Selection) {
+		text := strings.TrimSpace(p.Text())
+
+		// Skip short paragraphs
+		if len(text) < 50 {
+			return
+		}
+
+		// Skip paragraphs with noise patterns
+		if strings.Count(text, "\t") > 2 || strings.Count(text, "\n") > 3 {
+			return
+		}
+
+		// Skip truncated previews from related articles (end with […] or ...)
+		if strings.HasSuffix(text, "[…]") || strings.HasSuffix(text, "…]") {
+			return
+		}
+
+		// Skip navigation/boilerplate text
+		lowerText := strings.ToLower(text)
+		if strings.Contains(lowerText, "cookie") ||
+			strings.Contains(lowerText, "privacy policy") ||
+			strings.Contains(lowerText, "sign up") ||
+			strings.Contains(lowerText, "subscribe") ||
+			strings.Contains(lowerText, "register your email") ||
+			strings.Contains(lowerText, "notification of new") ||
+			strings.HasPrefix(text, "By:") {
+			return
+		}
+
+		paragraphs = append(paragraphs, text)
+	})
+
+	// Use paragraphs if found, otherwise fall back to meta description
+	if len(paragraphs) > 0 {
+		excerpt = strings.Join(paragraphs, "\n\n")
+	} else {
+		// Fallback to meta description
+		if metaDesc, exists := doc.Find("meta[name='description']").Attr("content"); exists && metaDesc != "" {
+			excerpt = strings.TrimSpace(metaDesc)
+		}
+		if excerpt == "" {
+			if ogDesc, exists := doc.Find("meta[property='og:description']").Attr("content"); exists && ogDesc != "" {
+				excerpt = strings.TrimSpace(ogDesc)
+			}
 		}
 	}
 
-	// Remove truncation markers like "[…]"
+	// Clean up truncation markers
 	excerpt = strings.TrimSuffix(excerpt, "[…]")
 	excerpt = strings.TrimSuffix(excerpt, "…")
 	excerpt = strings.TrimSuffix(excerpt, " [")
 	excerpt = strings.TrimSpace(excerpt)
 
-	// If excerpt ends mid-sentence, add "..."
-	if len(excerpt) > 0 {
-		lastChar := excerpt[len(excerpt)-1]
-		if lastChar != '.' && lastChar != '!' && lastChar != '?' && lastChar != '"' && lastChar != '\'' {
-			excerpt = excerpt + "..."
-		}
-	}
-
-	// Truncate very long excerpts
-	if len(excerpt) > 500 {
-		excerpt = excerpt[:497] + "..."
+	// Truncate very long excerpts (2000 chars max)
+	if len(excerpt) > 2000 {
+		excerpt = excerpt[:1997] + "..."
 	}
 
 	// Try to get date from JSON-LD

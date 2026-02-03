@@ -1,6 +1,6 @@
 module carbon-relay
 
-go 1.23
+go 1.24.1
 
 require github.com/PuerkitoBio/goquery v1.10.2
 
@@ -10,6 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/jomei/notionapi v1.13.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/mmcdole/gofeed v1.3.0 // indirect
 	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

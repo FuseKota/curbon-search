@@ -16,14 +16,77 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/ledongthuc/pdf"
 )
+
+// =============================================================================
+// PDF Text Extraction Helper
+// =============================================================================
+
+// extractTextFromPDF downloads a PDF from the given URL and extracts its text content
+func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (string, error) {
+	req, err := http.NewRequest("GET", pdfURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download PDF: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	// Read PDF content into memory
+	pdfData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read PDF: %w", err)
+	}
+
+	// Create a reader from the PDF data
+	reader := bytes.NewReader(pdfData)
+	pdfReader, err := pdf.NewReader(reader, int64(len(pdfData)))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse PDF: %w", err)
+	}
+
+	// Extract text from all pages
+	var textBuilder strings.Builder
+	numPages := pdfReader.NumPage()
+	for i := 1; i <= numPages; i++ {
+		page := pdfReader.Page(i)
+		if page.V.IsNull() {
+			continue
+		}
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			continue
+		}
+		textBuilder.WriteString(text)
+		textBuilder.WriteString("\n")
+	}
+
+	// Clean up the extracted text
+	result := textBuilder.String()
+	result = strings.TrimSpace(result)
+	// Normalize whitespace
+	result = strings.Join(strings.Fields(result), " ")
+
+	return result, nil
+}
 
 // =============================================================================
 // EU ETS (European Commission) Source
@@ -413,12 +476,22 @@ func collectHeadlinesRGGI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
+		// Extract description from body cell (text after the link)
+		listingDescription := ""
+		bodyCellText := strings.TrimSpace(bodyCell.Text())
+		if bodyCellText != "" && bodyCellText != title {
+			// Remove the title from the body cell text to get the description
+			listingDescription = strings.TrimSpace(strings.TrimPrefix(bodyCellText, title))
+		}
+
 		// Extract date from time element
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
+		foundDate := false
 		timeElem := row.Find("time")
 		if timeElem.Length() > 0 {
 			if datetime, exists := timeElem.Attr("datetime"); exists {
 				dateStr = datetime
+				foundDate = true
 			}
 		}
 
@@ -426,12 +499,99 @@ func collectHeadlinesRGGI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		typeCell := row.Find("td.views-field-field-item-type")
 		itemType := strings.TrimSpace(typeCell.Text())
 
+		// Fetch content from article page or PDF
+		excerpt := ""
+		isPDF := strings.HasSuffix(strings.ToLower(articleURL), ".pdf")
+
+		if isPDF {
+			// Extract text from PDF
+			pdfText, err := extractTextFromPDF(articleURL, client, cfg.UserAgent)
+			if err == nil && len(pdfText) > 50 {
+				// Limit PDF text to reasonable length
+				if len(pdfText) > 3000 {
+					pdfText = pdfText[:3000] + "..."
+				}
+				excerpt = pdfText
+			}
+		} else {
+			articleReq, err := http.NewRequest("GET", articleURL, nil)
+			if err == nil {
+				articleReq.Header.Set("User-Agent", cfg.UserAgent)
+				articleResp, err := client.Do(articleReq)
+				if err == nil && articleResp.StatusCode == http.StatusOK {
+					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+					articleResp.Body.Close()
+					if err == nil {
+						// Remove unwanted elements
+						articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar").Remove()
+
+						// Try to extract date if not found
+						if !foundDate {
+							articleDoc.Find("time").Each(func(_ int, elem *goquery.Selection) {
+								if foundDate {
+									return
+								}
+								if datetime, exists := elem.Attr("datetime"); exists {
+									dateStr = datetime
+									foundDate = true
+								}
+							})
+						}
+
+						// Extract content from main content area
+						contentSelectors := []string{
+							".field--name-body",
+							".content",
+							"article",
+							"main",
+						}
+						for _, sel := range contentSelectors {
+							contentElem := articleDoc.Find(sel)
+							if contentElem.Length() > 0 {
+								var paragraphs []string
+								contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
+									text := strings.TrimSpace(p.Text())
+									if len(text) > 30 {
+										paragraphs = append(paragraphs, text)
+									}
+								})
+								if len(paragraphs) > 0 {
+									excerpt = strings.Join(paragraphs, "\n\n")
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback: use listing description or type as excerpt
+		if excerpt == "" {
+			if listingDescription != "" {
+				// Use description from listing page
+				excerpt = listingDescription
+				if strings.HasSuffix(strings.ToLower(articleURL), ".pdf") {
+					excerpt = "[PDF] " + excerpt
+				}
+			} else if strings.HasSuffix(strings.ToLower(articleURL), ".pdf") {
+				excerpt = "PDF Document - Type: " + itemType
+			} else {
+				excerpt = "Type: " + itemType
+			}
+		}
+
+		// Fallback to current time if no date found
+		if !foundDate {
+			dateStr = time.Now().Format(time.RFC3339)
+		}
+
 		out = append(out, Headline{
 			Source:      "RGGI",
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     "Type: " + itemType,
+			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
 	})

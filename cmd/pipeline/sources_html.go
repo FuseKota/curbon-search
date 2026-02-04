@@ -29,6 +29,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"regexp"
 	"strings"
@@ -1501,15 +1502,29 @@ func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, er
 //
 // IISD ENB provides reporting on international environmental negotiations,
 // including climate change conferences and carbon market discussions.
+// Note: IISD requires cookie-based session to access individual article pages.
 func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://enb.iisd.org/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	// Create a client with cookie jar to maintain session
+	// IISD blocks requests without proper session cookies
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cookie jar: %w", err)
+	}
+	client := &http.Client{
+		Timeout: cfg.Timeout,
+		Jar:     jar,
+	}
+
+	// First, visit the homepage to get session cookies
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
 	req.Header.Set("User-Agent", cfg.UserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1529,22 +1544,126 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	doc.Find("article, .news-item, .views-row, div[class*='card'], div[class*='article']").Each(func(_ int, article *goquery.Selection) {
+	// Helper function to extract date from text
+	extractDate := func(text string) string {
+		datePatterns := []struct {
+			regex  string
+			format string
+		}{
+			{`(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})`, "2 January 2006"},
+			{`((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})`, "January 2, 2006"},
+		}
+		for _, dp := range datePatterns {
+			re := regexp.MustCompile(dp.regex)
+			if match := re.FindStringSubmatch(text); len(match) > 1 {
+				dateText := strings.ReplaceAll(match[1], ",", "")
+				if t, err := time.Parse(dp.format, dateText); err == nil {
+					return t.Format(time.RFC3339)
+				}
+			}
+		}
+		return ""
+	}
+
+	// Helper function to fetch article page and extract full content
+	// Returns: About (og:description) + full body content
+	fetchArticleContent := func(articleURL string) string {
+		time.Sleep(200 * time.Millisecond) // Small delay between requests
+
+		req, err := http.NewRequest("GET", articleURL, nil)
+		if err != nil {
+			return ""
+		}
+		req.Header.Set("User-Agent", cfg.UserAgent)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		req.Header.Set("Referer", newsURL)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if os.Getenv("DEBUG_SCRAPING") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: failed to fetch %s: %v\n", articleURL, err)
+			}
+			return ""
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			if os.Getenv("DEBUG_SCRAPING") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: status %d for %s\n", resp.StatusCode, articleURL)
+			}
+			return ""
+		}
+
+		articleDoc, err := goquery.NewDocumentFromReader(resp.Body)
+		if err != nil {
+			return ""
+		}
+
+		var parts []string
+
+		// 1. Get About section from og:description
+		if about := articleDoc.Find("meta[property='og:description']").AttrOr("content", ""); about != "" {
+			parts = append(parts, "【About】\n"+strings.TrimSpace(about))
+		}
+
+		// 2. Get full body content from ALL .c-wysiwyg__content sections
+		// Articles may have multiple sections separated by images
+		var bodyParts []string
+		seen := make(map[string]bool) // Avoid duplicates
+
+		articleDoc.Find(".c-wysiwyg__content").Each(func(_ int, section *goquery.Selection) {
+			// Get paragraphs from this section
+			section.Find("p").Each(func(_ int, p *goquery.Selection) {
+				text := strings.TrimSpace(p.Text())
+				// Skip short texts, metadata, and newsletter subscription text
+				if len(text) > 50 && !strings.Contains(text, "subscribe to the ENB") &&
+					!strings.Contains(text, "Earth Negotiations Bulletin writers") &&
+					!seen[text] {
+					seen[text] = true
+					bodyParts = append(bodyParts, text)
+				}
+			})
+
+			// Also get list items (highlights, agenda items, etc.)
+			section.Find("li").Each(func(_ int, li *goquery.Selection) {
+				text := strings.TrimSpace(li.Text())
+				if len(text) > 20 && !seen[text] {
+					seen[text] = true
+					bodyParts = append(bodyParts, "• "+text)
+				}
+			})
+		})
+
+		if len(bodyParts) > 0 {
+			parts = append(parts, "\n【Content】\n"+strings.Join(bodyParts, "\n\n"))
+		}
+
+		if len(parts) == 0 {
+			// Fallback to meta description if nothing found
+			if desc := articleDoc.Find("meta[name='description']").AttrOr("content", ""); desc != "" {
+				return strings.TrimSpace(desc)
+			}
+			return ""
+		}
+
+		return strings.Join(parts, "\n")
+	}
+
+	// First, collect from featured boxes (these have summaries on list page)
+	doc.Find("a.c-featured-box, .c-featured-box").Each(func(_ int, box *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		titleLink := article.Find("h2 a, h3 a, .title a, a[href*='/vol/']").First()
-		title := strings.TrimSpace(titleLink.Text())
-		if title == "" {
-			title = strings.TrimSpace(article.Find("h2, h3, .title").First().Text())
+		// Get link - either from the element itself or from child
+		var href string
+		if h, exists := box.Attr("href"); exists {
+			href = h
+		} else {
+			href, _ = box.Find("a").First().Attr("href")
 		}
-		if title == "" || len(title) < 10 {
-			return
-		}
-
-		href, exists := titleLink.Attr("href")
-		if !exists || href == "" {
+		if href == "" {
 			return
 		}
 
@@ -1554,46 +1673,20 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
-
-		// IISD shows dates in article text like "Event 2 February 2026" or "2 February 2026"
-		// Try to extract date from the full article text
-		articleText := strings.TrimSpace(article.Text())
-
-		// Try various date patterns
-		datePatterns := []struct {
-			regex  string
-			format string
-		}{
-			{`(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})`, "2 January 2006"},
-			{`((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})`, "January 2, 2006"},
+		// Get title
+		title := strings.TrimSpace(box.Find(".c-featured-box__title, h3, h4").First().Text())
+		if title == "" || len(title) < 10 {
+			return
 		}
 
-		for _, dp := range datePatterns {
-			re := regexp.MustCompile(dp.regex)
-			if match := re.FindStringSubmatch(articleText); len(match) > 1 {
-				dateText := match[1]
-				// Remove comma if present
-				dateText = strings.ReplaceAll(dateText, ",", "")
-				if t, err := time.Parse(dp.format, dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-					break
-				}
-			}
-		}
+		// Always fetch full content from article page (About + Content)
+		excerpt := fetchArticleContent(articleURL)
 
-		// Also try standard date elements
-		dateElem := article.Find("time, .date, span[class*='date']")
-		if dateStr == time.Now().Format(time.RFC3339) && dateElem.Length() > 0 {
-			if datetime, exists := dateElem.Attr("datetime"); exists {
-				dateStr = datetime
-			}
-		}
-
-		excerpt := ""
-		excerptElem := article.Find("p, .summary, .description").First()
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.Text())
+		// Extract date from box text
+		boxText := box.Text()
+		dateStr := extractDate(boxText)
+		if dateStr == "" {
+			dateStr = time.Now().Format(time.RFC3339)
 		}
 
 		out = append(out, Headline{
@@ -1605,6 +1698,50 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			IsHeadline:  true,
 		})
 	})
+
+	// If we haven't reached limit, also collect from hero items (current events)
+	if len(out) < limit {
+		doc.Find(".c-hero-item").Each(func(_ int, hero *goquery.Selection) {
+			if len(out) >= limit {
+				return
+			}
+
+			link := hero.Find("a[href]").First()
+			href, exists := link.Attr("href")
+			if !exists || href == "" {
+				return
+			}
+
+			articleURL := resolveURL(newsURL, href)
+			if articleURL == "" || seen[articleURL] {
+				return
+			}
+			seen[articleURL] = true
+
+			title := strings.TrimSpace(hero.Find("h2, h3, .c-hero-item__title").First().Text())
+			if title == "" || len(title) < 10 {
+				return
+			}
+
+			// Hero items don't have descriptions on list page
+			// Fetch content from individual article page using session cookies
+			excerpt := fetchArticleContent(articleURL)
+
+			dateStr := extractDate(hero.Text())
+			if dateStr == "" {
+				dateStr = time.Now().Format(time.RFC3339)
+			}
+
+			out = append(out, Headline{
+				Source:      "IISD ENB",
+				Title:       title,
+				URL:         articleURL,
+				PublishedAt: dateStr,
+				Excerpt:     excerpt,
+				IsHeadline:  true,
+			})
+		})
+	}
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: collected %d headlines\n", len(out))

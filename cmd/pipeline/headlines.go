@@ -207,7 +207,7 @@ type headlineSourceConfig struct {
 
 // defaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func defaultHeadlineConfig() headlineSourceConfig {
-	timeout := 20 * time.Second
+	timeout := 30 * time.Second // 30秒タイムアウト（一部のサイトは遅い）
 	return headlineSourceConfig{
 		UserAgent: "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
 		Timeout:   timeout,

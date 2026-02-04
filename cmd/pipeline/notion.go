@@ -113,8 +113,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 				Type: notionapi.PropertyConfigTypeSelect,
 				Select: notionapi.Select{
 					Options: []notionapi.Option{
-						{Name: "Carbon Pulse", Color: notionapi.ColorBlue},
-						{Name: "QCI", Color: notionapi.ColorGreen},
 						{Name: "CarbonCredits.jp", Color: notionapi.ColorOrange},
 						{Name: "Carbon Herald", Color: notionapi.ColorPink},
 						{Name: "Climate Home News", Color: notionapi.ColorPurple},

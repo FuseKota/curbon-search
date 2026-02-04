@@ -8,7 +8,6 @@
 // 【ファイル構成】
 //   - headlines.go (このファイル)  - 共通ロジック
 //   - sources_wordpress.go        - WordPress REST APIソース
-//   - sources_paid.go             - 有料ソース（Carbon Pulse, QCI）
 //   - sources_html.go             - HTMLスクレイピングソース
 //   - sources_japan.go            - 日本語ソース
 //   - sources_rss.go              - RSSフィードソース
@@ -16,21 +15,17 @@
 //   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】（全36ソース、有効33ソース）
+// 【実装ソース一覧】（全34ソース、有効31ソース）
 // =============================================================================
 //
-// ▼ 有料ソース（見出しのみ取得）- sources_paid.go
-//  1. Carbon Pulse    - カーボン市場専門ニュース（業界最大手）
-//  2. QCI             - Quantum Commodity Intelligence
-//
 // ▼ 無料ソース - WordPress REST API（7ソース）- sources_wordpress.go
-//  3. CarbonCredits.jp    - 日本のカーボンクレジット情報
-//  4. Carbon Herald       - CDR技術ニュース
-//  5. Climate Home News   - 国際気候政策
-//  6. CarbonCredits.com   - 教育・啓発コンテンツ
-//  7. Sandbag             - EU ETSアナリスト
-//  8. Ecosystem Marketplace - 自然気候ソリューション
-//  9. Carbon Brief        - 気候科学・政策
+//  1. CarbonCredits.jp    - 日本のカーボンクレジット情報
+//  2. Carbon Herald       - CDR技術ニュース
+//  3. Climate Home News   - 国際気候政策
+//  4. CarbonCredits.com   - 教育・啓発コンテンツ
+//  5. Sandbag             - EU ETSアナリスト
+//  6. Ecosystem Marketplace - 自然気候ソリューション
+//  7. Carbon Brief        - 気候科学・政策
 //
 // ▼ 無料ソース - HTMLスクレイピング（12ソース）- sources_html.go
 //  10. ICAP               - 国際カーボンアクションパートナーシップ
@@ -88,7 +83,7 @@
 //
 // 使用例:
 //
-//	DEBUG_SCRAPING=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0
+//	DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1
 //
 // =============================================================================
 package main
@@ -115,7 +110,7 @@ import (
 //
 // 【使用方法】
 //
-//	collector, ok := sourceCollectors["carbonpulse"]
+//	collector, ok := sourceCollectors["carbonherald"]
 //	if ok {
 //	    headlines, err := collector(10, cfg)
 //	}
@@ -135,10 +130,6 @@ type HeadlineCollector func(limit int, cfg headlineSourceConfig) ([]Headline, er
 // キー: ソース識別子（CLIの-sourcesで指定する文字列）
 // 値:  対応する収集関数
 var sourceCollectors = map[string]HeadlineCollector{
-	// 有料ソース（見出しのみ）- sources_paid.go
-	"carbonpulse": collectHeadlinesCarbonPulse,
-	"qci":         collectHeadlinesQCI,
-
 	// WordPress REST APIソース - sources_wordpress.go
 	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
 	"carbonherald":          collectHeadlinesCarbonHerald,
@@ -206,21 +197,15 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 // headlineSourceConfig は見出し収集時の設定を保持
 type headlineSourceConfig struct {
-	CarbonPulseTimelineURL string        // Carbon Pulse タイムラインページURL
-	CarbonPulseNewsletters string        // Carbon Pulse ニュースレターカテゴリURL
-	QCIHomeURL             string        // QCI ホームページURL
-	UserAgent              string        // HTTPリクエスト時のUser-Agentヘッダー
-	Timeout                time.Duration // HTTPリクエストのタイムアウト時間
+	UserAgent string        // HTTPリクエスト時のUser-Agentヘッダー
+	Timeout   time.Duration // HTTPリクエストのタイムアウト時間
 }
 
 // defaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func defaultHeadlineConfig() headlineSourceConfig {
 	return headlineSourceConfig{
-		CarbonPulseTimelineURL: "https://carbon-pulse.com/daily-timeline/",
-		CarbonPulseNewsletters: "https://carbon-pulse.com/category/newsletters/",
-		QCIHomeURL:             "https://www.qcintel.com/carbon/",
-		UserAgent:              "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
-		Timeout:                20 * time.Second, // デフォルト20秒タイムアウト
+		UserAgent: "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
+		Timeout:   20 * time.Second, // デフォルト20秒タイムアウト
 	}
 }
 
@@ -231,7 +216,7 @@ func defaultHeadlineConfig() headlineSourceConfig {
 // CollectFromSources は指定されたソースから見出しを収集する
 //
 // 【引数】
-//   - sources:   収集するソースのリスト（例: ["carbonpulse", "qci"]）
+//   - sources:   収集するソースのリスト（例: ["carbonherald", "carbon-brief"]）
 //   - perSource: ソースあたりの最大記事数
 //   - cfg:       HTTP設定
 //

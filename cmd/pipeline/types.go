@@ -24,7 +24,7 @@ package main
 // ニュースソースから取得した記事の見出しを表します。
 //
 // 【フィールドの説明】
-//   Source:        記事のソース名（例: "carbonpulse", "qci"）
+//   Source:        記事のソース名（例: "Carbon Herald", "Carbon Brief"）
 //   Title:         記事のタイトル
 //   URL:           記事のURL
 //   PublishedAt:   公開日時（RFC3339形式、例: "2026-01-05T12:00:00Z"）

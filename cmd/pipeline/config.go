@@ -93,7 +93,7 @@ type EmailModeConfig struct {
 // =============================================================================
 
 // デフォルトソースリスト
-const defaultSources = "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor,jri,env-ministry,pwc-japan,mizuho-rt"
+const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor,jri,env-ministry,meti,pwc-japan,mizuho-rt"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {

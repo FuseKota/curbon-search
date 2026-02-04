@@ -338,7 +338,7 @@ func collectHeadlinesCARB(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		seen[articleURL] = true
 
 		// Extract date
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
 		dateElem := article.Find("time, .date, .field--name-created, span[class*='date']")
 		if dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {

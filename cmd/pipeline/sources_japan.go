@@ -336,8 +336,8 @@ func collectHeadlinesJPX(limit int, cfg headlineSourceConfig) ([]Headline, error
 			continue
 		}
 
-		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Parse date (empty string if not available)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
@@ -753,8 +753,8 @@ func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, 
 				continue
 			}
 
-			// Parse date (format: "YYYY-MM-DD")
-			publishedAt := time.Now().Format(time.RFC3339)
+			// Parse date (format: "YYYY-MM-DD", empty string if not available)
+			publishedAt := ""
 			if dateStr != "" {
 				if t, err := time.Parse("2006-01-02", dateStr); err == nil {
 					publishedAt = t.Format(time.RFC3339)
@@ -851,8 +851,8 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 			articleURL = "https://www.mizuho-rt.co.jp" + href
 		}
 
-		// Extract date from surrounding text
-		dateStr := time.Now().Format(time.RFC3339)
+		// Extract date from surrounding text (empty string if not found)
+		dateStr := ""
 		parent := s.Parent()
 		if parent != nil {
 			parentText := parent.Text()

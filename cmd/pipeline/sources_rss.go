@@ -89,8 +89,8 @@ func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline
 			articleURL = articleURL[:idx]
 		}
 
-		// 日付のパース
-		dateStr := time.Now().Format(time.RFC3339)
+		// 日付のパース（取得できない場合は空文字列）
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
@@ -214,7 +214,7 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 		}
 
 		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
@@ -279,7 +279,7 @@ func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, err
 		articleURL := item.Link
 
 		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		} else if item.UpdatedParsed != nil {
@@ -358,7 +358,7 @@ func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, er
 		articleURL := item.Link
 
 		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		} else if item.UpdatedParsed != nil {

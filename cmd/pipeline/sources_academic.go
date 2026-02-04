@@ -482,7 +482,7 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 
 		// Look for date near the link
 		// OIES uses format like "22.01.26" (DD.MM.YY)
-		dateStr := time.Now().Format(time.RFC3339)
+		dateStr := ""
 
 		// Check parent elements for date
 		parent := link.Parent()
@@ -495,10 +495,12 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 			parent = parent.Parent()
 		}
 
-		// Filter out entries older than 2 years
-		if t, err := time.Parse(time.RFC3339, dateStr); err == nil {
-			if time.Since(t) > 2*365*24*time.Hour {
-				return
+		// Filter out entries older than 2 years (only if date was found)
+		if dateStr != "" {
+			if t, err := time.Parse(time.RFC3339, dateStr); err == nil {
+				if time.Since(t) > 2*365*24*time.Hour {
+					return
+				}
 			}
 		}
 

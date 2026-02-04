@@ -257,7 +257,8 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 //   - 指定時間以内に公開された記事のリスト
 //
 // 【注意】
-//   - PublishedAtが空または解析できない記事は除外される
+//   - PublishedAtが空の記事はフィルタをスキップして保持される（日付不明のため除外しない）
+//   - PublishedAtが解析できない記事は除外される
 //   - PublishedAtはRFC3339形式を想定（例: "2026-01-05T12:00:00Z"）
 //
 // 【使用例】
@@ -274,7 +275,10 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 
 	for _, h := range headlines {
 		if h.PublishedAt == "" {
-			continue // 日付がない記事は除外
+			// 日付が不明な記事はフィルタをスキップして保持
+			// （time.Now()フォールバックを廃止したため、古い記事が誤って含まれることはない）
+			filtered = append(filtered, h)
+			continue
 		}
 
 		// RFC3339形式でパース試行
@@ -479,81 +483,22 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 		fmt.Fprintf(os.Stderr, "[DEBUG] =====================================\n\n")
 	}
 
-	// Strategy 1: Carbon Pulse top page article structure
-	// The excerpt is a text node between <a class="thumbLink"> and <a class="readMore">
-	articleContainer := linkSel.Parent().Parent().Parent()
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		classes, _ := articleContainer.Attr("class")
-		fmt.Fprintf(os.Stderr, "[DEBUG] Article container classes: %s\n", classes)
-		fmt.Fprintf(os.Stderr, "[DEBUG] Has 'post' class: %v\n", articleContainer.HasClass("post"))
-	}
-
-	// Check if this is a Carbon Pulse article container (has class "post")
-	if articleContainer.HasClass("post") {
-		// Get all text from the container
-		fullText := articleContainer.Text()
-
-		// Remove metadata section (Published ... / Last updated ... / Author ... / Categories ...)
-		// Find "Read More" and take text before it
-		readMoreIdx := strings.Index(fullText, "Read More")
-		if readMoreIdx > 0 {
-			fullText = fullText[:readMoreIdx]
+	// Strategy 1: Check for <p> tags in parent elements
+	parent := linkSel.Parent()
+	parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
+		if excerpt.Len() >= maxChars {
+			return
 		}
-
-		// Split into lines and find the excerpt (typically after tags like "Carbon Pulse Premium")
-		lines := strings.Split(fullText, "\n")
-		for i, line := range lines {
-			line = strings.TrimSpace(line)
-
-			// Skip empty lines, metadata, tags, and navigation
-			if line == "" || len(line) < 30 {
-				continue
+		text := strings.TrimSpace(s.Text())
+		if text != "" && len(text) > 20 {
+			if excerpt.Len() > 0 {
+				excerpt.WriteString(" ")
 			}
-			if strings.Contains(line, "Published") ||
-				strings.Contains(line, "Last updated") ||
-				strings.Contains(line, "Carbon Pulse Premium") ||
-				strings.Contains(line, "Nature & Biodiversity") ||
-				strings.Contains(line, "Net Zero Pulse") ||
-				strings.HasPrefix(line, "Top") {
-				continue
-			}
-
-			// This should be the excerpt
-			if len(line) > 30 && !strings.HasPrefix(line, "http") {
-				excerpt.WriteString(line)
-
-				// Also check next line if it's a continuation
-				if i+1 < len(lines) {
-					nextLine := strings.TrimSpace(lines[i+1])
-					if len(nextLine) > 20 && !strings.Contains(nextLine, "Read More") {
-						excerpt.WriteString(" ")
-						excerpt.WriteString(nextLine)
-					}
-				}
-				break
-			}
+			excerpt.WriteString(text)
 		}
-	}
+	})
 
-	// Strategy 2: Fallback - Check for <p> tags (for other page structures)
-	if excerpt.Len() == 0 {
-		parent := linkSel.Parent()
-		parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
-			if excerpt.Len() >= maxChars {
-				return
-			}
-			text := strings.TrimSpace(s.Text())
-			if text != "" && len(text) > 20 {
-				if excerpt.Len() > 0 {
-					excerpt.WriteString(" ")
-				}
-				excerpt.WriteString(text)
-			}
-		})
-	}
-
-	// Strategy 3: Check for <div class="excerpt"> or similar
+	// Strategy 2: Check for <div class="excerpt"> or similar
 	if excerpt.Len() == 0 {
 		linkSel.Parent().Parent().Find(".excerpt, .summary, .description").Each(func(i int, s *goquery.Selection) {
 			if excerpt.Len() >= maxChars {

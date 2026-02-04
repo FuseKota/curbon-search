@@ -417,8 +417,8 @@ func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline,
 			articleURL = "https://www.worldbank.org" + href
 		}
 
-		// Extract date if available
-		dateStr := time.Now().Format(time.RFC3339)
+		// Extract date if available (empty string if not found)
+		dateStr := ""
 		// Try to find date in parent elements
 		parent := link.Parent().Parent()
 		dateElem := parent.Find("time, span.date, div.date")
@@ -514,8 +514,8 @@ func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]H
 			articleURL = "https://carbonmarketwatch.org" + href
 		}
 
-		// Extract date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Extract date (empty string if not found)
+		dateStr := ""
 		dateElem := s.Find("time, .date, .published")
 		if dateElem.Length() > 0 {
 			if dateAttr, exists := dateElem.Attr("datetime"); exists {
@@ -599,8 +599,8 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 		// Build absolute URL
 		articleURL := "https://newclimate.org" + href
 
-		// Try to extract date from parent or sibling elements
-		dateStr := time.Now().Format(time.RFC3339)
+		// Try to extract date from parent or sibling elements (empty string if not found)
+		dateStr := ""
 		parent := link.Parent().Parent()
 		dateElem := parent.Find("time, .date, span[class*='date']")
 		if dateElem.Length() > 0 {
@@ -722,8 +722,8 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 			return
 		}
 
-		// Extract date from parent container
-		dateStr := time.Now().Format(time.RFC3339)
+		// Extract date from parent container (empty string if not found)
+		dateStr := ""
 		container := link.ParentsFiltered("[class*='css-']").First()
 		if container.Length() > 0 {
 			// Look for date element with css-1fr5xea or similar classes
@@ -841,8 +841,8 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 
 		articleURL := item.Link
 
-		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Parse date (empty string if not available)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
@@ -968,8 +968,8 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 
 		seen[articleURL] = true
 
-		// Find date from nearby time element
-		dateStr := time.Now().Format(time.RFC3339)
+		// Find date from nearby time element (empty string if not found)
+		dateStr := ""
 		parent := link.Parent()
 		for i := 0; i < 5; i++ {
 			timeElem := parent.Find("time")
@@ -1454,7 +1454,8 @@ func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, er
 		}
 		seen[articleURL] = true
 
-		dateStr := time.Now().Format(time.RFC3339)
+		// Extract date (empty string if not found)
+		dateStr := ""
 		dateElem := article.Find("time, .date, .field--name-created, span[class*='date']")
 		if dateElem.Length() > 0 {
 			if datetime, exists := dateElem.Attr("datetime"); exists {
@@ -2008,8 +2009,8 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			continue
 		}
 
-		// Parse date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Parse date (empty string if not available)
+		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		} else if item.UpdatedParsed != nil {
@@ -2156,8 +2157,8 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			return
 		}
 
-		// Find date from div.cc-date
-		dateStr := time.Now().Format(time.RFC3339)
+		// Find date from div.cc-date (empty string if not found)
+		dateStr := ""
 		foundDate := false
 		dateElem := link.Find("div.cc-date, .label-small.cc-date")
 		if dateElem.Length() > 0 {

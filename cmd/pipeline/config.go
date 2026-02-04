@@ -39,6 +39,9 @@ type InputConfig struct {
 
 	// PerSource はソースあたりの最大記事数
 	PerSource int
+
+	// HoursBack は収集後に過去N時間以内の記事のみにフィルタ（0=フィルタなし）
+	HoursBack int
 }
 
 // Sources はSourcesRawをパースしてスライスで返す
@@ -100,6 +103,7 @@ func ParseFlags() *PipelineConfig {
 	flag.StringVar(&cfg.Input.HeadlinesFile, "headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 	flag.StringVar(&cfg.Input.SourcesRaw, "sources", defaultSources, "sources to scrape when --headlines is empty")
 	flag.IntVar(&cfg.Input.PerSource, "perSource", 30, "max headlines to collect per source")
+	flag.IntVar(&cfg.Input.HoursBack, "hoursBack", 0, "filter headlines to last N hours (0=no filter)")
 
 	// Output flags
 	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write output JSON to this path (default: stdout)")

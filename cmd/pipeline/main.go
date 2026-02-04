@@ -113,6 +113,14 @@ func main() {
 		fatalf("no headlines collected")
 	}
 
+	// --- 1.5) Filter by hours if specified ---
+	if cfg.Input.HoursBack > 0 {
+		headlines = FilterHeadlinesByHours(headlines, cfg.Input.HoursBack)
+		if len(headlines) == 0 {
+			fatalf("no headlines after filtering by %d hours", cfg.Input.HoursBack)
+		}
+	}
+
 	// --- 2) Output results ---
 	handleJSONOutput(headlines, &cfg.Output)
 

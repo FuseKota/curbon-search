@@ -20,13 +20,12 @@ AWS Lambda用のデプロイパッケージをビルドします。
 ### 📰 ヘッドライン収集
 
 #### `collect_headlines_only.sh`
-有料記事と無料記事のヘッドラインのみを収集します（OpenAI不要）。
+無料記事のヘッドラインを収集します。
 
 ```bash
 ./scripts/collect_headlines_only.sh
 ```
 
-**モード**: 無料記事収集モード（モード1）
 **出力**: `headlines_YYYYMMDD_HHMMSS.json`
 
 #### `view_headlines.sh`
@@ -49,44 +48,13 @@ AWS Lambda用のデプロイパッケージをビルドします。
 
 ---
 
-### 🔍 関連記事検索・マッチング
-
-#### `check_related.sh`
-有料記事に対する関連無料記事を検索・スコアリングします（OpenAI使用）。
-
-```bash
-./scripts/check_related.sh
-```
-
-**モード**: 有料記事マッチングモード（モード2）
-**要件**: `OPENAI_API_KEY`必須
-**出力**: `related_articles_YYYYMMDD_HHMMSS.json`
-
-#### `full_pipeline.sh`
-フルパイプライン（ヘッドライン収集 + 関連記事検索 + メール送信）を実行します。
-
-```bash
-./scripts/full_pipeline.sh
-```
-
-**モード**: モード2（完全版）
-**要件**:
-- `OPENAI_API_KEY`
-- `EMAIL_FROM`, `EMAIL_PASSWORD`, `EMAIL_TO`（メール送信時）
-
-**出力**:
-- JSON結果ファイル
-- メール送信（設定されている場合）
-
----
-
 ### 📋 Notion統合
 
 #### `clip_to_notion.sh`
 指定したソースの記事をNotionデータベースにクリップします。
 
 ```bash
-./scripts/clip_to_notion.sh carbonpulse
+./scripts/clip_to_notion.sh carbonherald
 ```
 
 **要件**:
@@ -128,8 +96,7 @@ Carbon Relayの様々な使い方の実行例を表示します。
 ```
 
 **内容**:
-- モード1（ヘッドライン収集のみ）の例
-- モード2（関連記事検索）の例
+- ヘッドライン収集の例
 - Notion統合の例
 - メール送信の例
 
@@ -147,17 +114,7 @@ Carbon Relayの様々な使い方の実行例を表示します。
 ./scripts/view_headlines.sh headlines_*.json
 ```
 
-### シナリオ2: 関連記事を検索したい
-
-```bash
-# OpenAI APIキーが設定されていることを確認
-echo $OPENAI_API_KEY
-
-# 関連記事検索を実行
-./scripts/check_related.sh
-```
-
-### シナリオ3: Notionに記事をクリップしたい
+### シナリオ2: Notionに記事をクリップしたい
 
 ```bash
 # 1. 環境変数を設定（.envファイルに記載）
@@ -165,13 +122,13 @@ echo $OPENAI_API_KEY
 # NOTION_PAGE_ID=xxxxx-xxxxx-xxxxx
 
 # 2. 特定ソースをクリップ
-./scripts/clip_to_notion.sh carbonpulse
+./scripts/clip_to_notion.sh carbonherald
 
 # 3. 全ソースをクリップ（時間がかかります）
 ./scripts/clip_all_sources.sh
 ```
 
-### シナリオ4: AWS Lambdaにデプロイしたい
+### シナリオ3: AWS Lambdaにデプロイしたい
 
 ```bash
 # 1. Lambda用パッケージをビルド
@@ -181,7 +138,7 @@ echo $OPENAI_API_KEY
 # carbon-relay-lambda.zip を Lambda コンソールでアップロード
 ```
 
-### シナリオ5: フルパイプラインを定期実行したい
+### シナリオ4: 定期実行したい
 
 ```bash
 # cronで定期実行する例
@@ -203,16 +160,10 @@ echo $OPENAI_API_KEY
 ./pipeline -sources=all -perSource=5 -queriesPerHeadline=0
 ```
 
-**検索クエリ数**:
-```bash
-# 各見出しから3つの検索クエリを生成
-./pipeline -sources=carbonpulse -perSource=3 -queriesPerHeadline=3
-```
-
 **特定ソースのみ**:
 ```bash
-# Carbon PulseとQCIのみ
-./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3
+# 日本のソースのみ
+./pipeline -sources=jri,env-ministry,meti -perSource=5 -queriesPerHeadline=0
 ```
 
 ### 出力先の変更

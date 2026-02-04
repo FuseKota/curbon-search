@@ -8,69 +8,88 @@
 
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 
-## 🔑 2つの運用モード（重要）
+## 🔑 運用モード
 
-### 🟢 モード1: 無料記事収集モード
-- **目的**: Carbon関連の無料記事を幅広く収集してメール配信
+### 🟢 無料記事収集モード
+- **目的**: Carbon関連の無料記事を幅広く収集してメール配信/Notion統合
 - **コマンド**: `./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail`
-- **特徴**: OpenAI API不要、コスト効率が高い、高速（5-15秒）
-- **用途**: 日次の無料記事レビュー
-
-### 🔵 モード2: 有料記事マッチングモード
-- **目的**: 有料記事のヘッドラインから関連する無料記事を発見
-- **コマンド**: `./pipeline -sources=carbonpulse,qci -queriesPerHeadline=3 -notionClip`
-- **特徴**: OpenAI検索、IDFマッチング、Notion統合
-- **用途**: 有料記事の裏付け情報収集、Weekly整理
+- **特徴**: 高速実行（5-15秒）、コスト効率が高い
+- **用途**: 日次のカーボンニュースレビュー
 
 ## 📁 主要ファイル構成
 
 ```
 cmd/pipeline/
-├── main.go              (515行) - エントリーポイント、CLI制御
-├── headlines.go         (2,354行) - 18ソース実装
-├── matcher.go           (506行) - IDFスコアリング
-├── search_openai.go     (295行) - OpenAI検索統合
-├── search_queries.go    (232行) - クエリ生成
-├── notion.go            (554行) - Notion統合
-├── email.go             (175行) - メール送信
-├── types.go             (42行) - データ構造
-└── utils.go             (78行) - ユーティリティ
+├── main.go              - エントリーポイント、CLI制御
+internal/pipeline/
+├── headlines.go         - 共通ロジック
+├── sources_wordpress.go - WordPress REST APIソース
+├── sources_html.go      - HTMLスクレイピングソース
+├── sources_japan.go     - 日本語ソース
+├── sources_rss.go       - RSSフィードソース
+├── notion.go            - Notion統合
+├── email.go             - メール送信
+├── types.go             - データ構造
+└── utils.go             - ユーティリティ
 ```
 
-## 🗂️ データソース（18ソース）
+## 🗂️ データソース（36ソース）
 
-### 有料ソース（見出しのみ）
-1. Carbon Pulse
-2. QCI (Quantum Commodity Intelligence)
-
-### 無料ソース（全文取得）
+### 無料ソース
 
 **日本市場（7ソース）**:
-3. CarbonCredits.jp
-4. JRI (日本総研)
-5. Environment Ministry (環境省)
-6. JPX (日本取引所グループ)
-7. METI (経済産業省)
-8. Mizuho R&T (みずほリサーチ＆テクノロジーズ)
-9. PwC Japan
+1. CarbonCredits.jp
+2. JRI (日本総研)
+3. Environment Ministry (環境省)
+4. JPX (日本取引所グループ)
+5. METI (経済産業省)
+6. Mizuho R&T (みずほリサーチ＆テクノロジーズ)
+7. PwC Japan
 
-**欧州・国際（6ソース）**:
-10. Sandbag
-11. Carbon Brief
-12. Climate Home News
-13. ICAP
-14. IETA
-15. Carbon Market Watch
+**WordPress API（6ソース）**:
+8. Carbon Herald
+9. Climate Home News
+10. CarbonCredits.com
+11. Sandbag
+12. Ecosystem Marketplace
+13. Carbon Brief
 
-**グローバル（3ソース）**:
-16. Carbon Herald
-17. CarbonCredits.com
-18. Energy Monitor
-
-**その他（3ソース）**:
+**HTMLスクレイピング（6ソース）**:
+14. ICAP
+15. IETA
+16. Energy Monitor
+17. World Bank
+18. NewClimate Institute
 19. Carbon Knowledge Hub
-20. Ecosystem Marketplace
-21. New Climate Institute
+
+**VCM認証団体（4ソース）**:
+20. Verra
+21. Gold Standard
+22. ACR
+23. CAR
+
+**国際機関（2ソース）**:
+24. IISD ENB
+25. Climate Focus
+
+**地域ETS（5ソース）**:
+26. EU ETS
+27. UK ETS
+28. CARB
+29. RGGI
+30. Australia CER
+
+**RSSフィード（2ソース）**:
+31. Politico EU
+32. Euractiv
+
+**学術・研究（2ソース）**:
+33. arXiv
+34. OIES
+
+**CDR関連（2ソース）**:
+35. Puro.earth
+36. Isometric
 
 ## 🛠️ よく使うコマンド
 
@@ -89,15 +108,6 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail
 ```
 
-### モード2: 有料記事マッチング
-```bash
-# 基本的なマッチング
-./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3 -out=matched.json
-
-# Notionクリッピング（推奨）
-./pipeline -sources=carbonpulse,qci -perSource=10 -queriesPerHeadline=3 -notionClip
-```
-
 ### 特定ソースのテスト
 ```bash
 # 日本市場のみ
@@ -109,23 +119,17 @@ go build -o pipeline ./cmd/pipeline
 
 ### デバッグ
 ```bash
-# OpenAI検索のデバッグ
-DEBUG_OPENAI=1 ./pipeline -sources=carbonpulse -perSource=2 -queriesPerHeadline=1
-
 # スクレイピングのデバッグ
 DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=5 -queriesPerHeadline=0
 
-# 完全デバッグ
-DEBUG_OPENAI_FULL=1 DEBUG_SCRAPING=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=1
+# 詳細デバッグ
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
 ```
 
 ## 🔧 環境変数（.env）
 
 必須の環境変数:
 ```bash
-# OpenAI（モード2で必要）
-OPENAI_API_KEY=sk-...
-
 # Notion統合（Notionクリップ時に必要）
 NOTION_API_KEY=secret_...
 NOTION_PAGE_ID=...           # 初回のみ必要（自動保存される）
@@ -142,26 +146,19 @@ EMAIL_TO=recipient@example.com
 ```bash
 -sources              # ソース指定（CSV形式）
 -perSource            # ソースあたりの記事数（デフォルト: 30）
--queriesPerHeadline   # 記事あたりのクエリ数（0=検索なし、デフォルト: 3）
--topK                 # 上位K件のマッチング結果（デフォルト: 3）
--minScore             # 最小マッチングスコア（デフォルト: 0.32）
+-queriesPerHeadline   # 検索クエリ数（0=検索なし、デフォルト: 0）
+-hoursBack            # 指定時間以内の記事のみ（デフォルト: 0）
 -out                  # 出力ファイル（省略時はstdout）
 -notionClip           # Notionにクリップ
 -notionPageID         # Notion親ページID（初回のみ）
 -sendEmail            # メール送信
--emailDaysBack        # メール対象期間（日数、デフォルト: 1）
 ```
 
 ## 🐛 トラブルシューティング
 
-### PwC Japanのスクレイピングエラー
-- **原因**: 3重エスケープされたJSON解析の失敗
-- **確認**: `DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=1 -queriesPerHeadline=0`
-- **対処**: headlines.go の `collectHeadlinesPwCJapan()` の正規表現を確認
-
-### OpenAI検索で結果が取得できない
-- **原因**: `web_search_call.results` が空（仕様）
-- **対処**: 正規表現によるURL抽出を使用（実装済み）
+### スクレイピングエラー
+- **確認**: `DEBUG_SCRAPING=1 ./pipeline -sources=問題のソース -perSource=1 -queriesPerHeadline=0`
+- **対処**: sources_*.go の該当関数のセレクタを確認
 
 ### Notionクリップでエラー
 - **原因**: DATABASE_IDが保存されていない、または無効
@@ -185,11 +182,11 @@ EMAIL_TO=recipient@example.com
 - **ドキュメント目次**: `docs/README.md`
 - **スクリプト一覧**: `scripts/README.md`
 
-## 🔄 最近の重要な変更（2026年1月4日）
+## 🔄 最近の重要な変更（2026年2月4日）
 
-1. **2つの運用モードを明確化**
-   - モード1（無料記事収集）とモード2（有料記事マッチング）を区別
-   - ドキュメント全体を更新
+1. **有料ソース（Carbon Pulse, QCI）を削除**
+   - 無料ソースのみの運用に変更
+   - ドキュメント・コメントを更新
 
 2. **PwC Japan実装修正**
    - 3重エスケープJSON解析を改善
@@ -198,10 +195,6 @@ EMAIL_TO=recipient@example.com
 3. **Carbon Knowledge Hub改善**
    - URL重複排除機能追加
    - CSSセレクタ改善
-
-4. **統合テスト完了**
-   - 全18ソース動作確認
-   - 100%テスト合格（15/15）
 
 ## 💡 開発のヒント
 
@@ -213,10 +206,8 @@ EMAIL_TO=recipient@example.com
 
 ## ⚠️ 注意事項
 
-1. **有料記事の本文取得は実装しない** - ヘッドラインのみ使用
-2. **OpenAI APIコスト** - モード2では1見出し×3クエリ = 3回のAPI呼び出し
-3. **スクレイピングマナー** - 過度なリクエストを避ける
-4. **環境変数の保護** - `.env`は`.gitignore`に含まれている
+1. **スクレイピングマナー** - 過度なリクエストを避ける
+2. **環境変数の保護** - `.env`は`.gitignore`に含まれている
 
 ## 📞 参考情報
 

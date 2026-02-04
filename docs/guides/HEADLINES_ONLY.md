@@ -1,14 +1,13 @@
-# ヘッドライン＋記事要約の収集（OpenAI API不要）
+# ヘッドライン収集ガイド
 
 ## 🎯 概要
 
-このモードでは、**OpenAI APIを使わずに**Carbon Pulse / QCI からヘッドラインと記事要約（無料で見れる部分）を収集できます。
+このモードでは、**36の無料ソース**からカーボン関連ニュースのヘッドラインと記事要約を収集します。
 
 - ✅ OpenAI API不要（OPENAI_API_KEY不要）
-- ✅ スクレイピングのみ
-- ✅ 記事の要約も自動取得（Carbon Pulseトップページから）
-- ✅ 高速（検索なし）
-- ❌ relatedFree は付かない（検索しないため）
+- ✅ 各種スクレイピング方式（WordPress API、HTML、RSSフィード）
+- ✅ 記事の要約も自動取得
+- ✅ 高速（検索処理なし）
 
 ---
 
@@ -18,29 +17,27 @@
 
 ```bash
 # ビルド（初回のみ）
-go build -o carbon-relay ./cmd/pipeline
+go build -o pipeline ./cmd/pipeline
 
-# ヘッドライン収集（OpenAI API不要）
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=30 \
+# 全無料ソースからヘッドライン収集
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
   -queriesPerHeadline=0 \
   -out=headlines.json
 ```
 
-**重要：** `-queriesPerHeadline=0` を指定することで検索をスキップします。
+**重要：** `-queriesPerHeadline=0` を指定して検索をスキップします。
 
 ### 方法2: 専用スクリプト（推奨）
 
 ```bash
-# すべてのヘッドライン収集パターンを一度に実行
-./collect_headlines_only.sh
+# すべての無料ソースからヘッドライン収集
+./scripts/collect_headlines_only.sh
 ```
 
 実行後、`headlines_output/`に以下のファイルが生成されます：
-- `carbonpulse_headlines.json` - Carbon Pulseのみ
-- `qci_headlines.json` - QCIのみ
-- `all_headlines.json` - 両方
+- `all_headlines.json` - 全ソースのヘッドライン
 
 ---
 
@@ -49,24 +46,20 @@ go build -o carbon-relay ./cmd/pipeline
 ```json
 [
   {
-    "source": "Carbon Pulse",
-    "title": "Climate litigation marks 'turning point' in 2025 but expanded scope on horizon -report",
-    "url": "https://carbon-pulse.com/470719/",
-    "excerpt": "Global climate litigation grew and diversified in 2025, marking a turning point especially at the international court level, according to a year-end review by a New York-based legal center.",
+    "source": "Carbon Herald",
+    "title": "EU carbon price hits record high amid supply concerns",
+    "url": "https://carbonherald.com/article/...",
+    "excerpt": "EU carbon prices reached a new record...",
     "isHeadline": true
   },
   {
-    "source": "QCI",
-    "title": "EU carbon price hits record high amid supply concerns",
-    "url": "https://www.qcintel.com/carbon/article/...",
+    "source": "JRI",
+    "title": "カーボンニュートラル達成に向けた政策動向",
+    "url": "https://www.jri.co.jp/page.jsp?id=...",
     "isHeadline": true
   }
 ]
 ```
-
-**新機能：** Carbon Pulseのトップページからは記事の要約（無料で見れる部分）も自動的に取得されます。
-
-**注意：** このモードでは`relatedFree`フィールドは含まれません（空配列になります）。
 
 ---
 
@@ -74,94 +67,136 @@ go build -o carbon-relay ./cmd/pipeline
 
 | オプション | デフォルト | 説明 |
 |----------|----------|------|
-| `-sources` | `carbonpulse,qci` | 収集元（カンマ区切り） |
+| `-sources` | `all-free` | 収集元（カンマ区切りまたはall-free） |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
-| `-queriesPerHeadline` | `3` | **0に設定して検索をスキップ** |
+| `-queriesPerHeadline` | `0` | **0に設定して検索をスキップ** |
 | `-out` | - | 出力ファイルパス（未指定で標準出力） |
+| `-hoursBack` | `0` | 指定時間以内の記事のみ（0で制限なし） |
 
 ---
 
 ## 📊 実行例
 
-### Carbon Pulseから10件収集
+### 全無料ソースから収集
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
+./pipeline \
+  -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
-  -out=cp_headlines.json
-```
-
-### QCIから50件収集
-```bash
-./carbon-relay \
-  -sources=qci \
-  -perSource=50 \
-  -queriesPerHeadline=0 \
-  -out=qci_headlines.json
-```
-
-### 両ソースから各100件収集
-```bash
-./carbon-relay \
-  -sources=carbonpulse,qci \
-  -perSource=100 \
   -queriesPerHeadline=0 \
   -out=all_headlines.json
 ```
 
+### 日本ソースのみ
+```bash
+./pipeline \
+  -sources=jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,carboncredits.jp \
+  -perSource=20 \
+  -queriesPerHeadline=0 \
+  -out=japan_headlines.json
+```
+
+### 国際ソースのみ
+```bash
+./pipeline \
+  -sources=carbonherald,carbon-brief,sandbag,icap,ieta,politico-eu \
+  -perSource=20 \
+  -queriesPerHeadline=0 \
+  -out=international_headlines.json
+```
+
 ### 標準出力（パイプで利用）
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
+./pipeline \
+  -sources=carbonherald \
   -perSource=5 \
   -queriesPerHeadline=0 | jq -r '.[].title'
 ```
 
----
-
-## 💡 次のステップ：関連記事の取得
-
-ヘッドラインを収集した後、別途無料記事を集めてマッチングすることができます：
-
-### ステップ1: ヘッドライン収集（このモード）
+### 過去24時間の記事のみ
 ```bash
-./carbon-relay -sources=carbonpulse -perSource=30 -queriesPerHeadline=0 -out=headlines.json
-```
-
-### ステップ2: 無料記事を別途収集
-（RSSフィード、別のスクレイピング、またはOpenAI検索を使用）
-
-### ステップ3: マッチング
-ユーザーが提供した`match_headlines.go`を使用：
-```bash
-go run match_headlines.go \
-  --headlines headlines.json \
-  --free free.json \
-  --topK 3 \
-  --minScore 0.32 \
-  > matched.json
+./pipeline \
+  -sources=all-free \
+  -perSource=30 \
+  -queriesPerHeadline=0 \
+  -hoursBack=24 \
+  -out=recent_headlines.json
 ```
 
 ---
 
-## 🆚 モード比較
+## 📰 利用可能なソース（36ソース）
 
-| モード | OpenAI API | 速度 | relatedFree |
-|-------|-----------|------|------------|
-| **ヘッドラインのみ** | ❌ 不要 | 🚀 高速 | ❌ なし |
-| **標準モード** | ✅ 必要 | 🐢 遅い | ✅ あり |
+### 日本ソース（7ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `jri` | 日本総研 |
+| `env-ministry` | 環境省 |
+| `meti` | 経産省 審議会 |
+| `pwc-japan` | PwC Japan |
+| `mizuho-rt` | みずほリサーチ＆テクノロジーズ |
+| `jpx` | 日本取引所グループ |
+| `carboncredits.jp` | カーボンクレジット.jp |
 
----
+### WordPress REST APIソース（6ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `carbonherald` | Carbon Herald |
+| `climatehomenews` | Climate Home News |
+| `carboncredits.com` | CarbonCredits.com |
+| `sandbag` | Sandbag |
+| `ecosystem-marketplace` | Ecosystem Marketplace |
+| `carbon-brief` | Carbon Brief |
 
-## 🔍 収集されるサイト
+### HTMLスクレイピングソース（6ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `icap` | ICAP |
+| `ieta` | IETA |
+| `energy-monitor` | Energy Monitor |
+| `world-bank` | World Bank |
+| `newclimate` | NewClimate Institute |
+| `carbon-knowledge-hub` | Carbon Knowledge Hub |
 
-### Carbon Pulse
-- `https://carbon-pulse.com/daily-timeline/`
-- `https://carbon-pulse.com/category/newsletters/`
+### VCM認証団体（4ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `verra` | Verra |
+| `gold-standard` | Gold Standard |
+| `acr` | American Carbon Registry |
+| `car` | Climate Action Reserve |
 
-### QCI
-- `https://www.qcintel.com/carbon/`
+### 国際機関（2ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `iisd` | IISD ENB |
+| `climate-focus` | Climate Focus |
+
+### 地域ETS（5ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `eu-ets` | EU ETS |
+| `uk-ets` | UK ETS |
+| `carb` | カリフォルニア大気資源局 |
+| `rggi` | RGGI |
+| `australia-cer` | オーストラリアCER |
+
+### RSSフィード（2ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `politico-eu` | Politico EU |
+| `euractiv` | Euractiv |
+
+### 学術・研究機関（2ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `arxiv` | arXiv |
+| `oies` | オックスフォードエネルギー研究所 |
+
+### CDR関連（2ソース）
+| ソース名 | 説明 |
+|---------|------|
+| `puro-earth` | Puro.earth |
+| `isometric` | Isometric |
 
 ---
 
@@ -171,13 +206,12 @@ go run match_headlines.go \
    - サイトのレイアウト変更で動作しなくなる可能性があります
    - 過度なアクセスは避けてください
 
-2. **無意味なリンクは自動除外**
+2. **日本語ソースのキーワードフィルタ**
+   - JRI、環境省、METI、Mizuho R&Tはカーボン関連キーワードでフィルタリングされます
+
+3. **無意味なリンクは自動除外**
    - "Read more", "Click here"等は除外されます
    - 10文字未満のタイトルも除外されます
-
-3. **relatedFreeについて**
-   - このモードでは空配列になります
-   - 関連記事が必要な場合は標準モード（`run_examples.sh`）を使用してください
 
 ---
 
@@ -186,21 +220,20 @@ go run match_headlines.go \
 ### エラー: "no headlines collected"
 ```bash
 # サイトがブロックしている可能性
-# → User-Agentを確認（headlines.go:32）
+# → User-Agentを確認
 # → 手動でサイトにアクセスできるか確認
-```
-
-### エラー: "no Carbon Pulse headlines found"
-```bash
-# サイトレイアウトが変更された可能性
-# → headlines.go の正規表現を確認
-# → 対象ページを手動で確認
 ```
 
 ### ヘッドライン数が少ない
 ```bash
 # perSource を増やす
-./carbon-relay -perSource=100 -queriesPerHeadline=0
+./pipeline -sources=all-free -perSource=50 -queriesPerHeadline=0
+```
+
+### 特定ソースがエラーになる
+```bash
+# デバッグモードで確認
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
 ```
 
 ---
@@ -209,7 +242,7 @@ go run match_headlines.go \
 
 - **README.md** - プロジェクト全体の説明
 - **QUICKSTART.md** - 5分で始めるガイド
-- **DEVELOPMENT.md** - アーキテクチャ詳細
+- **VIEWING_GUIDE.md** - 収集結果の確認方法
 
 ---
 

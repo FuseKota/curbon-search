@@ -3,275 +3,186 @@
 ## アーキテクチャ概要
 
 ```
-[Carbon Pulse / QCI]
-       ↓ スクレイピング
+[36の無料ソース]
+       ↓ スクレイピング（WordPress API / HTML / RSS）
 [Headline Collection]
        ↓
-[Search Query Generation] ← 見出し + 戦略的キーワード
+[キーワードフィルタリング]（日本ソースのみ）
        ↓
-[OpenAI Web Search] ← OpenAI Responses API
-       ↓ URL抽出
-[URL → Title Generation] ← 疑似タイトル生成
-       ↓
-[Candidate Pool] ← すべての検索結果
-       ↓
-[IDF Construction] ← コーパス全体から逆文書頻度計算
-       ↓
-[Similarity Matching] ← TF-IDF + Signals + Quality
-       ↓
-[Top-K Selection] → relatedFree
+[JSON出力 / Notion / メール送信]
 ```
 
 ---
 
 ## 各モジュールの詳細
 
-### 1. headlines.go - ヘッドライン収集
+### 1. internal/pipeline/headlines.go - ヘッドライン収集
 
-#### Carbon Pulse スクレイピング
+#### ソースコレクター登録（36ソース）
 ```go
-// 対象ページ
-- https://carbon-pulse.com/daily-timeline/
-- https://carbon-pulse.com/category/newsletters/
+var sourceCollectors = map[string]HeadlineCollector{
+    // WordPress REST APIソース（7ソース）
+    "carboncredits.jp": collectHeadlinesCarbonCreditsJP,
+    "carbonherald":     collectHeadlinesCarbonHerald,
+    "climatehomenews":  collectHeadlinesClimateHomeNews,
+    "carboncredits.com": collectHeadlinesCarbonCreditscom,
+    "sandbag":          collectHeadlinesSandbag,
+    "ecosystem-marketplace": collectHeadlinesEcosystemMarketplace,
+    "carbon-brief":     collectHeadlinesCarbonBrief,
 
-// 収集ロジック
-1. すべての<a>タグを走査
-2. href="/数字/" パターンにマッチするもののみ採用（例：/470597/）
-3. リンクテキストが空 or "Read more" 等 → 除外
-4. 最小文字数チェック（len < 10 → 除外）
+    // HTMLスクレイピングソース（6ソース）
+    "icap":             collectHeadlinesICAP,
+    "ieta":             collectHeadlinesIETA,
+    "energy-monitor":   collectHeadlinesEnergyMonitor,
+    "world-bank":       collectHeadlinesWorldBank,
+    "newclimate":       collectHeadlinesNewClimate,
+    "carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
+
+    // 日本語ソース（6ソース）
+    "jri":          collectHeadlinesJRI,
+    "env-ministry": collectHeadlinesEnvMinistry,
+    "meti":         collectHeadlinesMETI,
+    "pwc-japan":    collectHeadlinesPwCJapan,
+    "mizuho-rt":    collectHeadlinesMizuhoRT,
+    "jpx":          collectHeadlinesJPX,
+
+    // RSSフィード（2ソース）
+    "politico-eu": collectHeadlinesPoliticoEU,
+    "euractiv":    collectHeadlinesEuractiv,
+
+    // 学術・研究機関（2ソース）
+    "arxiv": collectHeadlinesArXiv,
+    "oies":  collectHeadlinesOIES,
+
+    // VCM認証団体（4ソース）
+    "verra":         collectHeadlinesVerra,
+    "gold-standard": collectHeadlinesGoldStandard,
+    "acr":           collectHeadlinesACR,
+    "car":           collectHeadlinesCAR,
+
+    // 国際機関（2ソース）
+    "iisd":          collectHeadlinesIISD,
+    "climate-focus": collectHeadlinesClimateFocus,
+
+    // 地域ETS（5ソース）
+    "eu-ets":        collectHeadlinesEUETS,
+    "uk-ets":        collectHeadlinesUKETS,
+    "carb":          collectHeadlinesCARB,
+    "rggi":          collectHeadlinesRGGI,
+    "australia-cer": collectHeadlinesAustraliaCER,
+
+    // CDR関連（2ソース）
+    "puro-earth": collectHeadlinesPuroEarth,
+    "isometric":  collectHeadlinesIsometric,
+}
 ```
 
-**重要な発見（2025-12-29）：**
-- "Read more" のような無意味なリンクテキストが大量に取得されていた
-- → 除外フィルタを追加（headlines.go:64-68）
-
-#### QCI スクレイピング
+#### WordPress REST API パターン
 ```go
-// 対象ページ
-- https://www.qcintel.com/carbon/
+// Carbon Herald、Sandbag 等
+url := "https://carbonherald.com/wp-json/wp/v2/posts?per_page=100"
+resp, _ := client.Get(url)
+var posts []WordPressPost
+json.NewDecoder(resp.Body).Decode(&posts)
+```
 
-// 収集ロジック
-1. すべての<a>タグを走査
-2. href に "/carbon/article/" を含むもののみ採用
-3. Carbon Pulse と同じフィルタを適用
+#### HTML スクレイピングパターン
+```go
+// JRI、環境省、METI 等
+doc, _ := goquery.NewDocumentFromReader(resp.Body)
+doc.Find("article, .post, .news-item").Each(func(i int, s *goquery.Selection) {
+    title := s.Find("h2, h3, .title").Text()
+    link, _ := s.Find("a").Attr("href")
+    // ...
+})
+```
+
+#### RSS フィードパターン
+```go
+// Carbon Brief 等
+fp := gofeed.NewParser()
+feed, _ := fp.ParseURL(rssURL)
+for _, item := range feed.Items {
+    // item.Title, item.Link, item.Published
+}
 ```
 
 ---
 
-### 2. search_openai.go - OpenAI検索統合
+### 2. キーワードフィルタリング
 
-#### 🚨 重要：OpenAI Responses API の挙動
+日本語ソース（JRI、環境省、METI、Mizuho R&T）では、カーボン関連キーワードでフィルタリングを行います。
 
-**期待していた動作：**
-```json
-{
-  "output": [
-    {
-      "type": "web_search_call",
-      "results": [
-        {"title": "...", "url": "...", "snippet": "..."}
-      ]
-    }
-  ]
+```go
+var carbonKeywords = []string{
+    "カーボン", "炭素", "CO2", "排出", "脱炭素",
+    "グリーン", "温室効果", "GHG", "クレジット",
+    "ネットゼロ", "気候変動", "climate",
 }
-```
 
-**実際の動作：**
-```json
-{
-  "output": [
-    {
-      "type": "web_search_call",
-      "results": [],  // ← 常に空！
-      "action": {}    // sources も空
-    },
-    {
-      "type": "message",
-      "content": [
-        {
-          "text": "I searched and found: https://example.com ..."
+func matchesCarbonKeywords(title, excerpt string) bool {
+    combined := strings.ToLower(title + " " + excerpt)
+    for _, kw := range carbonKeywords {
+        if strings.Contains(combined, strings.ToLower(kw)) {
+            return true
         }
-      ]
     }
-  ]
+    return false
 }
 ```
-
-**結論：**
-- OpenAI Responses API は検索結果を構造化データとして返さない
-- message.content にテキスト形式で統合される
-- → **正規表現でURL抽出**するしかない
-
-#### URL抽出ロジック
-
-```go
-// search_openai.go:177-217
-reURL := regexp.MustCompile(`https?://[^\s\)]+`)
-
-for _, it := range r.Output {
-    if it.Type != "message" { continue }
-    for _, cp := range it.Content {
-        if cp.Text != "" {
-            urls := reURL.FindAllString(cp.Text, -1)
-            for _, u := range urls {
-                u = strings.TrimRight(u, ".,;:!?")  // 末尾の句読点除去
-                // ... URL追加
-            }
-        }
-    }
-}
-```
-
-#### 疑似タイトル生成（generateTitleFromURL）
-
-**問題：**
-- 抽出したURLにはタイトル情報がない
-- マッチングにはタイトルが必須
-- → URLから疑似タイトルを生成
-
-**アルゴリズム（search_openai.go:53-101）：**
-```go
-// 入力：https://www.lse.ac.uk/granthaminstitute/wp-content/uploads/2025/06/Global-Trends-in-Climate-Change-Litigation-2025-Snapshot.pdf
-// 出力：Lse Granthaminstitute Wp Content Uploads Global Trends In Climate Change Litigation 2025 Snapshot.pdf
-
-1. ドメイン抽出：lse.ac.uk → lse
-2. パス分解：/granthaminstitute/wp-content/uploads/2025/06/Global-Trends...
-3. 意味のある部分を抽出：
-   - 数字のみのパート（06等）→ 除外
-   - 短すぎるパート（wp等、len < 3）→ 除外
-   - 残り：granthaminstitute, content, uploads, Global-Trends-in-Climate...
-4. ハイフン・アンダースコアをスペースに変換
-5. 各単語を先頭大文字化
-```
-
-**制約：**
-- PDF名がランダム文字列の場合は意味がない
-- ドメイン名が略称の場合（例：lse）も情報が少ない
-- → **Brave Search API等で本物のタイトルを取得すべき**
 
 ---
 
-### 3. search_queries.go - 検索クエリ生成
+### 3. internal/pipeline/notion.go - Notion統合
 
-#### 戦略
-
+#### データベース自動作成
 ```go
-// 基本戦略
-queries := []string{
-    `"見出し完全一致"`,                          // ① 引用符で完全一致
-    "見出し + カーボン市場キーワード",            // ② VCM, ETS等
-    "見出し + 地域別site:演算子",                // ③ site:go.kr等
-    "見出し + filetype:pdf",                    // ④ PDF優先
-    "見出し + official announcement",          // ⑤ 公式発表
-    "見出し + site:unfccc.int OR ...",        // ⑥ NGO優先
-}
-```
-
-#### 地域別site:演算子マッピング
-
-| 検出キーワード | site:演算子 |
-|--------------|-----------|
-| "south korea", "korea" | `site:go.kr` |
-| "eu", "europe" | `site:europa.eu` |
-| "japan" | `site:go.jp` |
-| "uk", "united kingdom" | `site:gov.uk` |
-| "china" | `site:gov.cn` |
-| "australia" | `site:gov.au` |
-
-#### カーボン市場キーワード拡張
-
-| 略語 | 拡張 |
-|-----|------|
-| VCM | voluntary carbon market |
-| ETS | emissions trading system |
-| CORSIA | CORSIA ICAO |
-| CCER | CCER China |
-
----
-
-### 4. matcher.go - マッチングアルゴリズム
-
-#### シグナル抽出（extractSignals）
-
-```go
-type Signals struct {
-    Markets map[string]bool  // EUA, UKA, RGGI, CCA, ACCU, NZU, etc.
-    Topics  map[string]bool  // VCM, CDR, DAC, biochar, methane, etc.
-    Geos    map[string]bool  // united_states, eu, south_korea, etc.
-}
-```
-
-**Market シグナル例：**
-- "EU ETS" → `markets["eua"] = true`
-- "UK ETS" → `markets["uka"] = true`
-- "RGGI" → `markets["rggi"] = true`
-
-**Topic シグナル例：**
-- "voluntary carbon market" → `topics["vcm"] = true`
-- "biochar" → `topics["biochar"] = true`
-
-**Geo シグナル例：**
-- 正規表現：`\bUS\b` → `geos["united_states"] = true`
-- 文字列検出：`"south korea"` → `geos["south_korea"] = true`
-
-#### IDF（逆文書頻度）計算
-
-```go
-// すべての見出し + 候補のタイトルをコーパスとして使用
-docs := [][]string{
-    tokenize("Climate litigation marks turning point"),
-    tokenize("LSE Grantham Institute PDF"),
+func createNotionDatabase(client *notionapi.Client, pageID string) (string, error) {
+    db := &notionapi.DatabaseCreateRequest{
+        Parent: notionapi.Parent{PageID: pageID},
+        Title:  []notionapi.RichText{{Text: &notionapi.Text{Content: "Carbon News Clippings"}}},
+        Properties: map[string]notionapi.PropertyConfig{
+            "Title":   notionapi.TitlePropertyConfig{},
+            "URL":     notionapi.URLPropertyConfig{},
+            "Source":  notionapi.SelectPropertyConfig{},
+            "Excerpt": notionapi.RichTextPropertyConfig{},
+        },
+    }
     // ...
 }
-
-idf := buildIDF(docs)
-// idf["climate"] = log(1 + N / (1 + df["climate"]))
 ```
 
-#### スコアリング（scoreHeadlineCandidate）
-
+#### リッチテキスト分割（2000文字制限対応）
 ```go
-score = 0.56 * overlap       // IDF加重Recall
-      + 0.28 * titleSim      // IDF加重Jaccard
-      + 0.06 * marketMatch   // Market信号一致度
-      + 0.04 * topicMatch    // Topic信号一致度
-      + 0.02 * geoMatch      // Geo信号一致度
-      + 0.04 * recency       // 新しさ（exp(-age/14))
-      + qualityBoost         // ドメイン品質（最大0.18）
+func splitRichText(text string, limit int) []notionapi.RichText {
+    var result []notionapi.RichText
+    for len(text) > 0 {
+        chunk := text
+        if len(chunk) > limit {
+            chunk = text[:limit]
+        }
+        result = append(result, notionapi.RichText{
+            Text: &notionapi.Text{Content: chunk},
+        })
+        text = text[len(chunk):]
+    }
+    return result
+}
 ```
 
-**ドメイン品質スコア（sourceQualityBoost）：**
+---
 
-| ドメイン種別 | スコア |
-|------------|-------|
-| `.gov`, `.gov.uk`, `europa.eu` | +0.18 |
-| `.pdf` ファイル | +0.18 |
-| NGO（carbonmarketwatch.org等） | +0.12 |
-| IR（/investor/, /ir/） | +0.12 |
-| プレスリリース配信 | +0.08 |
+### 4. cmd/pipeline/main.go - メインエントリーポイント
 
-#### 除外ルール
-
+#### コマンドラインフラグ
 ```go
-// 1. Market厳格マッチング（strictMarket=true）
-if strictMarket && len(hs.Markets) > 0 && marketMatch == 0 {
-    return false  // 見出しにmarket信号があるのに候補にない → 除外
-}
-
-// 2. 特定地域マッチング
-if hasSpecificGeo(hs) && geoMatch == 0 {
-    return false  // 見出しに特定地域（韓国等）があるのに候補にない → 除外
-}
-
-// 3. 語彙的実質性
-if sharedTokens < 2 && titleSim < 0.90 {
-    return false  // 共有トークンが2未満 かつ 類似度が0.9未満 → 除外
-}
-
-// 4. 広すぎる地域のみのマッチ回避
-if marketMatch == 0 && topicMatch == 0 && geoMatch > 0 && overlap < 0.50 {
-    return false  // market/topic無し、geoのみ、overlapが低い → 除外
-}
+sources        = flag.String("sources", "all-free", "Source names, comma-separated or 'all-free'")
+perSource      = flag.Int("perSource", 30, "Max headlines per source")
+queriesPerHL   = flag.Int("queriesPerHeadline", 0, "Search queries per headline (0 to skip)")
+hoursBack      = flag.Int("hoursBack", 0, "Only include headlines from last N hours (0 = no limit)")
+outFile        = flag.String("out", "", "Output file path")
+notionClip     = flag.Bool("notionClip", false, "Enable Notion clipping")
+sendEmail      = flag.Bool("sendEmail", false, "Send email with results")
 ```
 
 ---
@@ -283,18 +194,8 @@ if marketMatch == 0 && topicMatch == 0 && geoMatch > 0 && overlap < 0.50 {
 reTok = regexp.MustCompile(`[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*`)
 // マッチ例：
 // - "carbon-pulse" → 1トークン
-// - "climate-change-litigation" → 1トークン
+// - "climate-change" → 1トークン
 // - "EUA" → 1トークン
-```
-
-### 正規化マッピング
-```go
-normToken = map[string]string{
-    "euas": "eua", "eua": "eua",
-    "credits": "credit", "credit": "credit",
-    "offsets": "offset", "offset": "offset",
-    // ...
-}
 ```
 
 ### ストップワード
@@ -307,243 +208,117 @@ stop = map[string]bool{
 }
 ```
 
-**注意：** ストップワードは最小限に留める（過度に除去するとマッチング精度が下がる）
-
----
-
-## パフォーマンス最適化
-
-### 現在の処理フロー
-
-```
-見出し収集：      ~5秒（perSource=10の場合）
-検索実行：        ~2秒/query（OpenAI API）
-                 → 見出し10件 × クエリ3件 = ~60秒
-IDF構築：         ~0.1秒
-マッチング：      ~0.5秒
-合計：           ~65秒（10見出しの場合）
-```
-
-### ボトルネック
-
-1. **OpenAI API レスポンスタイム**
-   - 平均2秒/query
-   - 並列化できない（API制限）
-
-2. **構造化データが取れない**
-   - message.contentのパースが必要
-   - タイトル生成のオーバーヘッド
-
-### 最適化案
-
-#### すぐできる改善
-```go
-// 1. クエリ数を動的調整
-if hasMarketSignal(headline) {
-    queries = queries[:2]  // market特化クエリのみ
-}
-
-// 2. 並列化（goroutine）
-for i, h := range headlines {
-    go func(idx int, headline Headline) {
-        // 検索実行
-    }(i, h)
-}
-```
-
-#### 長期的改善
-- **Brave Search API**: レスポンスタイム ~500ms、構造化データあり
-- **ローカルキャッシュ**: 同じクエリは再検索しない
-- **バッチ処理**: 複数見出しをまとめて処理
-
 ---
 
 ## テスト戦略
 
-### 単体テスト（現在未実装）
-
-```go
-// matcher_test.go
-func TestExtractSignals(t *testing.T) {
-    sig := extractSignals("EU ETS carbon price hits record high")
-    assert.True(t, sig.Markets["eua"])
-    assert.True(t, sig.Geos["eu"])
-}
-
-func TestGenerateTitleFromURL(t *testing.T) {
-    title := generateTitleFromURL("https://energy.gov/sites/default/files/clean-hydrogen.pdf")
-    assert.Contains(t, title, "Energy")
-    assert.Contains(t, title, "Clean Hydrogen")
-}
-```
-
-### 統合テスト
+### 単体テスト
 
 ```bash
-# 小規模テスト
-./carbon-relay -sources=carbonpulse -perSource=1 -queriesPerHeadline=1
+# 特定ソースのテスト
+./pipeline -sources=carbonherald -perSource=3 -queriesPerHeadline=0
 
-# 期待される動作：
-# - 1件のヘッドラインが収集される
-# - 1件の検索クエリが実行される
-# - relatedFree が0〜3件返される
+# 日本ソースのテスト
+./pipeline -sources=jri,env-ministry -perSource=3 -queriesPerHeadline=0
+
+# 全ソースのクイックテスト
+./pipeline -sources=all-free -perSource=1 -queriesPerHeadline=0
 ```
 
-### 品質チェック
+### デバッグモード
 
 ```bash
-# 候補プールを確認
-./carbon-relay -saveFree=candidates.json
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2
 
-# 確認ポイント：
-# 1. URLが正しく抽出されているか
-# 2. Titleが意味のあるものか（URLそのままでないか）
-# 3. Sourceが "OpenAI(text_extract)" になっているか
+# 出力例：
+[DEBUG] Fetching https://carbonherald.com/wp-json/wp/v2/posts
+[DEBUG] Found 10 posts
+[DEBUG] Processing: "EU carbon price hits record high"
 ```
 
 ---
 
 ## デバッグガイド
 
-### DEBUG_OPENAI=1
+### DEBUG_SCRAPING=1
 
 ```bash
-DEBUG_OPENAI=1 ./carbon-relay ...
+DEBUG_SCRAPING=1 ./pipeline -sources=jri -perSource=5
 
 # 出力例：
-[DEBUG] OpenAI response for query '"Climate litigation"':
-[DEBUG] Output items: 2
-[DEBUG]   [0] Type=web_search_call, Results=0
-[DEBUG]       Action.Sources=0
-[DEBUG]   [1] Type=message, Results=0
-[DEBUG] Processing Action.Sources: 0 items
-[DEBUG] Total candidates collected: 0
-[DEBUG] Attempting URL extraction from message.content.text
-[DEBUG] Found message item with 1 content parts
-[DEBUG] Content text: I searched and found https://example.com ...
-[DEBUG] Extracted 3 URLs from text
-[DEBUG]   -> Added URL: https://example.com/article1
-```
-
-### DEBUG_OPENAI_FULL=1
-
-```bash
-DEBUG_OPENAI_FULL=1 ./carbon-relay ...
-
-# OpenAI APIのレスポンス全体をJSON形式で出力
-# 用途：新しいフィールドの発見、エラー詳細の確認
+[DEBUG] Fetching JRI page: https://www.jri.co.jp/...
+[DEBUG] Found 20 articles
+[DEBUG] After keyword filter: 8 articles
+[DEBUG]   - カーボンニュートラル達成に向けた...
 ```
 
 ### よくあるデバッグシナリオ
 
-#### relatedFreeが常に空
+#### ヘッドラインが収集されない
 
 ```bash
-# 1. minScoreを下げる
-./carbon-relay -minScore=0.1
+# 1. デバッグ出力で状況確認
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1
 
-# 2. デバッグ出力で候補数を確認
-DEBUG_OPENAI=1 ./carbon-relay -saveFree=candidates.json
+# 2. サイトに直接アクセスできるか確認
+curl -I https://carbonherald.com/wp-json/wp/v2/posts
 
-# 3. candidates.jsonを確認
-# → 候補が0件なら検索の問題
-# → 候補はあるがマッチしないならスコアリングの問題
+# 3. HTMLパース結果を確認（HTMLスクレイピングの場合）
+# → internal/pipeline/headlines.go のセレクタを確認
 ```
 
-#### 無関係な結果ばかり
+#### 日本ソースの記事が少ない
 
 ```bash
-# strictMarketをfalseにしてみる
-./carbon-relay -strictMarket=false
-
-# 検索クエリを確認
-# → search_queries.go の buildSearchQueries をデバッグ出力
+# キーワードフィルタの影響を確認
+# → carbonKeywords に必要なキーワードがあるか確認
+# → matchesCarbonKeywords の判定ロジックを確認
 ```
 
 ---
 
 ## よくある質問（FAQ）
 
-### Q1: Brave Search APIに移行したい
+### Q1: 新しいソースを追加したい
 
 ```go
-// 新規ファイル：cmd/pipeline/search_brave.go
-package main
-
-import (
-    "encoding/json"
-    "net/http"
-)
-
-type braveSearchResult struct {
-    Web struct {
-        Results []struct {
-            Title       string `json:"title"`
-            URL         string `json:"url"`
-            Description string `json:"description"`
-        } `json:"results"`
-    } `json:"web"`
+// 1. internal/pipeline/headlines.go に収集関数を追加
+func collectHeadlinesNewSource(ctx context.Context, cfg *HeadlineSourceConfig) ([]Headline, error) {
+    // WordPress API / HTML / RSS のいずれかのパターンで実装
+    // 既存の関数を参考に
 }
 
-func braveWebSearch(query string, limit int) ([]FreeArticle, error) {
-    apiKey := os.Getenv("BRAVE_API_KEY")
-    url := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
-        url.QueryEscape(query), limit)
-
-    req, _ := http.NewRequest("GET", url, nil)
-    req.Header.Set("X-Subscription-Token", apiKey)
-
-    // ... レスポンス処理
-
-    for _, res := range result.Web.Results {
-        cands = append(cands, FreeArticle{
-            Source:  "Brave",
-            Title:   res.Title,      // ← 本物のタイトル！
-            URL:     res.URL,
-            Excerpt: res.Description,
-        })
-    }
-
-    return cands, nil
+// 2. sourceCollectors に登録
+var sourceCollectors = map[string]HeadlineCollector{
+    // ...
+    "new-source": collectHeadlinesNewSource,
 }
 ```
 
-### Q2: 新しいmarketシグナルを追加したい
+### Q2: キーワードフィルタを調整したい
 
 ```go
-// matcher.go の marketTerms に追加
-var marketTerms = []string{
-    "eua", "uka", "rggi", "cca", "accu", "nzu", "irec", "ccer", "corsia",
-    "jcm",  // ← 追加例：Japan Credit Mechanism
-}
-
-// normToken にも追加
-var normToken = map[string]string{
-    // ...
-    "jcm": "jcm",
-    "japan credit mechanism": "jcm",
+// internal/pipeline/headlines.go の carbonKeywords を編集
+var carbonKeywords = []string{
+    "カーボン", "炭素", "CO2", "排出", "脱炭素",
+    "グリーン", "温室効果", "GHG", "クレジット",
+    "ネットゼロ", "気候変動", "climate",
+    "新しいキーワード",  // ← 追加
 }
 ```
 
-### Q3: 特定ドメインを優先したい
+### Q3: 特定ドメインをNotionソースリストに追加したい
 
 ```go
-// matcher.go の sourceQualityBoost に追加
-func sourceQualityBoost(u string) float64 {
+// internal/pipeline/notion.go の sourceOptions を編集
+sourceOptions := []struct {
+    Name  string
+    Color notionapi.Color
+}{
+    {Name: "Carbon Herald", Color: notionapi.ColorBlue},
+    {Name: "JRI", Color: notionapi.ColorGreen},
+    {Name: "New Source", Color: notionapi.ColorPurple},  // ← 追加
     // ...
-
-    // 新規追加例
-    priorityDomains := []string{
-        "climate-action.info",
-        "carbon-neutral.org",
-    }
-    for _, d := range priorityDomains {
-        if strings.HasSuffix(host, d) {
-            return 0.15
-        }
-    }
-
-    return 0
 }
 ```
 
@@ -569,18 +344,22 @@ func sourceQualityBoost(u string) float64 {
 2. **コメント**
    ```go
    // ✅ Good：なぜそうするのかを説明
-   // OpenAI Responses APIはresultsを返さないため、textから抽出
-   reURL := regexp.MustCompile(`https?://[^\s\)]+`)
+   // 日本語ソースはカーボン関連キーワードでフィルタリング
+   if matchesCarbonKeywords(title, excerpt) {
+       // ...
+   }
 
    // ❌ Bad：コードを繰り返すだけ
-   // URLを抽出する
-   reURL := regexp.MustCompile(`https?://[^\s\)]+`)
+   // キーワードをチェック
+   if matchesCarbonKeywords(title, excerpt) {
+       // ...
+   }
    ```
 
 3. **命名**
    - 変数：`camelCase`
    - 関数：`camelCase`
-   - 定数：`UPPER_SNAKE_CASE`（Goでは普通はPascalCase）
+   - 定数：`PascalCase`（Goの慣習）
    - エクスポート：`PascalCase`
 
 ---
@@ -593,14 +372,41 @@ func sourceQualityBoost(u string) float64 {
 - [ ] DEVELOPMENT.md が最新
 - [ ] エラーメッセージがユーザーフレンドリー
 - [ ] APIキーがハードコードされていない
-- [ ] パフォーマンステスト（100見出し処理時間）
-- [ ] メモリリーク確認
+- [ ] 全ソースのテスト実行（`./pipeline -sources=all-free -perSource=1`）
 
 ---
 
 ## 参考リンク
 
-- [OpenAI Responses API Documentation](https://platform.openai.com/docs/api-reference/responses)
-- [Brave Search API](https://brave.com/search/api/)
-- [Carbon Pulse](https://carbon-pulse.com/)
-- [QCI](https://www.qcintel.com/)
+- [WordPress REST API Documentation](https://developer.wordpress.org/rest-api/)
+- [goquery Documentation](https://github.com/PuerkitoBio/goquery)
+- [gofeed Documentation](https://github.com/mmcdole/gofeed)
+- [Notion API Documentation](https://developers.notion.com/)
+
+---
+
+## ソース一覧
+
+### 日本ソース
+| ソース | 実装方式 | URL |
+|-------|---------|-----|
+| JRI | HTML | https://www.jri.co.jp/ |
+| 環境省 | HTML | https://www.env.go.jp/ |
+| METI | HTML | https://www.meti.go.jp/ |
+| PwC Japan | JSON | https://www.pwc.com/jp/ |
+| Mizuho R&T | HTML | https://www.mizuho-rt.co.jp/ |
+| JPX | HTML | https://www.jpx.co.jp/ |
+| カーボンクレジット.jp | HTML | https://carboncredits.jp/ |
+
+### 国際ソース
+| ソース | 実装方式 | URL |
+|-------|---------|-----|
+| Carbon Herald | WordPress API | https://carbonherald.com/ |
+| Carbon Brief | RSS | https://www.carbonbrief.org/ |
+| Sandbag | WordPress API | https://sandbag.be/ |
+| ICAP | HTML | https://icapcarbonaction.com/ |
+| IETA | HTML | https://www.ieta.org/ |
+| Politico EU | HTML | https://www.politico.eu/ |
+| IISD | HTML | https://sdg.iisd.org/ |
+| UNFCCC | HTML | https://unfccc.int/ |
+| GEF | HTML | https://www.thegef.org/ |

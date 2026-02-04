@@ -8,21 +8,13 @@
 
 **Carbon Relay**は、カーボン関連ニュースの収集・分析・配信を自動化するGo製システムです。
 
-### ⚠️ 最重要: 2つの運用モードを理解する
+### 運用モード
 
-このシステムには**2つの異なる運用モード**があります：
+このシステムは**無料記事収集モード**で運用します：
 
-#### 🟢 モード1: 無料記事収集モード
-- 16の無料ソースから記事を直接収集
+- 36の無料ソースから記事を直接収集
 - OpenAI API不要（コスト効率が高い）
-- メール配信が主な用途
-
-#### 🔵 モード2: 有料記事マッチングモード
-- 有料記事（Carbon Pulse、QCI）のヘッドラインから無料記事を検索
-- OpenAI検索 + IDFマッチングを使用
-- Notion統合が主な用途
-
-**新しいタスクを受け取ったら、まずどちらのモードに関連するかを確認してください。**
+- メール配信・Notion統合が主な用途
 
 ---
 
@@ -30,10 +22,9 @@
 
 作業開始前に以下を参照：
 
-1. **docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md** (2,756行)
-   - セクション1.2: 2つの運用モードの詳細
+1. **docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md**
    - セクション8: 使用方法と実行例
-   - 全18ソースの実装詳細
+   - 全36ソースの実装詳細
 
 2. **.claude/PROJECT_CONTEXT.md**
    - プロジェクト概要とコンテキスト
@@ -97,19 +88,11 @@
 
 ## 🚫 やってはいけないこと
 
-1. **有料記事本文の取得を実装しない**
-   - ヘッドラインのみ使用
-   - これはプロジェクトの基本原則
-
-2. **過度なリクエストを送らない**
+1. **過度なリクエストを送らない**
    - スクレイピング時は適切な間隔を保つ
    - テスト時は`-perSource`を小さく設定
 
-3. **2つのモードを混同しない**
-   - モード1では`-queriesPerHeadline=0`（検索なし）
-   - モード2では`-queriesPerHeadline=3`（検索あり）
-
-4. **環境変数をコミットしない**
+2. **環境変数をコミットしない**
    - `.env`は`.gitignore`に含まれている
 
 ---
@@ -212,10 +195,8 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 🎓 学習リソース
 
-- **IDF（逆文書頻度）**: docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md セクション5.2
-- **OpenAI検索の仕様**: セクション9.1（最近の修正）
 - **Notion API制限**: セクション6.3
-- **全18ソースの実装パターン**: セクション3
+- **全36ソースの実装パターン**: セクション3
 
 ---
 
@@ -223,7 +204,6 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 作業開始前に`.env`が正しく設定されているか確認：
 
-- [ ] `OPENAI_API_KEY` - モード2で必要
 - [ ] `NOTION_API_KEY` - Notionクリップで必要
 - [ ] `NOTION_PAGE_ID` - 初回クリップで必要
 - [ ] `EMAIL_FROM` - メール送信で必要
@@ -268,7 +248,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 3. **最小構成でテスト**
    ```bash
-   ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0
+   ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
    ```
 
 4. **ドキュメントを参照**
@@ -278,14 +258,13 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 📊 プロジェクト統計
 
-- **総コード行数**: 4,751行（Go）
-- **実装ソース数**: 18（有料2 + 無料16）
-- **テスト成功率**: 100%（15/15）
+- **総コード行数**: 約6,000行（Go）
+- **実装ソース数**: 36（無料ソースのみ）
 - **ステータス**: 本番環境対応済み ✅
 
 ---
 
-**最終更新**: 2026年1月31日（ディレクトリ構造改善）
+**最終更新**: 2026年2月4日（全36ソース対応）
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

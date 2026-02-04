@@ -8,22 +8,9 @@ echo "carbon-relay 実行サンプル"
 echo "========================================="
 echo ""
 
-# OPENAI_API_KEY チェック
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "❌ ERROR: OPENAI_API_KEY が設定されていません"
-    echo ""
-    echo "以下のコマンドでAPIキーを設定してください："
-    echo "  export OPENAI_API_KEY=\"sk-...\""
-    echo ""
-    exit 1
-fi
-
-echo "✅ OPENAI_API_KEY が設定されています"
-echo ""
-
 # ビルド
 echo "🔨 ビルド中..."
-go build -o carbon-relay ./cmd/pipeline
+go build -o pipeline ./cmd/pipeline
 echo "✅ ビルド完了"
 echo ""
 
@@ -33,85 +20,68 @@ echo "📁 出力ディレクトリ作成: outputs/"
 echo ""
 
 # ========================================
-# 例1: クイックテスト（2件のみ）
+# 例1: クイックテスト（全ソース、少数）
 # ========================================
 echo "========================================="
-echo "例1: クイックテスト（Carbon Pulse 2件）"
+echo "例1: クイックテスト（全ソース 各2件）"
 echo "========================================="
-./carbon-relay \
-  -sources=carbonpulse \
+./pipeline \
+  -sources=all-free \
   -perSource=2 \
-  -queriesPerHeadline=2 \
-  -resultsPerQuery=8 \
-  -topK=3 \
-  -minScore=0.25 \
+  -queriesPerHeadline=0 \
   -out=outputs/quick_test.json
 
 echo "✅ 完了: outputs/quick_test.json"
 echo ""
-sleep 2
+sleep 1
 
 # ========================================
-# 例2: 標準実行（両ソース10件ずつ）
+# 例2: 標準実行（全ソース10件ずつ）
 # ========================================
 echo "========================================="
-echo "例2: 標準実行（Carbon Pulse + QCI 各10件）"
+echo "例2: 標準実行（全ソース 各10件）"
 echo "========================================="
-./carbon-relay \
-  -sources=carbonpulse,qci \
+./pipeline \
+  -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=3 \
-  -resultsPerQuery=12 \
-  -topK=3 \
-  -minScore=0.25 \
-  -saveFree=outputs/candidates_pool.json \
+  -queriesPerHeadline=0 \
   -out=outputs/standard_output.json
 
-echo "✅ 完了:"
-echo "  - outputs/standard_output.json"
-echo "  - outputs/candidates_pool.json"
+echo "✅ 完了: outputs/standard_output.json"
 echo ""
-sleep 2
+sleep 1
 
 # ========================================
-# 例3: 高品質モード（厳格なフィルタ）
+# 例3: 日本ソースのみ
 # ========================================
 echo "========================================="
-echo "例3: 高品質モード（厳格なフィルタ）"
+echo "例3: 日本ソースのみ"
 echo "========================================="
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=5 \
-  -queriesPerHeadline=4 \
-  -resultsPerQuery=15 \
-  -topK=5 \
-  -minScore=0.35 \
-  -strictMarket=true \
-  -out=outputs/high_quality.json
+./pipeline \
+  -sources=jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,carboncredits.jp \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
+  -out=outputs/japan_sources.json
 
-echo "✅ 完了: outputs/high_quality.json"
+echo "✅ 完了: outputs/japan_sources.json"
 echo ""
-sleep 2
+sleep 1
 
 # ========================================
-# 例4: 探索的モード（低スコア閾値）
+# 例4: 欧州ソースのみ
 # ========================================
 echo "========================================="
-echo "例4: 探索的モード（低スコア閾値、多数の候補）"
+echo "例4: 欧州・国際ソースのみ"
 echo "========================================="
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=3 \
-  -queriesPerHeadline=5 \
-  -resultsPerQuery=20 \
-  -topK=10 \
-  -minScore=0.15 \
-  -strictMarket=false \
-  -out=outputs/exploratory.json
+./pipeline \
+  -sources=sandbag,carbon-brief,icap,ieta,politico-eu \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
+  -out=outputs/europe_sources.json
 
-echo "✅ 完了: outputs/exploratory.json"
+echo "✅ 完了: outputs/europe_sources.json"
 echo ""
-sleep 2
+sleep 1
 
 # ========================================
 # 例5: デバッグモード
@@ -119,12 +89,10 @@ sleep 2
 echo "========================================="
 echo "例5: デバッグモード（詳細ログ出力）"
 echo "========================================="
-DEBUG_OPENAI=1 ./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=1 \
-  -queriesPerHeadline=2 \
-  -resultsPerQuery=8 \
-  -topK=3 \
+DEBUG_SCRAPING=1 ./pipeline \
+  -sources=carbonherald \
+  -perSource=2 \
+  -queriesPerHeadline=0 \
   -out=outputs/debug_output.json \
   2>&1 | tee outputs/debug.log
 
@@ -144,14 +112,11 @@ echo ""
 for file in outputs/*.json; do
     if [ -f "$file" ]; then
         headline_count=$(cat "$file" | grep -c '"isHeadline": true' || echo "0")
-        related_count=$(cat "$file" | grep -c '"relatedFree":' || echo "0")
-        echo "📄 $(basename $file)"
-        echo "   見出し数: $headline_count"
-        echo "   relatedFree付き: $related_count"
-        echo ""
+        echo "📄 $(basename $file): $headline_count 件"
     fi
 done
 
+echo ""
 echo "========================================="
 echo "✅ すべてのサンプル実行完了"
 echo "========================================="
@@ -162,5 +127,4 @@ echo ""
 echo "💡 ヒント："
 echo "  - JSON結果を確認: cat outputs/standard_output.json | jq"
 echo "  - デバッグログ確認: less outputs/debug.log"
-echo "  - 候補プール確認: cat outputs/candidates_pool.json | jq '.[] | .url'"
 echo ""

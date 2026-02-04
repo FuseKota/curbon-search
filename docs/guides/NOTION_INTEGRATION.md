@@ -2,12 +2,11 @@
 
 ## 🎯 概要
 
-carbon-relayで収集した記事（有料ヘッドライン + 関連無料記事）をNotion Databaseに自動的にクリッピングできます。
+carbon-relayで収集した記事をNotion Databaseに自動的にクリッピングできます。
 
 ### クリッピングされる記事
 
-- ✅ **有料記事のヘッドライン**: Carbon Pulse / QCI の見出しと要約
-- ✅ **関連無料記事**: OpenAI検索で見つかった一次情報
+- ✅ **カーボン関連ニュース**: 16の無料ソースから収集したヘッドラインと要約
 
 ---
 
@@ -44,14 +43,13 @@ carbon-relayで収集した記事（有料ヘッドライン + 関連無料記�
 
 ```bash
 # 環境変数設定
-export OPENAI_API_KEY="sk-..."
 export NOTION_TOKEN="secret_..."
 
 # 実行（新規DB作成）
-./carbon-relay \
-  -headlines=collected_headlines.json \
-  -queriesPerHeadline=5 \
-  -topK=3 \
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
   -out=results.json \
   -notionClip \
   -notionPageID="abc123def456..."
@@ -65,10 +63,10 @@ export NOTION_TOKEN="secret_..."
 
 ```bash
 # 2回目以降は既存のDatabase IDを指定
-./carbon-relay \
-  -headlines=collected_headlines.json \
-  -queriesPerHeadline=5 \
-  -topK=3 \
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
   -out=results.json \
   -notionClip \
   -notionDatabaseID="xyz789abc123..."
@@ -89,12 +87,11 @@ https://www.notion.so/xyz789abc123...?v=...
 
 | フィールド名 | タイプ | 説明 | 例 |
 |------------|--------|------|-----|
-| **Title** | Title | 記事タイトル | "Climate litigation marks 'turning point' in 2025" |
-| **URL** | URL | 記事URL | https://carbon-pulse.com/470719/ |
-| **Source** | Select | 記事ソース | "Carbon Pulse", "QCI", "OpenAI(text_extract)" |
-| **Type** | Select | 記事タイプ | "Headline" または "Related Free" |
-| **Excerpt** | Rich Text | 記事要約 | "Global climate litigation grew..." |
-| **Score** | Number | マッチングスコア | 0.79（Related Freeのみ） |
+| **Title** | Title | 記事タイトル | "EU carbon price hits record high amid supply concerns" |
+| **URL** | URL | 記事URL | https://carbonherald.com/article/... |
+| **Source** | Select | 記事ソース | "Carbon Herald", "JRI", "Carbon Brief" 等 |
+| **Type** | Select | 記事タイプ | "Headline" |
+| **Excerpt** | Rich Text | 記事要約 | "EU carbon prices reached..." |
 
 ---
 
@@ -103,28 +100,23 @@ https://www.notion.so/xyz789abc123...?v=...
 ### フィルタ設定
 
 ```
-Type = "Headline" → 有料記事のみ表示
-Type = "Related Free" → 無料記事のみ表示
-Source = "Carbon Pulse" → Carbon Pulseのみ
-Score > 0.5 → 高スコアの記事のみ
+Source = "Carbon Herald" → Carbon Heraldのみ
+Source = "JRI" → JRIのみ
 ```
 
 ### ソート設定
 
 ```
-Score（降順） → スコアの高い記事から表示
 Created time（降順） → 新しい記事から表示
 ```
 
 ### ビュー作成例
 
-1. **ヘッドライン一覧**（Table View）
-   - Filter: `Type = "Headline"`
+1. **全記事一覧**（Table View）
    - Sort: `Created time`（降順）
 
-2. **高品質な無料記事**（Gallery View）
-   - Filter: `Type = "Related Free" AND Score > 0.5`
-   - Sort: `Score`（降順）
+2. **日本ソースのみ**（Table View）
+   - Filter: `Source contains "JRI" OR Source contains "METI" OR Source contains "環境省"`
 
 3. **ソース別**（Board View）
    - Group by: `Source`
@@ -144,37 +136,34 @@ Created time（降順） → 新しい記事から表示
 | 環境変数 | 必須 | 説明 |
 |---------|------|------|
 | `NOTION_TOKEN` | ✅ | Notion Integration Token |
-| `OPENAI_API_KEY` | ✅ | OpenAI API Key（検索時） |
 
 ---
 
 ## 📝 実行例
 
-### 例1: ヘッドライン収集 → 検索 → Notionにクリッピング（一気通貫）
+### 例1: ヘッドライン収集 → Notionにクリッピング
 
 ```bash
 # 環境変数設定
-export OPENAI_API_KEY="sk-..."
 export NOTION_TOKEN="secret_..."
 
-# 一気通貫実行
-./carbon-relay \
-  -sources=carbonpulse \
+# 全無料ソースから収集してNotionにクリッピング
+./pipeline \
+  -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=5 \
-  -resultsPerQuery=10 \
-  -topK=3 \
+  -queriesPerHeadline=0 \
   -out=notion_clips.json \
   -notionClip \
   -notionPageID="abc123def456..."
 ```
 
-### 例2: 既存のヘッドラインファイルをNotionにクリッピング
+### 例2: 特定ソースのみNotionにクリッピング
 
 ```bash
-# 既に検索済みのresults.jsonをNotionにクリッピング
-./carbon-relay \
-  -headlines=search_results.json \
+# 日本ソースのみ
+./pipeline \
+  -sources=jri,env-ministry,meti \
+  -perSource=10 \
   -queriesPerHeadline=0 \
   -notionClip \
   -notionDatabaseID="xyz789abc123..."
@@ -225,41 +214,37 @@ export NOTION_TOKEN="secret_..."
 #!/bin/bash
 # daily_notion_clip.sh
 
-export OPENAI_API_KEY="sk-..."
 export NOTION_TOKEN="secret_..."
 DB_ID="xyz789abc123..."  # 既存のDB ID
 
-./carbon-relay \
-  -sources=carbonpulse,qci \
-  -perSource=20 \
-  -queriesPerHeadline=5 \
-  -topK=3 \
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
   -out="$(date +%Y%m%d)_clips.json" \
   -notionClip \
   -notionDatabaseID="$DB_ID"
 ```
 
-### 2. 高品質記事のみクリッピング
+### 2. 日本ソースのみクリッピング
 
 ```bash
-# 事前にminScoreを高めに設定して高品質記事のみ収集
-./carbon-relay \
-  -headlines=collected_headlines.json \
-  -queriesPerHeadline=5 \
-  -minScore=0.5 \
-  -topK=2 \
-  -out=high_quality.json \
+# 日本のカーボン関連ニュースのみ
+./pipeline \
+  -sources=jri,env-ministry,meti,mizuho-rt,jpx,carboncredits.jp \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
   -notionClip \
   -notionDatabaseID="$DB_ID"
 ```
 
-### 3. ヘッドラインのみクリッピング（検索なし）
+### 3. 国際ソースのみクリッピング
 
 ```bash
-# 検索をスキップしてヘッドラインのみNotionに保存
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=30 \
+# 国際的なカーボン関連ニュースのみ
+./pipeline \
+  -sources=carbonherald,carbon-brief,sandbag,icap,ieta \
+  -perSource=10 \
   -queriesPerHeadline=0 \
   -notionClip \
   -notionPageID="abc123..."

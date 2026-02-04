@@ -9,7 +9,7 @@ echo "========================================="
 echo ""
 
 # デフォルト設定
-SOURCE="${1:-carbonpulse}"
+SOURCE="${1:-all-free}"
 COUNT="${2:-30}"
 OUTPUT="collected_headlines.json"
 
@@ -20,9 +20,9 @@ echo "  - 出力  : $OUTPUT"
 echo ""
 
 # ビルド確認
-if [ ! -f "carbon-relay" ]; then
+if [ ! -f "pipeline" ]; then
     echo "🔨 ビルド中..."
-    go build -o carbon-relay ./cmd/pipeline
+    go build -o pipeline ./cmd/pipeline
     echo "✅ ビルド完了"
     echo ""
 fi
@@ -31,7 +31,7 @@ fi
 echo "========================================="
 echo "🔄 ヘッドライン収集中..."
 echo "========================================="
-DEBUG_SCRAPING=1 ./carbon-relay \
+DEBUG_SCRAPING=1 ./pipeline \
   -sources="$SOURCE" \
   -perSource="$COUNT" \
   -queriesPerHeadline=0 \

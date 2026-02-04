@@ -11,24 +11,24 @@
 ### 方法1: 収集 & 即確認（最も簡単）
 
 ```bash
-# Carbon Pulseから10件収集して即確認
-./collect_and_view.sh carbonpulse 10
+# 全無料ソースから10件ずつ収集して即確認
+./scripts/collect_and_view.sh all-free 10
 
-# QCIから20件収集して即確認
-./collect_and_view.sh qci 20
+# 日本ソースのみから各20件収集
+./scripts/collect_and_view.sh jri,env-ministry,meti 20
 
-# 両方から各30件収集
-./collect_and_view.sh carbonpulse,qci 30
+# 国際ソースから各30件収集
+./scripts/collect_and_view.sh carbonherald,carbon-brief,sandbag 30
 ```
 
 ### 方法2: 既存ファイルを確認
 
 ```bash
 # 詳細確認ツール
-./view_headlines.sh headlines.json
+./scripts/view_headlines.sh headlines.json
 
 # または別のファイル
-./view_headlines.sh latest_headlines.json
+./scripts/view_headlines.sh latest_headlines.json
 ```
 
 ---
@@ -38,12 +38,12 @@
 ### view_headlines.sh で表示される情報
 
 ```bash
-./view_headlines.sh <ファイル名>
+./scripts/view_headlines.sh <ファイル名>
 ```
 
 **表示内容：**
 1. 📊 総件数
-2. 📂 ソース別内訳（Carbon Pulse, QCI）
+2. 📂 ソース別内訳
 3. 🆕 最新5件のタイトル
 4. 📋 全タイトル一覧（番号付き）
 5. 🔗 URL一覧
@@ -93,8 +93,8 @@ cat headlines.json | jq '.[] | select(.title | test("US|USA"; "i"))'
 # 総件数
 cat headlines.json | jq '. | length'
 
-# Carbon Pulse の件数
-cat headlines.json | jq '[.[] | select(.source == "Carbon Pulse")] | length'
+# 特定ソースの件数
+cat headlines.json | jq '[.[] | select(.source == "Carbon Herald")] | length'
 
 # 特定キーワードを含む記事数
 cat headlines.json | jq '[.[] | select(.title | contains("climate"))] | length'
@@ -103,11 +103,14 @@ cat headlines.json | jq '[.[] | select(.title | contains("climate"))] | length'
 ### ソース別に分ける
 
 ```bash
-# Carbon Pulse のみ
-cat headlines.json | jq '[.[] | select(.source == "Carbon Pulse")]'
+# Carbon Herald のみ
+cat headlines.json | jq '[.[] | select(.source == "Carbon Herald")]'
 
-# QCI のみ
-cat headlines.json | jq '[.[] | select(.source == "QCI")]'
+# JRI のみ
+cat headlines.json | jq '[.[] | select(.source == "JRI")]'
+
+# 日本ソースのみ
+cat headlines.json | jq '[.[] | select(.source | test("JRI|環境省|METI|Mizuho"))]'
 ```
 
 ### CSV形式で出力
@@ -328,13 +331,13 @@ cat headlines.json | jq . > /dev/null
 # daily_check.sh
 
 # 最新データ収集
-./collect_and_view.sh carbonpulse,qci 30
+./scripts/collect_and_view.sh all-free 30
 
 # climate関連のみ抽出
 cat collected_headlines.json | jq '.[] | select(.title | contains("climate"))' > climate_news.json
 
 # 確認
-./view_headlines.sh climate_news.json
+./scripts/view_headlines.sh climate_news.json
 ```
 
 ### 週次レポート作成
@@ -368,8 +371,8 @@ cat headlines.json | jq -r '.[0].title'
 # 最新記事のURL
 cat headlines.json | jq -r '.[0].url'
 
-# Carbon Pulse の件数
-cat headlines.json | jq '[.[] | select(.source=="Carbon Pulse")] | length'
+# 特定ソースの件数
+cat headlines.json | jq '[.[] | select(.source=="Carbon Herald")] | length'
 
 # climateを含む記事数
 cat headlines.json | jq '[.[] | select(.title|contains("climate"))] | length'

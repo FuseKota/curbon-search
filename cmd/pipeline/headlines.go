@@ -133,7 +133,9 @@ type HeadlineCollector func(limit int, cfg headlineSourceConfig) ([]Headline, er
 // キー: ソース識別子（CLIの-sourcesで指定する文字列）
 // 値:  対応する収集関数
 var sourceCollectors = map[string]HeadlineCollector{
-	// WordPress REST APIソース - sources_wordpress.go
+	// =========================================================================
+	// sources_wordpress.go - WordPress REST API ソース (7)
+	// =========================================================================
 	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
 	"carbonherald":          collectHeadlinesCarbonHerald,
 	"climatehomenews":       collectHeadlinesClimateHomeNews,
@@ -142,55 +144,64 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"ecosystem-marketplace": collectHeadlinesEcosystemMarketplace,
 	"carbon-brief":          collectHeadlinesCarbonBrief,
 
-	// HTMLスクレイピングソース - sources_html.go
+	// =========================================================================
+	// sources_japan.go - 日本語ソース (6)
+	// =========================================================================
+	"jri":          collectHeadlinesJRI,
+	"env-ministry": collectHeadlinesEnvMinistry,
+	"jpx":          collectHeadlinesJPX,
+	"meti":         collectHeadlinesMETI,
+	"pwc-japan":    collectHeadlinesPwCJapan,
+	"mizuho-rt":    collectHeadlinesMizuhoRT,
+
+	// =========================================================================
+	// sources_rss.go - RSS/Atom フィードソース (2)
+	// =========================================================================
+	"politico-eu": collectHeadlinesPoliticoEU,
+	"euractiv":    collectHeadlinesEuractiv,
+	// "un-news": collectHeadlinesUNNews, // 2026-02: Pending - need to improve content extraction
+
+	// =========================================================================
+	// sources_academic.go - 学術・研究機関ソース (3)
+	// =========================================================================
+	"arxiv":        collectHeadlinesArXiv,
+	"nature-comms": collectHeadlinesNatureComms,
+	"oies":         collectHeadlinesOIES,
+
+	// =========================================================================
+	// sources_regional_ets.go - 地域排出量取引システム (5)
+	// =========================================================================
+	"eu-ets":        collectHeadlinesEUETS,
+	"uk-ets":        collectHeadlinesUKETSHTML, // HTML版（Atom feedが空のため）
+	"carb":          collectHeadlinesCARB,
+	"rggi":          collectHeadlinesRGGI,
+	"australia-cer": collectHeadlinesAustraliaCER,
+
+	// =========================================================================
+	// sources_html.go - HTMLスクレイピングソース (14)
+	// =========================================================================
+	// ニュースメディア・シンクタンク
 	"icap":                 collectHeadlinesICAP,
 	"ieta":                 collectHeadlinesIETA,
 	"energy-monitor":       collectHeadlinesEnergyMonitor,
 	"world-bank":           collectHeadlinesWorldBank,
 	"newclimate":           collectHeadlinesNewClimate,
 	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
-	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden エラーのため一時無効化
+	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden
 
-	// 日本語ソース - sources_japan.go
-	"jri":          collectHeadlinesJRI,
-	"env-ministry": collectHeadlinesEnvMinistry,
-	"meti":         collectHeadlinesMETI,
-	"pwc-japan":    collectHeadlinesPwCJapan,
-	"mizuho-rt":    collectHeadlinesMizuhoRT,
-
-	// その他 - sources_japan.go
-	"jpx": collectHeadlinesJPX,
-
-	// 欧州政策ソース（RSSフィード）- sources_rss.go
-	"politico-eu": collectHeadlinesPoliticoEU,
-	"euractiv":    collectHeadlinesEuractiv,
-
-	// 学術・研究機関ソース - sources_academic.go
-	"arxiv":        collectHeadlinesArXiv,
-	"nature-comms": collectHeadlinesNatureComms,
-	"oies":         collectHeadlinesOIES,
-
-	// VCM認証団体 - sources_html.go
+	// VCM認証団体
 	"verra":         collectHeadlinesVerra,
 	"gold-standard": collectHeadlinesGoldStandard,
 	"acr":           collectHeadlinesACR,
 	"car":           collectHeadlinesCAR,
 
-	// 国際機関 - sources_html.go, sources_rss.go
-	// "unfccc":        collectHeadlinesUNFCCC, // 2026-01: Incapsula protection, temporarily disabled
-	// "un-news":       collectHeadlinesUNNews, // 2026-02: Pending - need to improve content extraction
+	// 国際機関
 	"iisd":          collectHeadlinesIISD,
 	"climate-focus": collectHeadlinesClimateFocus,
+	// "unfccc": collectHeadlinesUNFCCC, // 2026-01: Incapsula protection
 
-	// 地域ETS - sources_regional_ets.go
-	"eu-ets":        collectHeadlinesEUETS,
-	"uk-ets":        collectHeadlinesUKETSHTML, // HTML scraping version (Atom feed was empty)
-	"carb":          collectHeadlinesCARB,
-	"rggi":          collectHeadlinesRGGI,
-	"australia-cer": collectHeadlinesAustraliaCER,
-
-	// 追加ソース（CDR関連）- sources_html.go
-	"puro-earth": collectHeadlinesPuroEarth, // Blog page now working
+	// CDR関連
+	"puro-earth": collectHeadlinesPuroEarth,
 	"isometric":  collectHeadlinesIsometric,
 }
 
@@ -390,6 +401,59 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] %s: collected %d headlines\n", sourceName, len(out))
+	}
+
+	return out, nil
+}
+
+// collectWordPressHeadlinesCustomType はカスタム投稿タイプからWordPress記事を収集する
+//
+// 一部のWordPressサイトは標準の「posts」ではなくカスタム投稿タイプを使用している。
+// 例: Ecosystem Marketplaceは「featured-articles」を使用。
+//
+// 【引数】
+//   - baseURL:    WordPressサイトのベースURL
+//   - sourceName: ソース名
+//   - postType:   カスタム投稿タイプ（例: "featured-articles"）
+//   - limit:      取得する記事の最大数
+//   - cfg:        HTTP設定
+func collectWordPressHeadlinesCustomType(baseURL, sourceName, postType string, limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	// WordPress REST API endpoint with custom post type
+	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/%s?per_page=%d&_fields=title,link,date_gmt,content", baseURL, postType, limit)
+
+	var posts []WPPost
+	if err := httpGetJSON(apiURL, cfg, &posts); err != nil {
+		return nil, fmt.Errorf("failed to fetch %s API: %w", sourceName, err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		publishedAt := ""
+		if p.DateGMT != "" {
+			publishedAt = p.DateGMT + "Z"
+		}
+
+		out = append(out, Headline{
+			Source:      sourceName,
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: publishedAt,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] %s: collected %d headlines from custom type '%s'\n", sourceName, len(out), postType)
 	}
 
 	return out, nil

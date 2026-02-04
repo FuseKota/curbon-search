@@ -43,8 +43,18 @@ func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, e
 }
 
 // collectHeadlinesEcosystemMarketplace fetches articles from Ecosystem Marketplace using WordPress REST API
+//
+// 注意: Ecosystem Marketplaceは記事をカスタム投稿タイプ「featured-articles」に保存している。
+// 標準の「posts」エンドポイントには2011-2017年の古いアーカイブしかないため、
+// featured-articlesエンドポイントを使用する。
 func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://www.ecosystemmarketplace.com", "Ecosystem Marketplace", limit, cfg)
+	return collectWordPressHeadlinesCustomType(
+		"https://www.ecosystemmarketplace.com",
+		"Ecosystem Marketplace",
+		"featured-articles", // カスタム投稿タイプ
+		limit,
+		cfg,
+	)
 }
 
 // collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API

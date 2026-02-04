@@ -81,9 +81,6 @@ type OutputConfig struct {
 //
 // 【注意】email.goのEmailConfig（SMTP設定）とは別物
 type EmailModeConfig struct {
-	// SendEmail がtrueの場合、フルメールサマリーを送信
-	SendEmail bool
-
 	// SendShortEmail がtrueの場合、50文字ダイジェストを送信
 	SendShortEmail bool
 
@@ -119,7 +116,6 @@ func ParseFlags() *PipelineConfig {
 	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", os.Getenv("NOTION_DATABASE_ID"), "existing Notion database ID")
 
 	// Email flags
-	flag.BoolVar(&cfg.Email.SendEmail, "sendEmail", false, "send headlines summary via email")
 	flag.BoolVar(&cfg.Email.SendShortEmail, "sendShortEmail", false, "send 50-char short headlines digest via email")
 	flag.BoolVar(&cfg.Email.ListShortHeadlines, "listShortHeadlines", false, "list ShortHeadline values from NotionDB (diagnostic)")
 	flag.IntVar(&cfg.Email.DaysBack, "emailDaysBack", 1, "fetch headlines from last N days for email")
@@ -130,5 +126,5 @@ func ParseFlags() *PipelineConfig {
 
 // IsEmailMode はメール関連モードかどうかを返す
 func (c *PipelineConfig) IsEmailMode() bool {
-	return c.Email.SendEmail || c.Email.SendShortEmail || c.Email.ListShortHeadlines
+	return c.Email.SendShortEmail || c.Email.ListShortHeadlines
 }

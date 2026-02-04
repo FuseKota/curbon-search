@@ -128,37 +128,6 @@ func createEmailSender() (*EmailSender, string, string) {
 // メールハンドラ
 // =============================================================================
 
-// handleEmailSend はフルメールサマリーを送信する
-//
-// 【処理の流れ】
-//  1. 環境変数をチェック（Notion + Email）
-//  2. NotionDBから記事を取得
-//  3. AI要約付きのフルメールを送信
-func handleEmailSend(emailDaysBack int) {
-	fmt.Fprintln(os.Stderr, "\n========================================")
-	fmt.Fprintln(os.Stderr, "📧 Sending Email Summary")
-	fmt.Fprintln(os.Stderr, "========================================")
-
-	// Create Notion clipper and fetch headlines
-	clipper := createNotionClipper()
-	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
-	if headlines == nil {
-		return
-	}
-
-	// Create email sender and send
-	sender, from, to := createEmailSender()
-	ctx := context.Background()
-	if err := sender.SendHeadlinesSummary(ctx, headlines); err != nil {
-		fatalf("ERROR sending email: %v", err)
-	}
-
-	fmt.Fprintln(os.Stderr, "✅ Email sent successfully")
-	fmt.Fprintf(os.Stderr, "   From: %s\n", from)
-	fmt.Fprintf(os.Stderr, "   To: %s\n", to)
-	fmt.Fprintln(os.Stderr, "========================================")
-}
-
 // handleShortEmailSend は50文字ヘッドラインダイジェストメールを送信する
 //
 // 【処理の流れ】

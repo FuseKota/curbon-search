@@ -80,10 +80,6 @@ func main() {
 	cfg := ParseFlags()
 
 	// --- Early exit for email-only modes ---
-	if cfg.Email.SendEmail {
-		handleEmailSend(cfg.Email.DaysBack)
-		return
-	}
 	if cfg.Email.SendShortEmail {
 		handleShortEmailSend(cfg.Email.DaysBack)
 		return

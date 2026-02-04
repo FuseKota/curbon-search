@@ -45,13 +45,19 @@ type InputConfig struct {
 }
 
 // Sources はSourcesRawをパースしてスライスで返す
+// "all-free" を指定すると全ソースに展開される
 func (c *InputConfig) Sources() []string {
 	var result []string
 	for _, s := range strings.Split(c.SourcesRaw, ",") {
 		s = strings.TrimSpace(strings.ToLower(s))
-		if s != "" {
-			result = append(result, s)
+		if s == "" {
+			continue
 		}
+		// "all-free" は全ソースに展開
+		if s == "all-free" {
+			return strings.Split(defaultSources, ",")
+		}
+		result = append(result, s)
 	}
 	return result
 }

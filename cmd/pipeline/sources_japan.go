@@ -277,10 +277,10 @@ func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headlin
 			contentResp.Body.Close() // Close immediately, not defer in loop
 		}
 
-		// Format published date
+		// Format published date (use UTC for consistency with other sources)
 		publishedAt := ""
 		if currentDate != "" {
-			publishedAt = currentDate + "T00:00:00+09:00"
+			publishedAt = currentDate + "T00:00:00Z"
 		}
 
 		out = append(out, Headline{
@@ -498,14 +498,14 @@ func collectHeadlinesMETI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			articleURL = baseURL + href
 		}
 
-		// Extract date from li text
+		// Extract date from li text (use UTC for consistency with other sources)
 		liText := s.Text()
 		dateStr := ""
 		if dateMatch := dateRe.FindStringSubmatch(liText); dateMatch != nil {
 			year := dateMatch[1]
 			month := fmt.Sprintf("%02d", atoi(dateMatch[2]))
 			day := fmt.Sprintf("%02d", atoi(dateMatch[3]))
-			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00+09:00", year, month, day)
+			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
 		}
 
 		if os.Getenv("DEBUG_SCRAPING") != "" {

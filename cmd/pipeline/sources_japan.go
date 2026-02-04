@@ -126,21 +126,23 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 		excerpt := ""
 		if item.Link != "" {
 			contentResp, err := client.Get(item.Link)
-			if err == nil && contentResp.StatusCode == http.StatusOK {
-				defer contentResp.Body.Close()
-				contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
-				if err == nil {
-					// Extract content from article page
-					// JRI uses various selectors for article content
-					contentDoc.Find("div.detail, div.content, div.main-content, article").Each(func(_ int, s *goquery.Selection) {
-						if excerpt == "" {
-							text := strings.TrimSpace(s.Text())
-							if len(text) > 100 { // Only use if substantial content
-								excerpt = text
+			if err == nil {
+				if contentResp.StatusCode == http.StatusOK {
+					contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
+					if err == nil {
+						// Extract content from article page
+						// JRI uses various selectors for article content
+						contentDoc.Find("div.detail, div.content, div.main-content, article").Each(func(_ int, s *goquery.Selection) {
+							if excerpt == "" {
+								text := strings.TrimSpace(s.Text())
+								if len(text) > 100 { // Only use if substantial content
+									excerpt = text
+								}
 							}
-						}
-					})
+						})
+					}
 				}
+				contentResp.Body.Close() // Close immediately, not defer in loop
 			}
 		}
 
@@ -257,20 +259,22 @@ func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headlin
 		// Fetch full article content
 		excerpt := ""
 		contentResp, err := client.Get(articleURL)
-		if err == nil && contentResp.StatusCode == http.StatusOK {
-			defer contentResp.Body.Close()
-			contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
-			if err == nil {
-				// Extract main content from article page
-				contentDoc.Find("div.l-content, div.c-content, article, main").Each(func(_ int, cs *goquery.Selection) {
-					if excerpt == "" {
-						text := strings.TrimSpace(cs.Text())
-						if len(text) > 100 {
-							excerpt = text
+		if err == nil {
+			if contentResp.StatusCode == http.StatusOK {
+				contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
+				if err == nil {
+					// Extract main content from article page
+					contentDoc.Find("div.l-content, div.c-content, article, main").Each(func(_ int, cs *goquery.Selection) {
+						if excerpt == "" {
+							text := strings.TrimSpace(cs.Text())
+							if len(text) > 100 {
+								excerpt = text
+							}
 						}
-					}
-				})
+					})
+				}
 			}
+			contentResp.Body.Close() // Close immediately, not defer in loop
 		}
 
 		// Format published date
@@ -778,8 +782,9 @@ func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, 
 
 // collectHeadlinesMizuhoRT collects headlines from Mizuho Research & Technologies
 func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// Use the 2025 publication page which lists recent reports
-	newsURL := "https://www.mizuho-rt.co.jp/publication/2025/index.html"
+	// Use current year's publication page which lists recent reports
+	currentYear := time.Now().Year()
+	newsURL := fmt.Sprintf("https://www.mizuho-rt.co.jp/publication/%d/index.html", currentYear)
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", newsURL, nil)

@@ -101,6 +101,9 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// Package-level compiled regex for performance (avoid recompiling on every call)
+var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
+
 // =============================================================================
 // ソースレジストリ（Source Registry）
 // =============================================================================
@@ -538,9 +541,8 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 
 // cleanHTMLTags removes HTML tags and decodes HTML entities
 func cleanHTMLTags(htmlStr string) string {
-	// Remove HTML tags
-	re := regexp.MustCompile(`<[^>]*>`)
-	text := re.ReplaceAllString(htmlStr, "")
+	// Remove HTML tags (using pre-compiled regex for performance)
+	text := reHTMLTags.ReplaceAllString(htmlStr, "")
 	// Decode HTML entities (including Japanese characters)
 	text = html.UnescapeString(text)
 	return text

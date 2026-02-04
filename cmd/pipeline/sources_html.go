@@ -39,6 +39,9 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
+// Package-level compiled regex for performance (avoid recompiling in loops)
+var reDatePublished = regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+
 // collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
 func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://icapcarbonaction.com/en/news"
@@ -103,13 +106,15 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			if err == nil {
 				articleReq.Header.Set("User-Agent", cfg.UserAgent)
 				articleResp, err := client.Do(articleReq)
-				if err == nil && articleResp.StatusCode == http.StatusOK {
-					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
-					articleResp.Body.Close()
-					if err == nil {
-						bodyElem := articleDoc.Find("div.field-body")
-						content = strings.TrimSpace(bodyElem.Text())
+				if err == nil {
+					if articleResp.StatusCode == http.StatusOK {
+						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+						if err == nil {
+							bodyElem := articleDoc.Find("div.field-body")
+							content = strings.TrimSpace(bodyElem.Text())
+						}
 					}
+					articleResp.Body.Close() // Always close body when err == nil
 				}
 			}
 		}
@@ -208,14 +213,16 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			if err == nil {
 				articleReq.Header.Set("User-Agent", cfg.UserAgent)
 				articleResp, err := client.Do(articleReq)
-				if err == nil && articleResp.StatusCode == http.StatusOK {
-					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
-					articleResp.Body.Close()
-					if err == nil {
-						// Try common content selectors
-						bodyElem := articleDoc.Find("article, .content, .post-content, .entry-content").First()
-						content = strings.TrimSpace(bodyElem.Text())
+				if err == nil {
+					if articleResp.StatusCode == http.StatusOK {
+						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+						if err == nil {
+							// Try common content selectors
+							bodyElem := articleDoc.Find("article, .content, .post-content, .entry-content").First()
+							content = strings.TrimSpace(bodyElem.Text())
+						}
 					}
+					articleResp.Body.Close() // Always close body when err == nil
 				}
 			}
 		}
@@ -298,36 +305,37 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 			if err == nil {
 				articleReq.Header.Set("User-Agent", cfg.UserAgent)
 				articleResp, err := client.Do(articleReq)
-				if err == nil && articleResp.StatusCode == http.StatusOK {
-					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
-					articleResp.Body.Close()
-					if err == nil {
-						// Try to find content
-						bodyElem := articleDoc.Find("article .entry-content, article .article-content, .post-content, .content").First()
-						content = strings.TrimSpace(bodyElem.Text())
+				if err == nil {
+					if articleResp.StatusCode == http.StatusOK {
+						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
+						if err == nil {
+							// Try to find content
+							bodyElem := articleDoc.Find("article .entry-content, article .article-content, .post-content, .content").First()
+							content = strings.TrimSpace(bodyElem.Text())
 
-						// Try to find published date from JSON-LD structured data
-						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
-							if publishedAt != "" {
-								return
-							}
-							jsonText := script.Text()
-							// Extract datePublished from JSON-LD
-							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
-							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
-								publishedAt = matches[1]
-							}
-						})
+							// Try to find published date from JSON-LD structured data
+							articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
+								if publishedAt != "" {
+									return
+								}
+								jsonText := script.Text()
+								// Extract datePublished from JSON-LD
+								if matches := reDatePublished.FindStringSubmatch(jsonText); len(matches) > 1 {
+									publishedAt = matches[1]
+								}
+							})
 
-						// Fallback: try time element
-						if publishedAt == "" {
-							timeElem := articleDoc.Find("time")
-							datetime, exists := timeElem.Attr("datetime")
-							if exists {
-								publishedAt = datetime
+							// Fallback: try time element
+							if publishedAt == "" {
+								timeElem := articleDoc.Find("time")
+								datetime, exists := timeElem.Attr("datetime")
+								if exists {
+									publishedAt = datetime
+								}
 							}
 						}
 					}
+					articleResp.Body.Close() // Always close body when err == nil
 				}
 			}
 		}

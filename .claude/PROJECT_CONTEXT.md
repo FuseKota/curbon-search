@@ -12,7 +12,7 @@
 
 ### 🟢 無料記事収集モード
 - **目的**: Carbon関連の無料記事を幅広く収集してメール配信/Notion統合
-- **コマンド**: `./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail`
+- **コマンド**: `./pipeline -sources=all-free -perSource=10 -sendEmail`
 - **特徴**: 高速実行（5-15秒）、コスト効率が高い
 - **用途**: 日次のカーボンニュースレビュー
 
@@ -99,31 +99,34 @@ cd /Users/kotafuse/Yasui/Prog/Test/carbon-relay
 go build -o pipeline ./cmd/pipeline
 ```
 
-### モード1: 無料記事収集
+### 無料記事収集
 ```bash
-# 全無料ソースから収集
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -out=free_articles.json
+# 全無料ソースから収集（all-freeで36ソース全て指定）
+./pipeline -sources=all-free -perSource=10 -out=free_articles.json
 
 # メール送信付き
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail
+./pipeline -sources=all-free -perSource=10 -sendEmail
+
+# Notion挿入付き
+./pipeline -sources=all-free -perSource=10 -notionClip
 ```
 
 ### 特定ソースのテスト
 ```bash
 # 日本市場のみ
-./pipeline -sources=jri,env-ministry,jpx,pwc-japan -perSource=5 -queriesPerHeadline=0
+./pipeline -sources=jri,env-ministry,jpx,pwc-japan -perSource=5
 
 # PwC Japanのテスト（複雑なJSON解析）
-./pipeline -sources=pwc-japan -perSource=5 -queriesPerHeadline=0 -out=/tmp/pwc_test.json
+./pipeline -sources=pwc-japan -perSource=5 -out=/tmp/pwc_test.json
 ```
 
 ### デバッグ
 ```bash
 # スクレイピングのデバッグ
-DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=5 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=5
 
 # 詳細デバッグ
-DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1
 ```
 
 ## 🔧 環境変数（.env）
@@ -144,10 +147,9 @@ EMAIL_TO=recipient@example.com
 ## 📊 主要なフラグ
 
 ```bash
--sources              # ソース指定（CSV形式）
+-sources              # ソース指定（CSV形式、"all-free"で全36ソース）
 -perSource            # ソースあたりの記事数（デフォルト: 30）
--queriesPerHeadline   # 検索クエリ数（0=検索なし、デフォルト: 0）
--hoursBack            # 指定時間以内の記事のみ（デフォルト: 0）
+-hoursBack            # 指定時間以内の記事のみ（デフォルト: 0、日付なし記事は保持）
 -out                  # 出力ファイル（省略時はstdout）
 -notionClip           # Notionにクリップ
 -notionPageID         # Notion親ページID（初回のみ）
@@ -157,7 +159,7 @@ EMAIL_TO=recipient@example.com
 ## 🐛 トラブルシューティング
 
 ### スクレイピングエラー
-- **確認**: `DEBUG_SCRAPING=1 ./pipeline -sources=問題のソース -perSource=1 -queriesPerHeadline=0`
+- **確認**: `DEBUG_SCRAPING=1 ./pipeline -sources=問題のソース -perSource=1`
 - **対処**: sources_*.go の該当関数のセレクタを確認
 
 ### Notionクリップでエラー
@@ -184,17 +186,28 @@ EMAIL_TO=recipient@example.com
 
 ## 🔄 最近の重要な変更（2026年2月4日）
 
-1. **有料ソース（Carbon Pulse, QCI）を削除**
-   - 無料ソースのみの運用に変更
-   - ドキュメント・コメントを更新
+### インフラ改善
+1. **HTTPクライアント共有（コネクションプーリング）**
+   - 全ソースで共有クライアントを使用
+   - MaxIdleConns: 100, MaxIdleConnsPerHost: 10
+   - タイムアウト: 30秒（20秒から増加）
 
-2. **PwC Japan実装修正**
-   - 3重エスケープJSON解析を改善
-   - 動作確認済み
+2. **WordPress API日付処理改善**
+   - `date`から`date_gmt`フィールドに変更
+   - UTC形式（Z suffix）で統一
 
-3. **Carbon Knowledge Hub改善**
-   - URL重複排除機能追加
-   - CSSセレクタ改善
+3. **日付フィルタリング改善**
+   - `FilterHeadlinesByHours`: 日付なし記事を保持
+   - `time.Now()`フォールバックを廃止（空文字列に変更）
+   - 全ソースでUTC形式に統一（JST→UTC）
+
+### ソース修正
+4. **Mizuho R&T**: 年を動的取得（`time.Now().Year()`）
+5. **リソースリーク修正**: JRI、環境省のdeferループ問題を修正
+6. **正規表現最適化**: パッケージレベルで事前コンパイル
+
+### CLI改善
+7. **`all-free`サポート**: `-sources=all-free`で全36ソース指定可能
 
 ## 💡 開発のヒント
 

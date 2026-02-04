@@ -46,12 +46,12 @@
 
 1. **テストを先に実行**
    ```bash
-   ./pipeline -sources={source-name} -perSource=5 -queriesPerHeadline=0 -out=/tmp/test.json
+   ./pipeline -sources={source-name} -perSource=5 -out=/tmp/test.json
    ```
 
 2. **デバッグフラグを活用**
    ```bash
-   DEBUG_SCRAPING=1 ./pipeline -sources={source-name} -perSource=1 -queriesPerHeadline=0
+   DEBUG_SCRAPING=1 ./pipeline -sources={source-name} -perSource=1
    ```
 
 3. **PwC Japanの特殊性に注意**
@@ -62,19 +62,6 @@
 4. **日本語ソースのキーワードフィルタリング**
    - JRI、環境省、METI、Mizuho R&Tはキーワードフィルタあり
    - `carbonKeywords`配列を参照
-
-### スコアリング（matcher.go）を変更する場合
-
-1. **IDF計算ロジックを理解する**
-   - セクション5参照（COMPLETE_IMPLEMENTATION_GUIDE_2026.md）
-
-2. **重みの調整は慎重に**
-   - 現在の重み: IDF加重リコール56% + Jaccard28% + Market6% + Topic4% + Geo2% + Recency4%
-
-3. **品質ブーストの変更**
-   - `.gov`ドメイン: +0.18
-   - `.pdf`: +0.18
-   - NGO: +0.12
 
 ### Notion統合（notion.go）を変更する場合
 
@@ -107,12 +94,12 @@
 
 ### ステップ2: 該当ソースを単独テスト
 ```bash
-./pipeline -sources={問題のソース} -perSource=1 -queriesPerHeadline=0
+./pipeline -sources={問題のソース} -perSource=1
 ```
 
 ### ステップ3: デバッグフラグを有効化
 ```bash
-DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 ```
 
 ### ステップ4: コードを確認
@@ -163,40 +150,14 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 3. **テストフェーズ**
    ```bash
-   ./pipeline -sources={new-source} -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_new.json
+   ./pipeline -sources={new-source} -perSource=5 -out=/tmp/test_new.json
    cat /tmp/test_new.json | jq '.'
    ```
 
 4. **ドキュメント更新**
    - docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.mdのセクション3に追加
    - README.mdのソースリストに追加
-
-### スコアリングアルゴリズムを調整する場合
-
-1. **現在のスコアを記録**
-   ```bash
-   ./pipeline ... -out=before.json
-   cat before.json | jq '[.[].relatedFree[]?.score] | add / length'
-   ```
-
-2. **変更を実装**
-   - `matcher.go`を編集
-
-3. **効果を測定**
-   ```bash
-   ./pipeline ... -out=after.json
-   cat after.json | jq '[.[].relatedFree[]?.score] | add / length'
-   ```
-
-4. **A/Bテスト**
-   - 同じ見出しで変更前後を比較
-
----
-
-## 🎓 学習リソース
-
-- **Notion API制限**: セクション6.3
-- **全36ソースの実装パターン**: セクション3
+   - config.goのdefaultSourcesに追加
 
 ---
 
@@ -248,7 +209,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 3. **最小構成でテスト**
    ```bash
-   ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
+   ./pipeline -sources=carbonherald -perSource=1
    ```
 
 4. **ドキュメントを参照**
@@ -258,13 +219,30 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 📊 プロジェクト統計
 
-- **総コード行数**: 約6,000行（Go）
 - **実装ソース数**: 36（無料ソースのみ）
+- **HTTPタイムアウト**: 30秒（共有クライアント）
 - **ステータス**: 本番環境対応済み ✅
 
 ---
 
-**最終更新**: 2026年2月4日（全36ソース対応）
+## 🔄 最近の技術的変更（2026年2月4日）
+
+### インフラ
+- **HTTPクライアント共有**: 全ソースで共有（コネクションプーリング有効）
+- **タイムアウト**: 20秒→30秒に増加
+- **正規表現**: パッケージレベルで事前コンパイル（パフォーマンス向上）
+
+### 日付処理
+- **WordPress API**: `date`→`date_gmt`フィールドに変更（UTC統一）
+- **全ソース**: UTC形式に統一（JST廃止）
+- **FilterHeadlinesByHours**: 日付なし記事を保持（time.Now()フォールバック廃止）
+
+### CLI
+- **all-free**: `-sources=all-free`で全36ソース指定可能
+
+---
+
+**最終更新**: 2026年2月4日
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

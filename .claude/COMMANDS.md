@@ -9,56 +9,41 @@ go build -o pipeline ./cmd/pipeline
 
 ---
 
-## 🟢 モード1: 無料記事収集モード
+## 🟢 無料記事収集モード
 
 ### 基本的な収集
 ```bash
-# 全無料ソースから10記事ずつ収集
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -out=free_articles.json
+# 全無料ソースから10記事ずつ収集（36ソース）
+./pipeline -sources=all-free -perSource=10 -out=free_articles.json
+
+# デフォルト（-sourcesを省略すると全ソース）
+./pipeline -perSource=10 -out=free_articles.json
 ```
 
 ### メール配信
 ```bash
 # 無料記事を収集してメール送信
-./pipeline -sources=all-free -perSource=15 -queriesPerHeadline=0 -sendEmail
+./pipeline -sources=all-free -perSource=15 -sendEmail
+```
+
+### Notion挿入
+```bash
+# 初回（データベース新規作成）
+./pipeline -sources=all-free -perSource=10 -notionClip -notionPageID=YOUR_PAGE_ID
+
+# 2回目以降（既存データベースに追加）
+./pipeline -sources=all-free -perSource=10 -notionClip
 ```
 
 ### 日本市場のみ
 ```bash
-./pipeline -sources=carboncredits-jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan -perSource=10 -queriesPerHeadline=0
+./pipeline -sources=carboncredits.jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan -perSource=10
 ```
 
----
-
-## 🔵 モード2: 有料記事マッチングモード
-
-### 基本的なマッチング
+### 時間フィルタ
 ```bash
-# 有料記事から無料記事を検索
-./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3 -out=matched.json
-```
-
-### Notionクリッピング（初回）
-```bash
-# データベースを新規作成
-./pipeline \
-  -sources=carbonpulse,qci \
-  -perSource=10 \
-  -queriesPerHeadline=3 \
-  -notionClip \
-  -notionPageID=YOUR_PAGE_ID
-```
-
-### Notionクリッピング（2回目以降）
-```bash
-# 既存データベースに追加
-./pipeline -sources=carbonpulse,qci -perSource=10 -queriesPerHeadline=3 -notionClip
-```
-
-### メール送信（Notionから）
-```bash
-# Notionにクリップした記事をメール送信
-./pipeline -sendEmail -emailDaysBack=1
+# 過去24時間の記事のみ（日付なし記事は保持）
+./pipeline -sources=all-free -perSource=10 -hoursBack=24
 ```
 
 ---
@@ -67,46 +52,42 @@ go build -o pipeline ./cmd/pipeline
 
 ### 単一ソーステスト
 ```bash
-# Carbon Pulse
-./pipeline -sources=carbonpulse -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_carbonpulse.json
-
 # PwC Japan（複雑な解析）
-./pipeline -sources=pwc-japan -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_pwc.json
+./pipeline -sources=pwc-japan -perSource=5 -out=/tmp/test_pwc.json
 
 # Carbon Knowledge Hub
-./pipeline -sources=carbon-knowledge-hub -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_ckh.json
+./pipeline -sources=carbon-knowledge-hub -perSource=5 -out=/tmp/test_ckh.json
+
+# METI
+./pipeline -sources=meti -perSource=5 -out=/tmp/test_meti.json
 ```
 
-### 全ソーステスト（ループ）
+### 全ソーステスト
 ```bash
-for source in carbonpulse qci sandbag carbon-brief climate-home carbon-herald carboncredits-com carbon-knowledge-hub; do
-  echo "Testing: $source"
-  ./pipeline -sources=$source -perSource=3 -queriesPerHeadline=0 -out=/tmp/test_${source}.json
-done
+# 全36ソースを一度にテスト
+./pipeline -sources=all-free -perSource=2 -out=/tmp/all_sources_test.json
+
+# ソース別件数を確認
+cat /tmp/all_sources_test.json | jq 'group_by(.source) | map({source: .[0].source, count: length})'
 ```
 
 ---
 
 ## 🐛 デバッグコマンド
 
-### OpenAI検索のデバッグ
-```bash
-DEBUG_OPENAI=1 ./pipeline -sources=carbonpulse -perSource=2 -queriesPerHeadline=1
-```
-
 ### スクレイピングのデバッグ
 ```bash
-DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=5 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=pwc-japan -perSource=5
 ```
 
 ### HTML出力のデバッグ
 ```bash
-DEBUG_HTML=1 ./pipeline -sources=carbon-knowledge-hub -perSource=1 -queriesPerHeadline=0
+DEBUG_HTML=1 ./pipeline -sources=carbon-knowledge-hub -perSource=1
 ```
 
 ### 完全デバッグ
 ```bash
-DEBUG_OPENAI_FULL=1 DEBUG_SCRAPING=1 DEBUG_HTML=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=1
+DEBUG_SCRAPING=1 DEBUG_HTML=1 ./pipeline -sources=meti -perSource=1
 ```
 
 ---
@@ -123,19 +104,14 @@ cat free_articles.json | jq 'length'
 cat free_articles.json | jq 'group_by(.source) | map({source: .[0].source, count: length})'
 ```
 
-### 関連記事ありの件数
-```bash
-cat matched.json | jq 'map(select(.relatedFree | length > 0)) | length'
-```
-
-### 平均マッチングスコア
-```bash
-cat matched.json | jq '[.[].relatedFree[]?.score] | add / length'
-```
-
 ### タイトル一覧表示
 ```bash
 cat free_articles.json | jq '.[] | .title'
+```
+
+### 日付確認
+```bash
+cat free_articles.json | jq '[.[] | {source: .source, publishedAt: .publishedAt}]'
 ```
 
 ---
@@ -145,7 +121,6 @@ cat free_articles.json | jq '.[] | .title'
 ### .envファイル作成
 ```bash
 cat > .env << 'EOF'
-OPENAI_API_KEY=sk-your-key-here
 NOTION_API_KEY=secret_your-key-here
 NOTION_PAGE_ID=your-page-id-here
 EMAIL_FROM=your-email@gmail.com
@@ -174,8 +149,11 @@ go mod tidy
 # Linux
 GOOS=linux GOARCH=amd64 go build -o pipeline-linux ./cmd/pipeline
 
-# macOS
+# macOS (Intel)
 GOOS=darwin GOARCH=amd64 go build -o pipeline-macos ./cmd/pipeline
+
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o pipeline-macos-arm64 ./cmd/pipeline
 
 # Windows
 GOOS=windows GOARCH=amd64 go build -o pipeline.exe ./cmd/pipeline
@@ -204,12 +182,12 @@ git push
 
 ### エラーのみ表示
 ```bash
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 2>&1 | grep ERROR
+./pipeline -sources=all-free -perSource=10 2>&1 | grep ERROR
 ```
 
 ### タイミング計測
 ```bash
-time ./pipeline -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
+time ./pipeline -sources=all-free -perSource=10 -out=/tmp/timing_test.json
 ```
 
 ---
@@ -223,18 +201,16 @@ time ./pipeline -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 ./pipeline \
   -sources=all-free \
   -perSource=15 \
-  -queriesPerHeadline=0 \
   -sendEmail
 ```
 
-### 週次の有料記事マッチング
+### 毎日のNotion保存
 ```bash
 #!/bin/bash
-# weekly_paid_matching.sh
+# daily_notion_save.sh
 ./pipeline \
-  -sources=carbonpulse,qci \
-  -perSource=50 \
-  -queriesPerHeadline=3 \
+  -sources=all-free \
+  -perSource=10 \
   -notionClip
 ```
 
@@ -243,9 +219,8 @@ time ./pipeline -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 #!/bin/bash
 # japan_deep_dive.sh
 ./pipeline \
-  -sources=carboncredits-jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan \
+  -sources=carboncredits.jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan \
   -perSource=20 \
-  -queriesPerHeadline=0 \
   -out=japan_articles_$(date +%Y%m%d).json
 ```
 
@@ -259,20 +234,51 @@ time ./pipeline -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 sed -i '' '/NOTION_DATABASE_ID/d' .env
 
 # 再度初回セットアップを実行
-./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0 -notionClip -notionPageID=YOUR_PAGE_ID
-```
-
-### OpenAI APIキーテスト
-```bash
-# 最小限のリクエストでテスト
-./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=1 -out=/tmp/openai_test.json
+./pipeline -sources=carbonherald -perSource=1 -notionClip -notionPageID=YOUR_PAGE_ID
 ```
 
 ### スクレイピング成功率チェック
 ```bash
 # 各ソースを1記事ずつテスト
-for source in carbonpulse qci sandbag carbon-brief pwc-japan; do
+for source in carbonherald sandbag carbon-brief pwc-japan meti; do
   echo "Testing $source..."
-  ./pipeline -sources=$source -perSource=1 -queriesPerHeadline=0 2>&1 | grep -E "ERROR|Collected"
+  ./pipeline -sources=$source -perSource=1 2>&1 | grep -E "ERROR|collected"
 done
 ```
+
+### タイムアウト問題の確認
+```bash
+# 遅いソースのテスト（タイムアウト30秒）
+time ./pipeline -sources=climatehomenews -perSource=1
+```
+
+---
+
+## 📋 利用可能なソース一覧（36ソース）
+
+### 日本市場（7）
+`carboncredits.jp`, `jri`, `env-ministry`, `meti`, `pwc-japan`, `mizuho-rt`, `jpx`
+
+### WordPress API（6）
+`carbonherald`, `climatehomenews`, `carboncredits.com`, `sandbag`, `ecosystem-marketplace`, `carbon-brief`
+
+### HTMLスクレイピング（6）
+`icap`, `ieta`, `energy-monitor`, `world-bank`, `newclimate`, `carbon-knowledge-hub`
+
+### VCM認証団体（4）
+`verra`, `gold-standard`, `acr`, `car`
+
+### 国際機関（2）
+`iisd`, `climate-focus`
+
+### 地域ETS（5）
+`eu-ets`, `uk-ets`, `carb`, `rggi`, `australia-cer`
+
+### RSSフィード（2）
+`politico-eu`, `euractiv`
+
+### 学術・研究（2）
+`arxiv`, `oies`
+
+### CDR関連（2）
+`puro-earth`, `isometric`

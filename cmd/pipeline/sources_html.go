@@ -46,7 +46,7 @@ var reDatePublished = regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
 func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://icapcarbonaction.com/en/news"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -140,7 +140,7 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	homeURL := "https://www.ieta.org/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", homeURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -248,7 +248,7 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.energymonitor.ai/news/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -361,7 +361,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.worldbank.org/en/topic/climatechange"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -470,7 +470,7 @@ func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline,
 func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://carbonmarketwatch.org/publications/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -563,7 +563,7 @@ func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]H
 func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://newclimate.org/news"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -649,7 +649,7 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.carbonknowledgehub.com"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -808,7 +808,7 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://verra.org/news/feed/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -917,7 +917,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.goldstandard.org/newsroom"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -1031,7 +1031,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://acrcarbon.org/news/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -1247,7 +1247,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://climateactionreserve.org/updates/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -1412,7 +1412,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://unfccc.int/news"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -1766,7 +1766,7 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	publicationsURL := "https://climatefocus.com/publications/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", publicationsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -1977,7 +1977,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://puro.earth/blog/our-blogs-1/feed"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -2118,7 +2118,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	resourcesURL := "https://isometric.com/writing"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", resourcesURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)

@@ -43,7 +43,7 @@ import (
 func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.politico.eu/section/energy/feed/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -144,7 +144,7 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 	// Use main feed (section feeds are Cloudflare-protected)
 	feedURL := "https://www.euractiv.com/feed/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -241,7 +241,7 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.gov.uk/government/publications.atom?topics%5B%5D=uk-emissions-trading-scheme"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -316,7 +316,7 @@ func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, err
 func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)

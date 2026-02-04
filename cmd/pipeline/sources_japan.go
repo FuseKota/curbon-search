@@ -65,7 +65,7 @@ var carbonKeywordsJapan = []string{
 func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	rssURL := "https://www.jri.co.jp/xml.jsp?id=12966" // JRI の RSSフィードURL
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", rssURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -169,7 +169,7 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	pressURL := "https://www.env.go.jp/press/"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", pressURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -303,7 +303,7 @@ func collectHeadlinesJPX(limit int, cfg headlineSourceConfig) ([]Headline, error
 	feedURL := "https://www.jpx.co.jp/rss/jpx-news.xml"
 
 	fp := gofeed.NewParser()
-	fp.Client = &http.Client{Timeout: cfg.Timeout}
+	fp.Client = cfg.Client
 
 	feed, err := fp.ParseURL(feedURL)
 	if err != nil {
@@ -631,12 +631,7 @@ func min(a, b int) int {
 func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.pwc.com/jp/ja/knowledge/column/sustainability.html"
 
-	client := &http.Client{
-		Timeout: cfg.Timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return nil // Follow redirects
-		},
-	}
+	client := cfg.Client // Use shared client (follows redirects by default)
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -786,7 +781,7 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 	currentYear := time.Now().Year()
 	newsURL := fmt.Sprintf("https://www.mizuho-rt.co.jp/publication/%d/index.html", currentYear)
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)

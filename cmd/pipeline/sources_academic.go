@@ -108,7 +108,7 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 		limit*10, // Request more to account for keyword filtering
 	)
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -275,7 +275,7 @@ func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		"https://www.oxfordenergy.org/electricity-programme/",
 	}
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 

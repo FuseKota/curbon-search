@@ -99,7 +99,7 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 func collectHeadlinesEUETS(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://climate.ec.europa.eu/news-other-reads/news_en"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -285,7 +285,7 @@ func collectHeadlinesEUETS(limit int, cfg headlineSourceConfig) ([]Headline, err
 func collectHeadlinesCARB(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://ww2.arb.ca.gov/news"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -425,7 +425,7 @@ func collectHeadlinesCARB(limit int, cfg headlineSourceConfig) ([]Headline, erro
 func collectHeadlinesRGGI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.rggi.org/news-releases/rggi-releases"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -614,7 +614,7 @@ func collectHeadlinesRGGI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 func collectHeadlinesAustraliaCER(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://cer.gov.au/news-and-media/news"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -815,7 +815,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg headlineSourceConfig) ([]Headline,
 	// Search gov.uk for UK ETS publications and news
 	searchURL := "https://www.gov.uk/search/all?keywords=%22UK+Emissions+Trading+Scheme%22&order=updated-newest"
 
-	client := &http.Client{Timeout: cfg.Timeout}
+	client := cfg.Client
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)

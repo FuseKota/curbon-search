@@ -202,13 +202,23 @@ var sourceCollectors = map[string]HeadlineCollector{
 type headlineSourceConfig struct {
 	UserAgent string        // HTTPリクエスト時のUser-Agentヘッダー
 	Timeout   time.Duration // HTTPリクエストのタイムアウト時間
+	Client    *http.Client  // 共有HTTPクライアント（コネクションプーリング有効）
 }
 
 // defaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func defaultHeadlineConfig() headlineSourceConfig {
+	timeout := 20 * time.Second
 	return headlineSourceConfig{
 		UserAgent: "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
-		Timeout:   20 * time.Second, // デフォルト20秒タイムアウト
+		Timeout:   timeout,
+		Client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 }
 
@@ -411,7 +421,7 @@ func min2(a, b int) int {
 //
 //	パースされたHTMLドキュメント、エラー
 func fetchDoc(u string, cfg headlineSourceConfig) (*goquery.Document, error) {
-	client := &http.Client{Timeout: cfg.Timeout} // タイムアウト付きHTTPクライアント
+	client := cfg.Client // 共有HTTPクライアントを使用
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err

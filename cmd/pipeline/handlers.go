@@ -8,6 +8,8 @@
 //   - handleEmailSend:          フルメールサマリー送信
 //   - handleShortEmailSend:     50文字ヘッドラインダイジェスト送信
 //   - handleListShortHeadlines: ShortHeadline診断表示
+//   - handleJSONOutput:         JSON出力
+//   - handleNotionClip:         Notionに記事を保存
 //
 // 【共通ヘルパー関数】
 //   - validateNotionEnv:    Notion環境変数の検証
@@ -269,15 +271,35 @@ func handleListShortHeadlines(emailDaysBack int) {
 }
 
 // =============================================================================
+// JSON出力ハンドラ
+// =============================================================================
+
+// handleJSONOutput は見出しをJSON形式で出力する
+//
+// cfg.OutFileが指定されている場合はファイルに、
+// 指定されていない場合はstdoutに出力する
+func handleJSONOutput(headlines []Headline, cfg *OutputConfig) {
+	if cfg.OutFile != "" {
+		if err := writeJSONFile(cfg.OutFile, headlines); err != nil {
+			fatalf("writing output: %v", err)
+		}
+	} else {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(headlines)
+	}
+}
+
+// =============================================================================
 // Notionハンドラ
 // =============================================================================
 
-// handleNotionClip は見出しと関連記事をNotionデータベースに保存する
+// handleNotionClip は見出しをNotionデータベースに保存する
 //
 // 【処理の流れ】
 //  1. Notion環境変数を確認
 //  2. 必要に応じて新規データベースを作成
-//  3. 各見出しと関連記事をクリップ
+//  3. 各見出しをクリップ
 func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
@@ -321,44 +343,15 @@ func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
 	fmt.Fprintln(os.Stderr, "\nClipping articles...")
 	clippedCount := 0
 	for _, h := range headlines {
-		if err := clipper.ClipHeadlineWithRelated(ctx, h); err != nil {
+		if err := clipper.ClipHeadline(ctx, h); err != nil {
 			warnf("failed to clip headline '%s': %v", h.Title, err)
 			continue
 		}
 		clippedCount++
-		fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s (%d related articles)\n", h.Title, len(h.RelatedFree))
+		fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s\n", truncateString(h.Title, 50))
 	}
 
 	fmt.Fprintln(os.Stderr, "========================================")
 	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
 	fmt.Fprintln(os.Stderr, "========================================")
-}
-
-// =============================================================================
-// JSON出力ハンドラ
-// =============================================================================
-
-// handleJSONOutput は見出しをJSON形式で出力する
-//
-// cfg.OutFileが指定されている場合はファイルに、
-// 指定されていない場合はstdoutに出力する
-func handleJSONOutput(headlines []Headline, cfg *OutputConfig) {
-	if cfg.OutFile != "" {
-		if err := writeJSONFile(cfg.OutFile, headlines); err != nil {
-			fatalf("writing output: %v", err)
-		}
-	} else {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(headlines)
-	}
-}
-
-// handleSaveFreePool は候補プールをファイルに保存する
-func handleSaveFreePool(globalPool []FreeArticle, cfg *OutputConfig) {
-	if cfg.SaveFree != "" {
-		if err := writeJSONFile(cfg.SaveFree, globalPool); err != nil {
-			fatalf("writing free pool: %v", err)
-		}
-	}
 }

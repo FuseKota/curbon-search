@@ -122,14 +122,27 @@ func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline
 	return out, nil
 }
 
-// collectHeadlinesEuractiv fetches articles from Euractiv ETS section RSS feed
+// carbonKeywordsEuractiv contains keywords for filtering Euractiv articles
+// to focus on carbon/climate-related content
+var carbonKeywordsEuractiv = []string{
+	"carbon", "emission", "ets", "climate", "co2", "greenhouse",
+	"net zero", "net-zero", "decarbonisation", "decarbonization",
+	"green deal", "fit for 55", "cbam", "carbon border",
+	"renewable", "energy transition", "paris agreement",
+	"methane", "carbon market", "carbon price", "carbon tax",
+}
+
+// collectHeadlinesEuractiv fetches articles from Euractiv main RSS feed
+// and filters for carbon/climate-related content
 //
-// Euractiv is a European news site focusing on EU policy. The ETS section
-// covers emissions trading scheme news and analysis.
+// Euractiv is a European news site focusing on EU policy.
+// Note: Section-specific feeds (like /section/emissions-trading-scheme/feed/)
+// are protected by Cloudflare, so we use the main feed with keyword filtering.
 //
-// URL: https://www.euractiv.com/section/emissions-trading-scheme/feed/
+// URL: https://www.euractiv.com/feed/
 func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	feedURL := "https://www.euractiv.com/section/emissions-trading-scheme/feed/"
+	// Use main feed (section feeds are Cloudflare-protected)
+	feedURL := "https://www.euractiv.com/feed/"
 
 	client := &http.Client{Timeout: cfg.Timeout}
 	req, err := http.NewRequest("GET", feedURL, nil)
@@ -170,6 +183,30 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 			continue
 		}
 
+		// Get content for keyword filtering
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		// Filter by keywords - main feed has all topics
+		titleLower := strings.ToLower(title)
+		excerptLower := strings.ToLower(excerpt)
+		hasKeyword := false
+		for _, kw := range carbonKeywordsEuractiv {
+			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
+				hasKeyword = true
+				break
+			}
+		}
+		if !hasKeyword {
+			continue
+		}
+
 		// Remove UTM tracking parameters
 		articleURL := item.Link
 		if idx := strings.Index(articleURL, "?utm_"); idx > 0 {
@@ -180,16 +217,6 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 		dateStr := time.Now().Format(time.RFC3339)
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
-		}
-
-		// Get content
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
 		}
 
 		out = append(out, Headline{

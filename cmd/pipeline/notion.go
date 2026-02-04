@@ -2,8 +2,7 @@
 // notion.go - Notion統合モジュール
 // =============================================================================
 //
-// このファイルはNotionデータベースへの記事保存機能を提供します。
-// Carbon Relayのモード2（有料記事マッチング）で使用されます。
+// このファイルはNotionデータベースへの記事保存・取得機能を提供します。
 //
 // =============================================================================
 // 【主要な機能】
@@ -14,47 +13,18 @@
 //    - 作成したデータベースIDを.envに自動保存
 //
 // 2. 記事のクリッピング
-//    - 有料記事の見出しをデータベースに保存
-//    - 関連する無料記事も一緒に保存
+//    - 記事の見出しをデータベースに保存
 //
 // 3. 記事の取得
 //    - Notionデータベースから最近の記事を取得
 //    - メール送信機能で使用
 //
 // =============================================================================
-// 【データベーススキーマ】
-// =============================================================================
-//
-// 以下のプロパティを持つデータベースを作成/使用:
-//
-//   ┌────────────────┬──────────────┬────────────────────────────────┐
-//   │ プロパティ名   │ 型           │ 説明                           │
-//   ├────────────────┼──────────────┼────────────────────────────────┤
-//   │ Title          │ Title        │ 記事タイトル                   │
-//   │ URL            │ URL          │ 記事URL                        │
-//   │ Source         │ Select       │ ソース名（22種類のオプション） │
-//   │ Type           │ Select       │ Headline / Related Free        │
-//   │ AI Summary     │ RichText     │ 記事の要約・本文               │
-//   │ Score          │ Number       │ マッチングスコア（0-1）        │
-//   │ Published Date │ Date         │ 記事の公開日                   │
-//   └────────────────┴──────────────┴────────────────────────────────┘
-//
-// =============================================================================
-// 【Notion API制限への対応】
-// =============================================================================
-//
-// - RichTextプロパティ: 最大2000文字
-//   → splitIntoRichTextBlocks() で分割して対応
-//
-// - ブロックコンテンツ: 最大2000文字/ブロック
-//   → createContentBlocks() で分割して対応
-//
-// =============================================================================
 // 【必要な環境変数】
 // =============================================================================
 //
-//   NOTION_TOKEN     - Notion Integration Token（必須）
-//   NOTION_PAGE_ID   - 新規DB作成時の親ページID
+//   NOTION_TOKEN       - Notion Integration Token（必須）
+//   NOTION_PAGE_ID     - 新規DB作成時の親ページID
 //   NOTION_DATABASE_ID - 既存DBのID（作成済みの場合）
 //
 // =============================================================================
@@ -63,7 +33,6 @@
 //
 // - Notion APIはOAuth認証ではなくIntegration Tokenを使用
 // - データベースIDは32文字のハイフン区切り文字列
-// - ページIDはデータベース内の個々のレコードを指す
 // - github.com/jomei/notionapi ライブラリを使用
 //
 // =============================================================================
@@ -83,23 +52,16 @@ import (
 // 設定・構造体
 // =============================================================================
 
-// NotionClipperConfig はNotion統合の設定を保持する
-type NotionClipperConfig struct {
-	Token      string // Notion Integration Token
-	PageID     string // 新規DB作成時の親ページID（オプション）
-	DatabaseID string // 既存DBのID（オプション）
-}
-
-// NotionClipper はNotionへの記事保存を担当する
+// NotionClipper はNotionへの記事保存・取得を担当する
 //
 // 【使用方法】
 //
 //	clipper, err := NewNotionClipper(token, dbID)
-//	err = clipper.ClipHeadlineWithRelated(ctx, headline)
+//	err = clipper.ClipHeadline(ctx, headline)
+//	headlines, err := clipper.FetchRecentHeadlines(ctx, daysBack)
 type NotionClipper struct {
-	client                     *notionapi.Client     // Notion APIクライアント
-	dbID                       notionapi.DatabaseID  // 操作対象のデータベースID
-	shortHeadlinePropertyEnsured bool                // ShortHeadlineプロパティ確認済みフラグ
+	client *notionapi.Client    // Notion APIクライアント
+	dbID   notionapi.DatabaseID // 操作対象のデータベースID
 }
 
 // NewNotionClipper creates a new Notion clipper
@@ -162,7 +124,7 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 						{Name: "Carbon Brief", Color: notionapi.ColorPurple},
 						{Name: "ICAP", Color: notionapi.ColorRed},
 						{Name: "IETA", Color: notionapi.ColorBrown},
-					{Name: "Energy Monitor", Color: notionapi.ColorPink},
+						{Name: "Energy Monitor", Color: notionapi.ColorPink},
 						{Name: "Japan Research Institute", Color: notionapi.ColorGreen},
 						{Name: "Japan Environment Ministry", Color: notionapi.ColorBlue},
 						{Name: "Japan Exchange Group (JPX)", Color: notionapi.ColorRed},
@@ -173,7 +135,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 						{Name: "Carbon Knowledge Hub", Color: notionapi.ColorOrange},
 						{Name: "PwC Japan", Color: notionapi.ColorPink},
 						{Name: "Mizuho Research & Technologies", Color: notionapi.ColorBlue},
-						{Name: "OpenAI(text_extract)", Color: notionapi.ColorGray},
 						{Name: "Free Article", Color: notionapi.ColorDefault},
 					},
 				},
@@ -189,14 +150,7 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 				Select: notionapi.Select{
 					Options: []notionapi.Option{
 						{Name: "Headline", Color: notionapi.ColorRed},
-						{Name: "Related Free", Color: notionapi.ColorGreen},
 					},
-				},
-			},
-			"Score": notionapi.NumberPropertyConfig{
-				Type: notionapi.PropertyConfigTypeNumber,
-				Number: notionapi.NumberFormat{
-					Format: notionapi.FormatNumber,
 				},
 			},
 			"Published Date": notionapi.DatePropertyConfig{
@@ -217,71 +171,11 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 	return string(db.ID), nil
 }
 
-// ensureShortHeadlineProperty は既存のデータベースにShortHeadlineプロパティを追加する
-//
-// 【背景】
-//   - 既存のデータベースにはShortHeadlineプロパティが存在しない場合がある
-//   - この関数はプロパティが存在しない場合のみ追加する
-//   - 既存プロパティのAI機能設定を上書きしないよう、存在確認してから追加
-func (nc *NotionClipper) ensureShortHeadlineProperty(ctx context.Context) error {
-	// 既に確認済みの場合はスキップ
-	if nc.shortHeadlinePropertyEnsured {
-		return nil
-	}
-
-	if nc.dbID == "" {
-		return nil
-	}
-
-	// データベースのスキーマを取得してShortHeadlineプロパティの存在を確認
-	db, err := nc.client.Database.Get(ctx, nc.dbID)
-	if err != nil {
-		if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to get database schema: %v\n", err)
-		}
-		nc.shortHeadlinePropertyEnsured = true
-		return nil
-	}
-
-	// ShortHeadlineプロパティが既に存在する場合はスキップ（AI機能設定を保持）
-	if _, exists := db.Properties["ShortHeadline"]; exists {
-		if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] ShortHeadline property already exists, skipping update\n")
-		}
-		nc.shortHeadlinePropertyEnsured = true
-		return nil
-	}
-
-	// ShortHeadlineプロパティが存在しない場合のみ追加
-	_, err = nc.client.Database.Update(ctx, nc.dbID, &notionapi.DatabaseUpdateRequest{
-		Properties: notionapi.PropertyConfigs{
-			"ShortHeadline": notionapi.RichTextPropertyConfig{
-				Type: notionapi.PropertyConfigTypeRichText,
-			},
-		},
-	})
-	if err != nil {
-		if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to add ShortHeadline property: %v\n", err)
-		}
-	} else {
-		if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] ShortHeadline property added to database\n")
-		}
-	}
-
-	nc.shortHeadlinePropertyEnsured = true
-	return nil
-}
-
 // ClipHeadline clips a headline to Notion
 func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	if nc.dbID == "" {
 		return fmt.Errorf("database ID not set")
 	}
-
-	// 既存DBにShortHeadlineプロパティがない場合に追加
-	nc.ensureShortHeadlineProperty(ctx)
 
 	properties := notionapi.Properties{
 		"Title": notionapi.TitleProperty{
@@ -322,8 +216,6 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 					Start: (*notionapi.Date)(&publishedTime),
 				},
 			}
-		} else if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse PublishedAt '%s': %v\n", h.PublishedAt, err)
 		}
 	}
 
@@ -358,124 +250,11 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	// Add full content as page blocks if available
 	if h.Excerpt != "" {
 		blocks := createContentBlocks(h.Excerpt)
-		if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Adding %d content blocks to page (total chars: %d)\n", len(blocks), len(h.Excerpt))
-		}
-
-		// Append blocks to the page
 		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
 			Children: blocks,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to add content blocks: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// ClipRelatedFree clips a related free article to Notion
-func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) error {
-	if nc.dbID == "" {
-		return fmt.Errorf("database ID not set")
-	}
-
-	properties := notionapi.Properties{
-		"Title": notionapi.TitleProperty{
-			Type: notionapi.PropertyTypeTitle,
-			Title: []notionapi.RichText{
-				{
-					Text: &notionapi.Text{
-						Content: rf.Title,
-					},
-				},
-			},
-		},
-		"URL": notionapi.URLProperty{
-			Type: notionapi.PropertyTypeURL,
-			URL:  rf.URL,
-		},
-		"Source": notionapi.SelectProperty{
-			Type: notionapi.PropertyTypeSelect,
-			Select: notionapi.Option{
-				Name: rf.Source,
-			},
-		},
-		"Type": notionapi.SelectProperty{
-			Type: notionapi.PropertyTypeSelect,
-			Select: notionapi.Option{
-				Name: "Related Free",
-			},
-		},
-		"Score": notionapi.NumberProperty{
-			Type:   notionapi.PropertyTypeNumber,
-			Number: rf.Score,
-		},
-	}
-
-	// Add Published Date if available
-	if rf.PublishedAt != "" {
-		publishedTime, err := parsePublishedDate(rf.PublishedAt)
-		if err == nil {
-			properties["Published Date"] = notionapi.DateProperty{
-				Type: notionapi.PropertyTypeDate,
-				Date: &notionapi.DateObject{
-					Start: (*notionapi.Date)(&publishedTime),
-				},
-			}
-		} else if os.Getenv("DEBUG_SCRAPING") != "" {
-			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse PublishedAt '%s': %v\n", rf.PublishedAt, err)
-		}
-	}
-
-	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
-	if rf.Excerpt != "" {
-		properties["AI Summary"] = notionapi.RichTextProperty{
-			Type:     notionapi.PropertyTypeRichText,
-			RichText: splitIntoRichTextBlocks(rf.Excerpt),
-		}
-	}
-
-	// Create page request (without content blocks - will add separately)
-	pageRequest := &notionapi.PageCreateRequest{
-		Parent: notionapi.Parent{
-			Type:       notionapi.ParentTypeDatabaseID,
-			DatabaseID: nc.dbID,
-		},
-		Properties: properties,
-	}
-
-	page, err := nc.client.Page.Create(ctx, pageRequest)
-	if err != nil {
-		return fmt.Errorf("failed to clip related free article: %w", err)
-	}
-
-	// Add full content as page blocks if available
-	if rf.Excerpt != "" {
-		blocks := createContentBlocks(rf.Excerpt)
-		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
-			Children: blocks,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to add content blocks: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// ClipHeadlineWithRelated clips a headline and all its related articles
-func (nc *NotionClipper) ClipHeadlineWithRelated(ctx context.Context, h Headline) error {
-	// Clip the headline
-	if err := nc.ClipHeadline(ctx, h); err != nil {
-		return fmt.Errorf("failed to clip headline: %w", err)
-	}
-
-	// Clip all related free articles
-	for _, rf := range h.RelatedFree {
-		if err := nc.ClipRelatedFree(ctx, rf); err != nil {
-			warnf("failed to clip related article %s: %v", rf.URL, err)
-			// Continue with other articles even if one fails
 		}
 	}
 
@@ -492,7 +271,6 @@ func splitIntoRichTextBlocks(text string) []notionapi.RichText {
 		return richTexts
 	}
 
-	// Split text into chunks of maxChars
 	for i := 0; i < len(text); i += maxChars {
 		end := i + maxChars
 		if end > len(text) {
@@ -509,12 +287,10 @@ func splitIntoRichTextBlocks(text string) []notionapi.RichText {
 }
 
 // createContentBlocks splits long text into Notion paragraph blocks
-// Notion has a 2000 character limit per block, so we split long text
 func createContentBlocks(content string) notionapi.Blocks {
 	const maxBlockSize = 2000
 	blocks := notionapi.Blocks{}
 
-	// Split by paragraphs first (double newlines)
 	paragraphs := []string{}
 	currentPara := ""
 	for _, line := range strings.Split(content, "\n") {
@@ -534,7 +310,6 @@ func createContentBlocks(content string) notionapi.Blocks {
 		paragraphs = append(paragraphs, strings.TrimSpace(currentPara))
 	}
 
-	// Create blocks, splitting if any paragraph exceeds max size
 	for _, para := range paragraphs {
 		if len(para) <= maxBlockSize {
 			blocks = append(blocks, notionapi.ParagraphBlock{
@@ -553,7 +328,6 @@ func createContentBlocks(content string) notionapi.Blocks {
 				},
 			})
 		} else {
-			// Split long paragraph into chunks
 			for i := 0; i < len(para); i += maxBlockSize {
 				end := i + maxBlockSize
 				if end > len(para) {
@@ -582,26 +356,22 @@ func createContentBlocks(content string) notionapi.Blocks {
 }
 
 // parsePublishedDate parses published date from various formats
-// WordPress API may return dates without timezone, so we try multiple formats
 func parsePublishedDate(dateStr string) (time.Time, error) {
-	// Try RFC3339 format first (with timezone)
+	// Try RFC3339 format first
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err == nil {
 		return t, nil
 	}
 
-	// Try ISO 8601 with timezone offset without colon (e.g., +0000)
-	// Gold Standard returns: "2025-12-17T08:00:00+0000"
+	// Try ISO 8601 with timezone offset without colon
 	t, err = time.Parse("2006-01-02T15:04:05-0700", dateStr)
 	if err == nil {
 		return t, nil
 	}
 
 	// Try format without timezone (assume UTC)
-	// WordPress often returns: "2025-12-26T14:42:50"
 	t, err = time.Parse("2006-01-02T15:04:05", dateStr)
 	if err == nil {
-		// Treat as UTC since no timezone info
 		return t.UTC(), nil
 	}
 
@@ -612,6 +382,39 @@ func parsePublishedDate(dateStr string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
+}
+
+// appendToEnvFile appends or updates a key-value pair in .env file
+func appendToEnvFile(filename, key, value string) error {
+	content := ""
+	data, err := os.ReadFile(filename)
+	if err == nil {
+		content = string(data)
+	}
+
+	lines := strings.Split(content, "\n")
+	keyExists := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, key+"=") || strings.HasPrefix(line, "#"+key+"=") {
+			lines[i] = key + "=" + value
+			keyExists = true
+			break
+		}
+	}
+
+	if !keyExists {
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		lines = append(lines, key+"="+value)
+	}
+
+	newContent := strings.Join(lines, "\n")
+	if err := os.WriteFile(filename, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write .env file: %w", err)
+	}
+
+	return nil
 }
 
 // FetchRecentHeadlines fetches headlines from Notion database
@@ -715,59 +518,4 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 	}
 
 	return allHeadlines, nil
-}
-
-// =============================================================================
-// 環境変数ファイル操作
-// =============================================================================
-
-// appendToEnvFile は.envファイルにキーと値のペアを追加または更新する
-//
-// キーが既に存在する場合は値を更新、存在しない場合は末尾に追加する。
-// コメントアウトされたキー（#KEY=value）も検出して上書きする。
-//
-// 【使用場面】
-//
-//	新しいNotionデータベースを作成した際に、NOTION_DATABASE_IDを
-//	.envファイルに自動保存する
-//
-// 引数:
-//
-//	filename: .envファイルのパス
-//	key:      環境変数名（例: "NOTION_DATABASE_ID"）
-//	value:    設定する値
-func appendToEnvFile(filename, key, value string) error {
-	// 既存の.envファイルを読み込む（存在しない場合は空文字）
-	content := ""
-	data, err := os.ReadFile(filename)
-	if err == nil {
-		content = string(data)
-	}
-
-	// キーが既に存在するかチェック
-	lines := strings.Split(content, "\n")
-	keyExists := false
-	for i, line := range lines {
-		if strings.HasPrefix(line, key+"=") || strings.HasPrefix(line, "#"+key+"=") {
-			lines[i] = key + "=" + value
-			keyExists = true
-			break
-		}
-	}
-
-	// キーが存在しない場合は末尾に追加
-	if !keyExists {
-		if content != "" && !strings.HasSuffix(content, "\n") {
-			content += "\n"
-		}
-		lines = append(lines, key+"="+value)
-	}
-
-	// ファイルに書き戻す
-	newContent := strings.Join(lines, "\n")
-	if err := os.WriteFile(filename, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write .env file: %w", err)
-	}
-
-	return nil
 }

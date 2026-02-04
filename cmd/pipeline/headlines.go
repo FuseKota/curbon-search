@@ -336,7 +336,8 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 //	)
 func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	// WordPress REST API endpoint - get full content for free articles
-	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", baseURL, limit)
+	// Use date_gmt for consistent UTC timestamps across all WordPress sources
+	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date_gmt,content", baseURL, limit)
 
 	// httpGetJSON is defined in utils.go
 	var posts []WPPost
@@ -357,11 +358,18 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 		content := cleanHTMLTags(p.Content.Rendered)
 		content = strings.TrimSpace(content)
 
+		// Convert date_gmt to RFC3339 format with UTC timezone indicator
+		// WordPress date_gmt format: "2026-01-05T14:42:50"
+		publishedAt := ""
+		if p.DateGMT != "" {
+			publishedAt = p.DateGMT + "Z" // Add Z suffix to indicate UTC
+		}
+
 		out = append(out, Headline{
 			Source:      sourceName,
 			Title:       title,
 			URL:         p.Link,
-			PublishedAt: p.Date,  // WordPress API returns RFC3339 format
+			PublishedAt: publishedAt,
 			Excerpt:     content, // Store full content in Excerpt field for free articles
 			IsHeadline:  true,
 		})

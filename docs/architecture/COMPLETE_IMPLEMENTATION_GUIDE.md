@@ -27,11 +27,9 @@
 
 **Carbon Relay**は、カーボン関連ニュースの収集・分析・配信を自動化するGo製インテリジェンスシステムです。
 
-### 1.2 2つの運用モード
+### 1.2 運用モード
 
-本システムは、以下の2つの異なる運用モードをサポートします：
-
-#### 🟢 モード1: 無料記事収集モード（Free Article Collection Mode）
+#### 🟢 無料記事収集モード（Free Article Collection Mode）
 
 **目的**: Carbon関連の無料記事を幅広く収集し、要約してメール配信
 
@@ -41,74 +39,35 @@ Carbon関連の無料記事を幅広く確認
     ↓
 その日のニュースをまとめて、各記事300文字程度のNotionAiで要約
     ↓
-まとめたニュースを安井宛にメールする
+まとめたニュースをメール配信
 ```
 
 **使用例**:
 ```bash
-# 16の無料ソースから幅広く記事を収集（検索なし）
+# 20の無料ソースから幅広く記事を収集
 ./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail
 ```
 
 **特徴**:
-- 有料記事のヘッドラインは使用しない
-- 16の無料ソースから直接記事を収集
-- OpenAI検索は不要（queriesPerHeadline=0）
-- メールで要約を配信
-
----
-
-#### 🔵 モード2: 有料記事マッチングモード（Paid Article Matching Mode）
-
-**目的**: 有料記事のヘッドラインから関連する無料の一次情報源を発見
-
-**フロー**:
-```
-Carbon関連の有料記事のヘッドラインだけ確認して、無料記事を探す
-    ↓
-個別記事をNotion DBにClippingする
-    ↓
-Notion DBでAI要約をする
-    ↓
-【Weekly】Notion DBに格納されたニュースをカテゴリごとに抽出して並べる
-    ↓
-記事の内容・参照元をチェックしながら内容を理解する
-```
-
-**使用例**:
-```bash
-# Carbon PulseとQCIのヘッドラインから無料記事を検索してNotionにクリップ
-./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3 -notionClip
-```
-
-**特徴**:
-- 有料記事（Carbon Pulse、QCI）のヘッドラインを分析
-- OpenAI検索で関連無料記事を発見
-- IDF（逆文書頻度）ベースのマッチングアルゴリズム
-- Notion Databaseへの自動クリッピング
-- AI要約フィールドでの整理
+- 20の無料ソースから直接記事を収集
+- 高速実行（5-15秒）
+- メール配信・Notion統合に対応
 
 ---
 
 ### 1.3 主要機能
 
-**共通機能**:
-- ✅ 18の情報ソースからのニュース自動収集（有料2 + 無料16）
+- ✅ 20の情報ソースからのニュース自動収集
 - ✅ HTML/RSS/WordPress API によるスクレイピング
 - ✅ メール送信機能（Gmail SMTP）
-
-**モード2専用機能**:
-- ✅ OpenAI Responses APIを使用したWeb検索
-- ✅ IDF（逆文書頻度）ベースの高度なマッチングアルゴリズム
 - ✅ Notion Databaseへの自動クリッピング
-- ✅ AI要約フィールドの生成
 
 ### 1.4 プロジェクト統計
 
 | 項目 | 値 |
 |------|-----|
 | 総コード行数 | 4,751行（Go） |
-| 実装ソース数 | 18（有料2 + 無料16） |
+| 実装ソース数 | 20（無料ソースのみ） |
 | テスト成功率 | 100%（15/15テスト合格） |
 | 実装期間 | 2025年12月29日 - 2026年1月4日 |
 | ステータス | 本番環境対応済み |
@@ -310,78 +269,11 @@ Notion DBでAI要約をする
 
 ---
 
-## 3. 全18ソースの実装詳細
+## 3. 全20ソースの実装詳細
 
-### 3.1 有料ソース（見出しのみ）- 2ソース
+### 3.1 無料ソース - 日本市場（7ソース）
 
-#### ソース1: Carbon Pulse
-**実装**: `collectHeadlinesCarbonPulse()`
-**手法**: HTML Scraping（goquery）
-**収集URL**:
-- `https://carbon-pulse.com/` - トップページ（excerpt付き）
-- `https://carbon-pulse.com/daily-timeline/`
-- `https://carbon-pulse.com/category/newsletters/`
-
-**特徴**:
-- トップページの投稿divから記事excerptを抽出
-- 複数のコンテンツ抽出戦略
-- メタデータとナビゲーションテキストをフィルタリング
-- Carbon PulseドメインURLのみ検証
-- 記事ID用正規表現パターン: `/^\d+$/`
-
-**Excerpt サポート**: ✅ はい（トップページから）
-
-**コード例**:
-```go
-// トップページからexcerptを抽出
-doc.Find(".post").Each(func(_ int, post *goquery.Selection) {
-    titleLink := post.Find("h2 a")
-    title := strings.TrimSpace(titleLink.Text())
-
-    // Excerpt抽出（複数セレクタを試行）
-    excerpt := ""
-    excerptElem := post.Find(".entry-content, .excerpt, p")
-    if excerptElem.Length() > 0 {
-        excerpt = cleanExcerpt(excerptElem.Text())
-    }
-})
-```
-
-#### ソース2: QCI (Quantum Commodity Intelligence)
-**実装**: `collectHeadlinesQCI()`
-**手法**: HTML Scraping（goquery）
-**収集URL**: `https://www.qcintel.com/carbon/`
-
-**特徴**:
-- タイトルフィルタリング付きリンク抽出
-- URLパターンマッチング: `/carbon/article/`
-- 「Read more」と短いリンクテキストをフィルタリング
-
-**Excerpt サポート**: ❌ なし
-
-**コード例**:
-```go
-doc.Find("a").Each(func(_ int, link *goquery.Selection) {
-    href, _ := link.Attr("href")
-
-    // QCI記事URLのみ
-    if !reQCIArticle.MatchString(href) {
-        return
-    }
-
-    title := strings.TrimSpace(link.Text())
-    // 短いテキストやナビゲーションをフィルタ
-    if len(title) < 15 || strings.Contains(strings.ToLower(title), "read more") {
-        return
-    }
-})
-```
-
----
-
-### 3.2 無料ソース - 日本市場（7ソース）
-
-#### ソース3: CarbonCredits.jp
+#### ソース1: CarbonCredits.jp
 **実装**: `collectHeadlinesCarbonCreditsJP()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://carboncredits.jp/wp-json/wp/v2/posts`
@@ -414,7 +306,7 @@ for _, p := range posts {
 }
 ```
 
-#### ソース4: Japan Research Institute (JRI - 日本総研)
+#### ソース2: Japan Research Institute (JRI - 日本総研)
 **実装**: `collectHeadlinesJRI()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.jri.co.jp/xml.jsp?id=12966`
@@ -443,7 +335,7 @@ for _, item := range feed.Items {
 }
 ```
 
-#### ソース5: Japan Environment Ministry（環境省）
+#### ソース3: Japan Environment Ministry（環境省）
 **実装**: `collectHeadlinesEnvMinistry()`
 **手法**: HTML Scraping + キーワードフィルタリング
 **収集URL**: `https://www.env.go.jp/press/`
@@ -473,7 +365,7 @@ fmt.Sscanf(dateText, "%d年%d月%d日", &year, &month, &day)
 currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 ```
 
-#### ソース6: Japan Exchange Group (JPX)
+#### ソース4: Japan Exchange Group (JPX)
 **実装**: `collectHeadlinesJPX()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.jpx.co.jp/rss/jpx-news.xml`
@@ -486,7 +378,7 @@ currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 **ステータス**: ✅ 完全動作
 
-#### ソース7: Japan Ministry of Economy (METI - 経済産業省)
+#### ソース5: Japan Ministry of Economy (METI - 経済産業省)
 **実装**: `collectHeadlinesMETI()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.chusho.meti.go.jp/rss/index.xml`
@@ -498,7 +390,7 @@ currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 **ステータス**: ✅ 完全動作（マッチなしの場合空を返す）
 
-#### ソース8: Mizuho Research & Technologies（みずほリサーチ＆テクノロジーズ）
+#### ソース6: Mizuho Research & Technologies（みずほリサーチ＆テクノロジーズ）
 **実装**: `collectHeadlinesMizuhoRT()`
 **手法**: HTML Scraping + キーワードフィルタリング
 **収集URL**: `https://www.mizuho-rt.co.jp/publication/2025/index.html`
@@ -520,7 +412,7 @@ if len(matches) == 4 {
 
 **ステータス**: ✅ 完全動作
 
-#### ソース9: PwC Japan
+#### ソース7: PwC Japan
 **実装**: `collectHeadlinesPwCJapan()`
 **手法**: HTML Scraping（複雑なJSON抽出）
 **収集URL**: `https://www.pwc.com/jp/ja/knowledge/column/sustainability.html`
@@ -564,9 +456,9 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 ---
 
-### 3.3 無料ソース - ヨーロッパ＆国際（6ソース）
+### 3.2 無料ソース - ヨーロッパ＆国際（6ソース）
 
-#### ソース10: Sandbag
+#### ソース8: Sandbag
 **実装**: `collectHeadlinesSandbag()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://sandbag.be/wp-json/wp/v2/posts`
@@ -575,7 +467,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: HTMLクリーニング付き完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース11: Ecosystem Marketplace
+#### ソース9: Ecosystem Marketplace
 **実装**: `collectHeadlinesEcosystemMarketplace()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://www.ecosystemmarketplace.com/wp-json/wp/v2/posts`
@@ -584,7 +476,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: 完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース12: Carbon Brief
+#### ソース10: Carbon Brief
 **実装**: `collectHeadlinesCarbonBrief()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://www.carbonbrief.org/wp-json/wp/v2/posts`
@@ -593,7 +485,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: 完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース13: Climate Home News
+#### ソース11: Climate Home News
 **実装**: `collectHeadlinesClimateHomeNews()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://www.climatechangenews.com/wp-json/wp/v2/posts`
@@ -602,7 +494,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: 完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース14: ICAP (International Carbon Action Partnership)
+#### ソース12: ICAP (International Carbon Action Partnership)
 **実装**: `collectHeadlinesICAP()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://icapcarbonaction.com/en/news`
@@ -615,7 +507,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 **ステータス**: ✅ 完全動作
 
-#### ソース15: IETA (International Emissions Trading Association)
+#### ソース13: IETA (International Emissions Trading Association)
 **実装**: `collectHeadlinesIETA()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://www.ieta.org/`
@@ -630,9 +522,9 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 ---
 
-### 3.4 無料ソース - グローバルメディア（3ソース）
+### 3.3 無料ソース - グローバルメディア（3ソース）
 
-#### ソース16: Carbon Herald
+#### ソース14: Carbon Herald
 **実装**: `collectHeadlinesCarbonHerald()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://carbonherald.com/wp-json/wp/v2/posts`
@@ -641,7 +533,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: 完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース17: CarbonCredits.com
+#### ソース15: CarbonCredits.com
 **実装**: `collectHeadlinesCarbonCreditscom()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://carboncredits.com/wp-json/wp/v2/posts`
@@ -650,7 +542,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 **コンテンツ**: 完全記事
 **ステータス**: ✅ 完全動作
 
-#### ソース18: Energy Monitor
+#### ソース16: Energy Monitor
 **実装**: `collectHeadlinesEnergyMonitor()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://www.energymonitor.ai/news/`
@@ -665,7 +557,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 ---
 
-### 3.5 追加実装ソース
+### 3.4 追加実装ソース
 
 #### Carbon Knowledge Hub
 **実装**: `collectHeadlinesCarbonKnowledgeHub()`
@@ -1371,8 +1263,6 @@ if score < minScore {
 **Sourceオプション（色分け）**:
 ```go
 sourceOptions := []notionapi.Option{
-    {Name: "Carbon Pulse", Color: notionapi.ColorRed},
-    {Name: "QCI", Color: notionapi.ColorOrange},
     {Name: "CarbonCredits.jp", Color: notionapi.ColorYellow},
     {Name: "Carbon Herald", Color: notionapi.ColorGreen},
     {Name: "Climate Home News", Color: notionapi.ColorBlue},
@@ -1838,8 +1728,6 @@ defaultSources := []string{
 **ソース名の対応**:
 | CLI名 | 実装関数 | ソース名 |
 |-------|----------|---------|
-| carbonpulse | collectHeadlinesCarbonPulse | Carbon Pulse |
-| qci | collectHeadlinesQCI | QCI |
 | carboncredits.jp | collectHeadlinesCarbonCreditsJP | CarbonCredits.jp |
 | jri | collectHeadlinesJRI | Japan Research Institute |
 | env-ministry | collectHeadlinesEnvMinistry | Environment Ministry |
@@ -1857,18 +1745,14 @@ defaultSources := []string{
 
 ## 8. 使用方法と実行例
 
-このシステムには**2つの運用モード**があります。使用目的に応じて適切なモードを選択してください。
-
----
-
-### 8.1 🟢 モード1: 無料記事収集モード
+### 8.1 🟢 無料記事収集モード
 
 **使用シーン**: Carbon関連の無料記事を幅広く収集し、要約してメール配信したい場合
 
 #### 基本コマンド
 
 ```bash
-# 無料ソースから記事を収集（有料ソースを使わない）
+# 無料ソースから記事を収集
 ./pipeline \
   -sources=sandbag,carbon-brief,climate-home,carbon-herald,carboncredits-com,carbon-knowledge-hub,ecosystem,icap,ieta,energy-monitor,carbon-market-watch,new-climate,carboncredits-jp,jri,env-ministry,jpx \
   -perSource=10 \
@@ -1888,226 +1772,106 @@ defaultSources := []string{
 ```
 
 **特徴**:
-- ✅ 有料記事（Carbon Pulse、QCI）は使用しない
-- ✅ 16の無料ソースから直接記事を収集
-- ✅ OpenAI検索は不要（`-queriesPerHeadline=0`）
-- ✅ コスト効率が高い（OpenAI API呼び出しなし）
+- ✅ 20の無料ソースから直接記事を収集
 - ✅ 実行速度が速い（5-15秒程度）
+- ✅ メール配信・Notion統合に対応
 
 **ユースケース**:
 - 日次の無料記事レビュー
 - 業界トレンドの幅広い把握
-- コストを抑えた運用
 
 ---
 
-### 8.2 🔵 モード2: 有料記事マッチングモード
+### 8.2 詳細なワークフロー例
 
-**使用シーン**: 有料記事のヘッドラインから関連する無料の一次情報源を発見したい場合
+#### ワークフロー1: 全ソースから収集
 
-#### 基本コマンド
-
-```bash
-# 有料記事から無料記事を検索してマッチング
-./pipeline \
-  -sources=carbonpulse,qci \
-  -perSource=5 \
-  -queriesPerHeadline=3 \
-  -topK=3 \
-  -out=matched.json
-```
-
-#### Notionクリッピング付き（推奨）
-
-```bash
-# 初回実行: データベース作成
-./pipeline \
-  -sources=carbonpulse,qci \
-  -perSource=10 \
-  -queriesPerHeadline=3 \
-  -notionClip \
-  -notionPageID=YOUR_PAGE_ID
-
-# 2回目以降: 既存DBに追加
-./pipeline \
-  -sources=carbonpulse,qci \
-  -perSource=10 \
-  -queriesPerHeadline=3 \
-  -notionClip
-```
-
-**特徴**:
-- ✅ 有料記事のヘッドラインを分析
-- ✅ OpenAI検索で関連無料記事を発見
-- ✅ IDF（逆文書頻度）ベースの高精度マッチング
-- ✅ Notion DatabaseでAI要約を整理
-- ✅ Weekly レビューに最適
-
-**ユースケース**:
-- 有料記事の裏付け情報収集
-- 一次情報源の発見
-- Notionでの体系的な整理
-
-**処理時間**:
-- 10見出し × 3クエリ = 30 OpenAI API呼び出し
-- 約60-90秒
-
----
-
-### 8.3 詳細なワークフロー例
-
-#### ワークフロー1: 見出しのみ収集（検索なし）
-
-**目的**: OpenAI APIを使わずに見出しとexcerptを収集
+**目的**: 全無料ソースから見出しとexcerptを収集
 
 **コマンド**:
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=30 \
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
   -queriesPerHeadline=0 \
   -out=headlines.json
 ```
 
 **出力**:
-- `headlines.json`: Headline[]配列（excerptあり、relatedFreeなし）
+- `headlines.json`: Headline[]配列（excerptあり）
 
 **ユースケース**:
-- OpenAI APIキーがない場合
-- 見出しのみが必要な場合
-- 開発・デバッグ時
+- 日次のニュースレビュー
+- 業界トレンドの把握
 
 ---
 
-#### ワークフロー2: 完全なパイプライン（検索+マッチング）
+#### ワークフロー2: Notionクリッピング
 
-**目的**: 見出し収集 → Web検索 → マッチング
+**目的**: 記事をNotionにクリッピング
 
 **コマンド**:
 ```bash
-./carbon-relay \
-  -sources=carbonpulse,sandbag,carbon-brief \
+./pipeline \
+  -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=3 \
-  -topK=3 \
-  -out=matched.json
-```
-
-**出力**:
-- `matched.json`: Headline[]配列（relatedFree含む）
-
-**処理時間**:
-- 10見出し × 3クエリ = 30 OpenAI API呼び出し
-- 約60-90秒
-
----
-
-#### ワークフロー3: Notionクリッピング
-
-**初回実行（データベース作成）**:
-```bash
-./carbon-relay \
-  -sources=carbonpulse,sandbag \
-  -perSource=5 \
-  -queriesPerHeadline=3 \
-  -notionClip \
-  -notionPageID=1234567890abcdef1234567890abcdef
-```
-
-**出力**:
-- 新規Notionデータベース作成
-- `.env`に`NOTION_DATABASE_ID`自動保存
-- 5見出し + 関連記事をクリップ
-
-**2回目以降の実行**:
-```bash
-./carbon-relay \
-  -sources=carbonpulse,sandbag \
-  -perSource=5 \
-  -queriesPerHeadline=3 \
+  -queriesPerHeadline=0 \
   -notionClip
 ```
 
 **出力**:
-- 既存データベースに追加クリップ
-- `.env`の`NOTION_DATABASE_ID`を自動使用
+- Notionデータベースに記事が追加される
 
 ---
 
-#### ワークフロー4: メール送信
+#### ワークフロー3: メール送信
 
-**ステップ1: Notionにクリップ**:
+**コマンド**:
 ```bash
-./carbon-relay \
-  -sources=carbonpulse,qci \
-  -perSource=20 \
-  -queriesPerHeadline=3 \
-  -notionClip
-```
-
-**ステップ2: メール送信（翌日実行）**:
-```bash
-./carbon-relay \
-  -sendEmail \
-  -emailDaysBack=1
+./pipeline \
+  -sources=all-free \
+  -perSource=10 \
+  -queriesPerHeadline=0 \
+  -sendEmail
 ```
 
 **出力**:
 - `EMAIL_TO`にメールサマリー送信
-- 過去1日間のNotionエントリを含む
 
 ---
 
-#### ワークフロー5: デバッグモード
-
-**OpenAI検索のデバッグ**:
-```bash
-DEBUG_OPENAI=1 ./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=2 \
-  -queriesPerHeadline=3 \
-  -out=debug.json
-```
+#### ワークフロー4: デバッグモード
 
 **スクレイピングのデバッグ**:
 ```bash
-DEBUG_SCRAPING=1 ./carbon-relay \
-  -sources=pwc-japan \
-  -perSource=5 \
-  -queriesPerHeadline=0
-```
-
-**完全デバッグ**:
-```bash
-DEBUG_OPENAI_FULL=1 DEBUG_SCRAPING=1 DEBUG_HTML=1 ./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=1 \
-  -queriesPerHeadline=1
+DEBUG_SCRAPING=1 ./pipeline \
+  -sources=carbonherald \
+  -perSource=2 \
+  -queriesPerHeadline=0 \
+  -out=debug.json
 ```
 
 ---
 
-### 8.4 高度な使用例
-
-#### モード別の組み合わせ例
+### 8.3 高度な使用例
 
 #### 例1: 日本市場のみに焦点
 
 ```bash
-./carbon-relay \
-  -sources=jri,env-ministry,jpx,meti,pwc-japan,mizuho-rt \
+./pipeline \
+  -sources=jri,env-ministry,jpx,meti,pwc-japan,mizuho-rt,carboncredits.jp \
   -perSource=20 \
-  -queriesPerHeadline=3 \
+  -queriesPerHeadline=0 \
   -notionClip
 ```
 
 #### 例2: EU市場のみに焦点
 
 ```bash
-./carbon-relay \
-  -sources=sandbag,icap,ieta \
+./pipeline \
+  -sources=sandbag,icap,ieta,politico-eu \
   -perSource=15 \
-  -queriesPerHeadline=3 \
+  -queriesPerHeadline=0 \
   -notionClip
 ```
 
@@ -2714,17 +2478,11 @@ time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 
 本システムは**2つの異なる運用モード**をサポートします：
 
-#### 🟢 モード1: 無料記事収集モード
+#### 🟢 無料記事収集モード
 - **用途**: 幅広いCarbon関連無料記事の収集と要約配信
 - **コマンド例**: `./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail`
-- **特徴**: コスト効率が高く、高速（OpenAI API不要）
+- **特徴**: コスト効率が高く、高速実行
 - **詳細**: セクション1.2、セクション8.1
-
-#### 🔵 モード2: 有料記事マッチングモード
-- **用途**: 有料記事ヘッドラインから無料一次情報源の発見
-- **コマンド例**: `./pipeline -sources=carbonpulse,qci -queriesPerHeadline=3 -notionClip`
-- **特徴**: AI検索とマッチング、Notion統合、Weekly整理
-- **詳細**: セクション1.2、セクション8.2
 
 ---
 
@@ -2732,11 +2490,10 @@ time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 
 新しいClaude Codeセッションで参照する際は、以下のセクションを参照してください：
 
-- **2つのモードの理解**: セクション1.2
+- **運用モードの理解**: セクション1.2
 - **使用方法とコマンド例**: セクション8.1、8.2
 - **アーキテクチャ理解**: セクション2
 - **ソース追加**: セクション3
-- **アルゴリズム調整**: セクション5
 - **Notion統合**: セクション6
 - **トラブルシューティング**: セクション10
 
@@ -2748,8 +2505,8 @@ time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 
 **主要ファイル**:
 - `cmd/pipeline/main.go` - エントリーポイント
-- `cmd/pipeline/headlines.go` - 18ソース実装
-- `cmd/pipeline/matcher.go` - スコアリングロジック
+- `internal/pipeline/headlines.go` - 共通ロジック
+- `internal/pipeline/sources_*.go` - ソース実装
 - `.env` - 環境変数設定
 
 **ステータス**: 本番環境対応済み ✅

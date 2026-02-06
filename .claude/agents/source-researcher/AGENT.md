@@ -100,7 +100,6 @@ I will:
 ## Integration with Existing Sources
 
 I am familiar with all 18 existing sources in Carbon Relay:
-- 2 paid sources (Carbon Pulse, QCI)
 - 16 free sources (various approaches)
 
 I will recommend approaches consistent with existing patterns.

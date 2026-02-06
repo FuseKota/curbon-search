@@ -8,7 +8,6 @@
 // 【ファイル構成】
 //   - headlines.go (このファイル)  - 共通ロジック
 //   - sources_wordpress.go        - WordPress REST APIソース
-//   - sources_paid.go             - 有料ソース（Carbon Pulse, QCI）
 //   - sources_html.go             - HTMLスクレイピングソース
 //   - sources_japan.go            - 日本語ソース
 //   - sources_rss.go              - RSSフィードソース
@@ -17,40 +16,35 @@
 // 【実装ソース一覧】
 // =============================================================================
 //
-// ▼ 有料ソース（見出しのみ取得）- sources_paid.go
-//   1. Carbon Pulse    - カーボン市場専門ニュース（業界最大手）
-//   2. QCI             - Quantum Commodity Intelligence
-//
 // ▼ 無料ソース - WordPress REST API（7ソース）- sources_wordpress.go
-//   3. CarbonCredits.jp    - 日本のカーボンクレジット情報
-//   4. Carbon Herald       - CDR技術ニュース
-//   5. Climate Home News   - 国際気候政策
-//   6. CarbonCredits.com   - 教育・啓発コンテンツ
-//   7. Sandbag             - EU ETSアナリスト
-//   8. Ecosystem Marketplace - 自然気候ソリューション
-//   9. Carbon Brief        - 気候科学・政策
+//   1. CarbonCredits.jp    - 日本のカーボンクレジット情報
+//   2. Carbon Herald       - CDR技術ニュース
+//   3. Climate Home News   - 国際気候政策
+//   4. CarbonCredits.com   - 教育・啓発コンテンツ
+//   5. Sandbag             - EU ETSアナリスト
+//   6. Ecosystem Marketplace - 自然気候ソリューション
+//   7. Carbon Brief        - 気候科学・政策
 //
 // ▼ 無料ソース - HTMLスクレイピング（6ソース）- sources_html.go
-//   10. ICAP               - 国際カーボンアクションパートナーシップ
-//   11. IETA               - 国際排出量取引協会
-//   12. Energy Monitor     - エネルギー転換ニュース
-//   13. World Bank         - 世界銀行気候変動
-//   14. Carbon Market Watch - NGO監視団体
-//   15. NewClimate Institute - 気候研究機関
-//   16. Carbon Knowledge Hub - 教育プラットフォーム
+//   8. ICAP               - 国際カーボンアクションパートナーシップ
+//   9. IETA               - 国際排出量取引協会
+//   10. Energy Monitor     - エネルギー転換ニュース
+//   11. World Bank         - 世界銀行気候変動
+//   12. NewClimate Institute - 気候研究機関
+//   13. Carbon Knowledge Hub - 教育プラットフォーム
 //
-// ▼ 無料ソース - 日本語ソース（4ソース）- sources_japan.go
-//   17. JRI（日本総研）    - RSSフィード
-//   18. 環境省             - プレスリリース
-//   19. METI（経産省）     - SME Agency RSS
-//   20. PwC Japan          - コンサルティングレポート
-//   21. Mizuho R&T         - 金融調査レポート
+// ▼ 無料ソース - 日本語ソース（5ソース）- sources_japan.go
+//   14. JRI（日本総研）    - RSSフィード
+//   15. 環境省             - プレスリリース
+//   16. METI（経産省）     - 審議会ページ
+//   17. PwC Japan          - コンサルティングレポート
+//   18. Mizuho R&T         - 金融調査レポート
 //
 // ▼ その他 - sources_japan.go
-//   22. JPX（日本取引所）  - カーボン関連株式ニュース
+//   19. JPX（日本取引所）  - カーボン関連株式ニュース
 //
 // ▼ 欧州政策ソース - sources_rss.go
-//   23. Politico EU        - EU政策・エネルギー・気候変動ニュース
+//   20. Politico EU        - EU政策・エネルギー・気候変動ニュース
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -61,7 +55,7 @@
 //   DEBUG_HTML=1      - 取得したHTMLの構造を出力
 //
 // 使用例:
-//   DEBUG_SCRAPING=1 ./pipeline -sources=carbonpulse -perSource=1 -queriesPerHeadline=0
+//   DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
 //
 // =============================================================================
 package pipeline
@@ -88,7 +82,7 @@ import (
 //
 // 【使用方法】
 //
-//	collector, ok := sourceCollectors["carbonpulse"]
+//	collector, ok := sourceCollectors["carbonherald"]
 //	if ok {
 //	    headlines, err := collector(10, cfg)
 //	}
@@ -108,10 +102,6 @@ type HeadlineCollector func(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 // キー: ソース識別子（CLIの-sourcesで指定する文字列）
 // 値:  対応する収集関数
 var sourceCollectors = map[string]HeadlineCollector{
-	// 有料ソース（見出しのみ）- sources_paid.go
-	"carbonpulse": collectHeadlinesCarbonPulse,
-	"qci":         collectHeadlinesQCI,
-
 	// WordPress REST APIソース - sources_wordpress.go
 	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
 	"carbonherald":          collectHeadlinesCarbonHerald,
@@ -150,21 +140,15 @@ var sourceCollectors = map[string]HeadlineCollector{
 
 // HeadlineSourceConfig は見出し収集時の設定を保持
 type HeadlineSourceConfig struct {
-	CarbonPulseTimelineURL string        // Carbon Pulse タイムラインページURL
-	CarbonPulseNewsletters string        // Carbon Pulse ニュースレターカテゴリURL
-	QCIHomeURL             string        // QCI ホームページURL
-	UserAgent              string        // HTTPリクエスト時のUser-Agentヘッダー
-	Timeout                time.Duration // HTTPリクエストのタイムアウト時間
+	UserAgent string        // HTTPリクエスト時のUser-Agentヘッダー
+	Timeout   time.Duration // HTTPリクエストのタイムアウト時間
 }
 
 // DefaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func DefaultHeadlineConfig() HeadlineSourceConfig {
 	return HeadlineSourceConfig{
-		CarbonPulseTimelineURL: "https://carbon-pulse.com/daily-timeline/",
-		CarbonPulseNewsletters: "https://carbon-pulse.com/category/newsletters/",
-		QCIHomeURL:             "https://www.qcintel.com/carbon/",
-		UserAgent:              "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
-		Timeout:                20 * time.Second, // デフォルト20秒タイムアウト
+		UserAgent: "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
+		Timeout:   20 * time.Second, // デフォルト20秒タイムアウト
 	}
 }
 
@@ -175,7 +159,7 @@ func DefaultHeadlineConfig() HeadlineSourceConfig {
 // CollectFromSources は指定されたソースから見出しを収集する
 //
 // 【引数】
-//   - sources:   収集するソースのリスト（例: ["carbonpulse", "qci"]）
+//   - sources:   収集するソースのリスト（例: ["carbonherald", "carbon-brief"]）
 //   - perSource: ソースあたりの最大記事数
 //   - cfg:       HTTP設定
 //
@@ -438,64 +422,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 		fmt.Fprintf(os.Stderr, "[DEBUG] =====================================\n\n")
 	}
 
-	// Strategy 1: Carbon Pulse top page article structure
-	// The excerpt is a text node between <a class="thumbLink"> and <a class="readMore">
-	articleContainer := linkSel.Parent().Parent().Parent()
-
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		classes, _ := articleContainer.Attr("class")
-		fmt.Fprintf(os.Stderr, "[DEBUG] Article container classes: %s\n", classes)
-		fmt.Fprintf(os.Stderr, "[DEBUG] Has 'post' class: %v\n", articleContainer.HasClass("post"))
-	}
-
-	// Check if this is a Carbon Pulse article container (has class "post")
-	if articleContainer.HasClass("post") {
-		// Get all text from the container
-		fullText := articleContainer.Text()
-
-		// Remove metadata section (Published ... / Last updated ... / Author ... / Categories ...)
-		// Find "Read More" and take text before it
-		readMoreIdx := strings.Index(fullText, "Read More")
-		if readMoreIdx > 0 {
-			fullText = fullText[:readMoreIdx]
-		}
-
-		// Split into lines and find the excerpt (typically after tags like "Carbon Pulse Premium")
-		lines := strings.Split(fullText, "\n")
-		for i, line := range lines {
-			line = strings.TrimSpace(line)
-
-			// Skip empty lines, metadata, tags, and navigation
-			if line == "" || len(line) < 30 {
-				continue
-			}
-			if strings.Contains(line, "Published") ||
-				strings.Contains(line, "Last updated") ||
-				strings.Contains(line, "Carbon Pulse Premium") ||
-				strings.Contains(line, "Nature & Biodiversity") ||
-				strings.Contains(line, "Net Zero Pulse") ||
-				strings.HasPrefix(line, "Top") {
-				continue
-			}
-
-			// This should be the excerpt
-			if len(line) > 30 && !strings.HasPrefix(line, "http") {
-				excerpt.WriteString(line)
-
-				// Also check next line if it's a continuation
-				if i+1 < len(lines) {
-					nextLine := strings.TrimSpace(lines[i+1])
-					if len(nextLine) > 20 && !strings.Contains(nextLine, "Read More") {
-						excerpt.WriteString(" ")
-						excerpt.WriteString(nextLine)
-					}
-				}
-				break
-			}
-		}
-	}
-
-	// Strategy 2: Fallback - Check for <p> tags (for other page structures)
+	// Strategy 1: Check for <p> tags in parent elements
 	if excerpt.Len() == 0 {
 		parent := linkSel.Parent()
 		parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
@@ -512,7 +439,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 		})
 	}
 
-	// Strategy 3: Check for <div class="excerpt"> or similar
+	// Strategy 2: Check for <div class="excerpt"> or similar
 	if excerpt.Len() == 0 {
 		linkSel.Parent().Parent().Find(".excerpt, .summary, .description").Each(func(i int, s *goquery.Selection) {
 			if excerpt.Len() >= maxChars {

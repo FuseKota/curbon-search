@@ -107,6 +107,7 @@ import (
 
 // Package-level compiled regex for performance (avoid recompiling on every call)
 var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
+var reShortcodes = regexp.MustCompile(`\[/?[a-z_]+[^\]]*\]`)
 
 // =============================================================================
 // ソースレジストリ（Source Registry）
@@ -625,6 +626,8 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 func cleanHTMLTags(htmlStr string) string {
 	// Remove HTML tags (using pre-compiled regex for performance)
 	text := reHTMLTags.ReplaceAllString(htmlStr, "")
+	// Remove WordPress/Divi shortcodes like [et_pb_section ...] [/et_pb_section]
+	text = reShortcodes.ReplaceAllString(text, "")
 	// Decode HTML entities (including Japanese characters)
 	text = html.UnescapeString(text)
 	return text

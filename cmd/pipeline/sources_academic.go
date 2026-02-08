@@ -20,6 +20,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"regexp"
 	"strings"
@@ -28,6 +29,9 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 )
+
+// reScienceDirectDate extracts "Publication date: Month Year" from ScienceDirect description HTML
+var reScienceDirectDate = regexp.MustCompile(`Publication date:\s*(\w+ \d{4})`)
 
 // =============================================================================
 // arXiv Source
@@ -679,7 +683,14 @@ func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline
 func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.nature.com/natecolevol.rss"
 
-	client := cfg.Client
+	// Nature.com uses a cookie-based auth redirect (303 → idp.nature.com → back).
+	// We need a client with a cookie jar to persist cookies across redirects.
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Timeout: cfg.Client.Timeout,
+		Jar:     jar,
+	}
+
 	req, err := http.NewRequest("GET", feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -850,12 +861,22 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 
 		articleURL := item.Link
 
-		// Parse date
+		// Parse date - ScienceDirect RSS has no standard date fields,
+		// but description contains "Publication date: Month Year"
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		} else if item.UpdatedParsed != nil {
 			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		} else if item.Description != "" {
+			dateStr = parseScienceDirectDate(item.Description)
+		}
+
+		// Fetch abstract from article page (RSS only has metadata)
+		if articleURL != "" {
+			if abs := fetchScienceDirectAbstract(articleURL, client, cfg.UserAgent); abs != "" {
+				excerpt = abs
+			}
 		}
 
 		out = append(out, Headline{
@@ -873,4 +894,52 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 	}
 
 	return out, nil
+}
+
+// fetchScienceDirectAbstract fetches the article page and extracts the abstract text.
+func fetchScienceDirectAbstract(articleURL string, client *http.Client, userAgent string) string {
+	req, err := http.NewRequest("GET", articleURL, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	// Abstract is inside <div class="abstract author">
+	// (not "abstract author-highlights" or "abstract graphical")
+	abs := doc.Find("div.abstract.author").Not(".author-highlights").First().Text()
+	abs = strings.TrimSpace(abs)
+	// Remove leading "Abstract" label
+	abs = strings.TrimPrefix(abs, "Abstract")
+	abs = strings.TrimSpace(abs)
+
+	return abs
+}
+
+// parseScienceDirectDate extracts date from ScienceDirect description HTML.
+// Input like: "<p>Publication date: March 2026</p>..." → "2026-03-01T00:00:00Z"
+func parseScienceDirectDate(desc string) string {
+	m := reScienceDirectDate.FindStringSubmatch(desc)
+	if m == nil {
+		return ""
+	}
+	t, err := time.Parse("January 2006", m[1])
+	if err != nil {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }

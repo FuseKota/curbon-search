@@ -46,9 +46,10 @@ var sourceCollectors = map[string]HeadlineCollector{
     "mizuho-rt":    collectHeadlinesMizuhoRT,
     "jpx":          collectHeadlinesJPX,
 
-    // RSSフィード（2ソース）
-    "politico-eu": collectHeadlinesPoliticoEU,
-    "euractiv":    collectHeadlinesEuractiv,
+    // RSSフィード（3ソース）
+    "politico-eu":         collectHeadlinesPoliticoEU,
+    "euractiv":            collectHeadlinesEuractiv,
+    "carbon-market-watch": collectHeadlinesCarbonMarketWatch,
 
     // 学術・研究機関（2ソース）
     "arxiv": collectHeadlinesArXiv,

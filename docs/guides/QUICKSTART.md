@@ -104,9 +104,10 @@ go build -o pipeline ./cmd/pipeline
 - `rggi` - RGGI
 - `australia-cer` - オーストラリアCER
 
-### RSSフィード（2つ）
+### RSSフィード（3つ）
 - `politico-eu` - Politico EU
-- `euractiv` - Euractiv
+- `euractiv` - Euractiv（RSS + 記事ページスクレイピングで全文取得）
+- `carbon-market-watch` - Carbon Market Watch
 
 ### 学術・研究（2つ）
 - `arxiv` - arXiv

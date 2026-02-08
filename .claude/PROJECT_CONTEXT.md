@@ -79,17 +79,22 @@ internal/pipeline/
 29. RGGI
 30. Australia CER
 
-**RSSフィード（2ソース）**:
+**RSSフィード（3ソース）**:
 31. Politico EU
-32. Euractiv
+32. Euractiv（RSS + 記事ページスクレイピングで全文取得）
+33. Carbon Market Watch
 
-**学術・研究（2ソース）**:
-33. arXiv
-34. OIES
+**学術・研究（6ソース）**:
+34. arXiv
+35. Nature Communications（curl方式でTLSフィンガープリント回避）
+36. OIES
+37. IOP Science (ERL)
+38. Nature Eco&Evo
+39. ScienceDirect
 
 **CDR関連（2ソース）**:
-35. Puro.earth
-36. Isometric
+40. Puro.earth
+41. Isometric
 
 ## 🛠️ よく使うコマンド
 

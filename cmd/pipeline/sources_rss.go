@@ -17,8 +17,12 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // collectHeadlinesPoliticoEU は Politico EU の Energy & Climate セクションから記事を収集
@@ -92,21 +96,31 @@ func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline
 }
 
 // carbonKeywordsEuractiv contains keywords for filtering Euractiv articles
-// to focus on carbon/climate-related content
+// to focus on carbon/climate-related content.
+// Categories from RSS items are also checked against these keywords.
+// Note: "ets" is avoided as a standalone keyword because it matches substrings
+// like "Markets", "bets", "Metsola" etc. Use specific forms instead.
 var carbonKeywordsEuractiv = []string{
-	"carbon", "emission", "ets", "climate", "co2", "greenhouse",
+	"carbon", "emission", "climate", "co2", "greenhouse",
 	"net zero", "net-zero", "decarbonisation", "decarbonization",
 	"green deal", "fit for 55", "cbam", "carbon border",
 	"renewable", "energy transition", "paris agreement",
 	"methane", "carbon market", "carbon price", "carbon tax",
+	"energy", "environment", "sustainability",
+	"eu ets", "ets2", "emissions trading", "uk ets",
 }
 
-// collectHeadlinesEuractiv fetches articles from Euractiv main RSS feed
-// and filters for carbon/climate-related content
+// reEuactivSpaces normalizes whitespace in scraped Euractiv article text
+var reEuractiveSpaces = regexp.MustCompile(`\s+`)
+
+// collectHeadlinesEuractiv fetches articles from Euractiv main RSS feed,
+// filters for carbon/climate-related content using title+description+categories,
+// and scrapes article pages for full-text excerpts.
 //
 // Euractiv is a European news site focusing on EU policy.
 // Note: Section-specific feeds (like /section/emissions-trading-scheme/feed/)
 // are protected by Cloudflare, so we use the main feed with keyword filtering.
+// Article pages are accessible via Go's http.Client for content extraction.
 //
 // URL: https://www.euractiv.com/feed/
 func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, error) {
@@ -122,6 +136,7 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 		return nil, fmt.Errorf("no items in Euractiv RSS feed")
 	}
 
+	client := cfg.Client
 	out := make([]Headline, 0, limit)
 
 	for _, item := range feed.Items {
@@ -134,11 +149,14 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 			continue
 		}
 
-		// Get content for keyword filtering
-		excerpt := extractRSSExcerpt(item)
+		// Get RSS description for keyword filtering
+		rssExcerpt := extractRSSExcerpt(item)
 
-		// Filter by keywords - main feed has all topics
-		if !matchesKeywords(title, excerpt, carbonKeywordsEuractiv) {
+		// Include categories in keyword matching for better recall
+		catStr := strings.Join(item.Categories, " ")
+
+		// Filter by keywords using title + description + categories
+		if !matchesKeywords(title, rssExcerpt+" "+catStr, carbonKeywordsEuractiv) {
 			continue
 		}
 
@@ -146,6 +164,13 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 		articleURL := item.Link
 		if idx := strings.Index(articleURL, "?utm_"); idx > 0 {
 			articleURL = articleURL[:idx]
+		}
+
+		// Scrape article page for full-text excerpt
+		excerpt := fetchEuractivArticleExcerpt(client, articleURL, cfg.UserAgent)
+		if excerpt == "" {
+			// Fall back to RSS description if scraping fails
+			excerpt = rssExcerpt
 		}
 
 		// Parse date
@@ -165,6 +190,50 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 	}
 
 	return out, nil
+}
+
+// fetchEuractivArticleExcerpt scrapes an Euractiv article page for body text.
+// Returns empty string if the page is paywalled (Euractiv Pro) or inaccessible.
+func fetchEuractivArticleExcerpt(client *http.Client, articleURL, userAgent string) string {
+	req, err := http.NewRequest("GET", articleURL, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	// Detect paywall (Euractiv Pro articles have Lorem ipsum placeholder)
+	content := doc.Find("div.c-news-detail__content")
+	if content.Length() == 0 {
+		return ""
+	}
+
+	// Remove unwanted elements (ads, scripts, etc.)
+	content.Find("script, style, .ad-container, aside, .c-news-detail__subscribe").Remove()
+
+	text := strings.TrimSpace(content.Text())
+	text = reEuractiveSpaces.ReplaceAllString(text, " ")
+
+	// Check for paywall markers
+	if strings.Contains(text, "Lorem ipsum") || strings.Contains(text, "…Subscribe now") {
+		return ""
+	}
+
+	return text
 }
 
 // collectHeadlinesUKETS fetches articles from UK Government ETS Atom feed

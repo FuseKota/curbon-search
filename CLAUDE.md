@@ -263,9 +263,24 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **Notion**: コンテンツブロック数を100に制限（API上限対応）
 - **arXiv**: IPベースのレート制限（429）が厳しいため、他ソースと同時テスト時は注意
 
+### ソース復旧・改善（2026年2月9日）
+
+#### 復旧成功
+- **Carbon Market Watch**: HTMLスクレイピング→RSS方式に変更（`/feed/`で`content:encoded`全文取得）、41ソースに復帰
+- **Nature Communications**: `fetchViaCurl()`でTLSフィンガープリント回避、サブジェクトRSSフィードで気候変動記事取得
+
+#### 復旧不可
+- **UNFCCC**: Imperva Incapsula全面ブロック、ヘッドレスブラウザなしでは不可能
+
+#### コンテンツ抽出改善
+- **Euractiv**: 記事ページスクレイピング追加（`div.c-news-detail__content`）、Excerpt 56〜116文字→1,717〜6,408文字に大幅改善
+- **Euractiv**: カテゴリベースのキーワードマッチング追加（ヒット率~5%→~18%に改善）
+- **Euractiv**: ペイウォール検出（Lorem ipsum）+ RSS descriptionフォールバック
+- **Euractiv**: `"ets"`キーワードの部分文字列一致問題を修正（`"eu ets"`, `"emissions trading"`等に変更）
+
 ---
 
-**最終更新**: 2026年2月8日
+**最終更新**: 2026年2月9日
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

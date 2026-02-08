@@ -158,11 +158,76 @@ Total articles: 3
 
 ---
 
+## 4. Euractiv - コンテンツ抽出改善
+
+### 問題
+
+Euractivは以前からRSSフィード方式で動作していたが、以下の課題があった：
+
+- RSSの`content:encoded`が常に空で、`description`は56〜116文字の短い要約のみ
+- キーワードフィルタリングがタイトル＋短い説明文のみ対象で、カーボン関連記事の漏れが多い
+- セクション別フィード（`/section/emissions-trading-scheme/feed/`等）はCloudflare 403でブロック
+
+### 調査結果
+
+| エンドポイント | ステータス |
+|---------------|-----------|
+| `/feed/` (メインRSS) | Go http.Client: **200** / curl: Cloudflare 403 |
+| セクション別RSS | Go / curl ともに **403** |
+| 記事ページ (HTML) | Go http.Client: **200** / curl: Cloudflare 403 |
+
+- Go の http.Client はCloudflareを通過するが、curlはブロックされる（Nature.comと逆パターン）
+- 記事ページの`div.c-news-detail__content`に本文テキストが含まれている
+- 一部記事はEuractiv Pro（有料）で、本文が「Lorem ipsum」プレースホルダに置き換えられている
+- RSSアイテムにカテゴリ情報（例: "Climate Change", "Energy", "Emissions Trading Scheme"）が付与されている
+
+### 修正内容
+
+#### 1. 記事ページスクレイピング追加
+- `fetchEuractivArticleExcerpt()` 関数を `sources_rss.go` に追加
+- `div.c-news-detail__content` セレクタで本文取得（script, style, ad等除去）
+- ペイウォール検出: 「Lorem ipsum」検出時はRSS descriptionにフォールバック
+
+#### 2. カテゴリベースのキーワードマッチング
+- RSSアイテムのカテゴリをキーワードフィルタリング対象に追加
+- タイトル + 説明文 + カテゴリでマッチング → ヒット率向上（~5/100 → ~18/100）
+
+#### 3. キーワード改善
+- `"energy"`, `"environment"`, `"sustainability"` を追加（EU政策サイトとして適切）
+- `"eu ets"`, `"ets2"`, `"emissions trading"`, `"uk ets"` を追加
+- `"ets"` 単体を削除（`"Markets"`, `"bets"`, `"Metsola"` 等の部分文字列一致を防止）
+
+### テスト結果
+
+```
+Total articles: 10
+
+  Free articles (full text):
+  1. [2509 chars] Meloni brands violent Olympic protesters 'enemies of Italy'
+  2. [6408 chars] Winter Olympics kick off as sustainability and safety concerns linger
+  3. [2313 chars] Spain, Portugal brace for fresh storm after deadly flood
+  4. [1717 chars] Russia hits Ukraine power grid with massive attack
+  5. [1973 chars] Commission rolls out new Russia sanctions package after delays
+  6. [1980 chars] US lawmakers urge EU to resist pressure to weaken methane rules
+  7. [1974 chars] International Seabed Authority chief urges EU to back deep-sea mining rules
+
+  Paywalled articles (RSS description fallback):
+  8. [47 chars] HARVEST: Committees' crossover
+  9. [95 chars] Multi-billion credit line to smooth introduction of carbon levy on fuels
+  10. [97 chars] Agriculture and environment MEPs to share food safety simplification file
+```
+
+- Notion送信: 3件すべて成功（全文テキスト付き）
+- **改善前**: Excerpt 56〜116文字（RSS descriptionのみ）
+- **改善後**: Excerpt 1,717〜6,408文字（記事全文）
+
+---
+
 ## 変更ファイル一覧
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `cmd/pipeline/sources_rss.go` | Carbon Market Watch RSS実装を追加 |
+| `cmd/pipeline/sources_rss.go` | Carbon Market Watch RSS実装を追加、Euractiv記事ページスクレイピング・キーワード改善 |
 | `cmd/pipeline/sources_html.go` | Carbon Market Watch旧実装を削除 |
 | `cmd/pipeline/headlines.go` | sourceMap更新、コメント整理、`fetchViaCurl()` 追加 |
 | `cmd/pipeline/sources_academic.go` | Nature Communications: curl方式で復活、Abstract取得追加 |

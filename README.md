@@ -19,7 +19,7 @@
 ```
 
 **特徴**:
-- 36の無料ソースから直接記事を収集
+- 40の無料ソースから直接記事を収集
 - 高速実行（5-15秒程度）
 - 日次レビューに最適
 - Notion統合・メール配信に対応
@@ -32,13 +32,13 @@
 
 #### 1. ヘッドライン収集 (`cmd/pipeline/headlines.go`)
 
-**無料ソース（全文取得）：** **36サイト実装完了**
+**無料ソース（全文取得）：** **40サイト実装完了**
 
 **日本市場（7ソース）：**
 - CarbonCredits.jp、JRI、環境省、METI、PwC Japan、Mizuho R&T、JPX
 
-**WordPress REST API（6ソース）：**
-- Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief
+**WordPress REST API（7ソース）：**
+- Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
 
 **HTMLスクレイピング（6ソース）：**
 - ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
@@ -55,16 +55,16 @@
 **RSSフィード（2ソース）：**
 - Politico EU、Euractiv
 
-**学術・研究（2ソース）：**
-- arXiv、OIES
+**学術・研究（5ソース）：**
+- arXiv、OIES、IOP Science (ERL)、Nature Eco&Evo、ScienceDirect
 
 **CDR関連（2ソース）：**
 - Puro.earth、Isometric
 
 **技術スタック：**
-- WordPress REST API（7サイト）- 標準化されたJSON endpoint
+- WordPress REST API（8サイト）- 標準化されたJSON endpoint
 - HTML Scraping + goquery（多数サイト）- カスタムHTML構造解析
-- RSSフィード解析（2サイト）
+- RSSフィード解析（5サイト）
 
 #### 2. Notion統合 (`internal/pipeline/notion.go`)
 - Notion Databaseへの自動クリッピング
@@ -266,15 +266,15 @@ EOF
 - ✅ **AI Summaryフィールド** - 全文の最初2000文字（後から手動要約可能）
 - ✅ **メタデータ** - Title, URL, Source, Type, Score
 
-**対応ソース（36ソース）：**
+**対応ソース（40ソース）：**
 - **日本（7）**: CarbonCredits.jp、JRI、環境省、METI、PwC Japan、Mizuho R&T、JPX
-- **WordPress API（6）**: Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief
+- **WordPress API（7）**: Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
 - **HTML（6）**: ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
 - **VCM認証（4）**: Verra、Gold Standard、ACR、CAR
 - **国際機関（2）**: IISD ENB、Climate Focus
 - **地域ETS（5）**: EU ETS、UK ETS、CARB、RGGI、Australia CER
 - **RSS（2）**: Politico EU、Euractiv
-- **学術（2）**: arXiv、OIES
+- **学術（5）**: arXiv、OIES、IOP Science (ERL)、Nature Eco&Evo、ScienceDirect
 - **CDR（2）**: Puro.earth、Isometric
 
 ### 🗂️ Notionデータベーススキーマ

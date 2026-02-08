@@ -15,10 +15,10 @@
 //   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】（全34ソース、有効31ソース）
+// 【実装ソース一覧】（全38ソース、有効35ソース）
 // =============================================================================
 //
-// ▼ 無料ソース - WordPress REST API（7ソース）- sources_wordpress.go
+// ▼ 無料ソース - WordPress REST API（8ソース）- sources_wordpress.go
 //  1. CarbonCredits.jp    - 日本のカーボンクレジット情報
 //  2. Carbon Herald       - CDR技術ニュース
 //  3. Climate Home News   - 国際気候政策
@@ -26,6 +26,7 @@
 //  5. Sandbag             - EU ETSアナリスト
 //  6. Ecosystem Marketplace - 自然気候ソリューション
 //  7. Carbon Brief        - 気候科学・政策
+//  8. RMI                 - エネルギー転換シンクタンク
 //
 // ▼ 無料ソース - HTMLスクレイピング（12ソース）- sources_html.go
 //  10. ICAP               - 国際カーボンアクションパートナーシップ
@@ -57,10 +58,13 @@
 //  36. UN News            - 国連ニュース気候変動セクション（UNFCCC代替）
 //  38. Euractiv           - EU政策ニュース（メインフィード + キーワードフィルタ）
 //
-// ▼ 学術・研究機関ソース（3ソース）- sources_academic.go
+// ▼ 学術・研究機関ソース（6ソース）- sources_academic.go
 //  30. arXiv              - プレプリントリポジトリ
 //  31. Nature Communications - 科学ジャーナル（キーワードフィルタ）
 //  37. OIES               - オックスフォードエネルギー研究所（プログラムページ経由）
+//  39. IOP Science (ERL)  - 環境研究レター（RSSフィード + キーワードフィルタ）
+//  40. Nature Eco&Evo     - 生態学・進化学（RSSフィード + キーワードフィルタ）
+//  41. ScienceDirect      - Elsevier学術誌（RSSフィード + キーワードフィルタ）
 //
 // ▼ 地域ETSソース（4ソース）- sources_regional_ets.go
 //  32. EU ETS             - 欧州委員会ETSニュース
@@ -134,7 +138,7 @@ type HeadlineCollector func(limit int, cfg headlineSourceConfig) ([]Headline, er
 // 値:  対応する収集関数
 var sourceCollectors = map[string]HeadlineCollector{
 	// =========================================================================
-	// sources_wordpress.go - WordPress REST API ソース (7)
+	// sources_wordpress.go - WordPress REST API ソース (8)
 	// =========================================================================
 	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
 	"carbonherald":          collectHeadlinesCarbonHerald,
@@ -143,6 +147,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"sandbag":               collectHeadlinesSandbag,
 	"ecosystem-marketplace": collectHeadlinesEcosystemMarketplace,
 	"carbon-brief":          collectHeadlinesCarbonBrief,
+	"rmi":                   collectHeadlinesRMI,
 
 	// =========================================================================
 	// sources_japan.go - 日本語ソース (6)
@@ -162,11 +167,14 @@ var sourceCollectors = map[string]HeadlineCollector{
 	// "un-news": collectHeadlinesUNNews, // 2026-02: Pending - need to improve content extraction
 
 	// =========================================================================
-	// sources_academic.go - 学術・研究機関ソース (3)
+	// sources_academic.go - 学術・研究機関ソース (6)
 	// =========================================================================
-	"arxiv":        collectHeadlinesArXiv,
-	"nature-comms": collectHeadlinesNatureComms,
-	"oies":         collectHeadlinesOIES,
+	"arxiv":           collectHeadlinesArXiv,
+	"nature-comms":    collectHeadlinesNatureComms,
+	"oies":            collectHeadlinesOIES,
+	"iopscience":      collectHeadlinesIOPScience,
+	"nature-ecoevo":   collectHeadlinesNatureEcoEvo,
+	"sciencedirect":   collectHeadlinesScienceDirect,
 
 	// =========================================================================
 	// sources_regional_ets.go - 地域排出量取引システム (5)
@@ -338,7 +346,7 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 // WordPress REST API 共通処理
 // =============================================================================
 //
-// WordPress REST APIを使用するソース（7ソース）の共通処理を提供します。
+// WordPress REST APIを使用するソース（8ソース）の共通処理を提供します。
 //
 // =============================================================================
 

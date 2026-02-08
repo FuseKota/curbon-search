@@ -10,7 +10,7 @@
 
 1. [プロジェクト概要](#1-プロジェクト概要)
 2. [システムアーキテクチャ](#2-システムアーキテクチャ)
-3. [全18ソースの実装詳細](#3-全18ソースの実装詳細)
+3. [全ソースの実装詳細](#3-全ソースの実装詳細)
 4. [データ処理パイプライン](#4-データ処理パイプライン)
 5. [スコアリング・マッチングアルゴリズム](#5-スコアリングマッチングアルゴリズム)
 6. [Notion統合](#6-notion統合)
@@ -269,7 +269,7 @@ Carbon関連の無料記事を幅広く確認
 
 ---
 
-## 3. 全20ソースの実装詳細
+## 3. 全ソースの実装詳細
 
 ### 3.1 無料ソース - 日本市場（7ソース）
 
@@ -587,6 +587,61 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 - タイプ自動判定（Factsheet、Story、Audio等）
 
 **ステータス**: ✅ 実装済み（2026年1月4日修正で動作確認）
+
+### 3.5 追加実装ソース（2026年2月6日）
+
+#### RMI (Rocky Mountain Institute)
+**実装**: `collectHeadlinesRMI()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://rmi.org/wp-json/wp/v2/posts`
+**ファイル**: `sources_wordpress.go`
+
+**特徴**:
+- エネルギー転換に特化したシンクタンク
+- 標準WordPress REST API（共通関数使用）
+- 全文コンテンツ取得
+
+**ステータス**: ✅ 完全動作
+
+#### IOP Science (Environmental Research Letters)
+**実装**: `collectHeadlinesIOPScience()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**フィードURL**: `https://iopscience.iop.org/journal/rss/1748-9326`
+**フォーマット**: RDF/RSS 1.0
+**ファイル**: `sources_academic.go`
+
+**特徴**:
+- 環境科学全般をカバーする学術誌
+- `carbonKeywordsAcademic`によるキーワードフィルタリング
+- gofeedがRDF/RSS 1.0を自動処理
+
+**ステータス**: ✅ 完全動作
+
+#### Nature Ecology & Evolution
+**実装**: `collectHeadlinesNatureEcoEvo()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**フィードURL**: `https://www.nature.com/natecolevol.rss`
+**ファイル**: `sources_academic.go`
+
+**特徴**:
+- 生態学・進化学の学術誌
+- Nature.comのbot保護により空スライスを返す場合あり（Nature Commsと同様）
+- エラー時はgracefulに空スライスを返却
+
+**ステータス**: ⚠️ bot保護により不安定（空スライス返却で対応）
+
+#### ScienceDirect (Resources, Conservation & Recycling Advances)
+**実装**: `collectHeadlinesScienceDirect()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**フィードURL**: `https://rss.sciencedirect.com/publication/science/2950631X`
+**ファイル**: `sources_academic.go`
+
+**特徴**:
+- Elsevier社の学術誌プラットフォーム
+- 持続可能性・資源管理に特化したジャーナル
+- `carbonKeywordsAcademic`によるキーワードフィルタリング
+
+**ステータス**: ✅ 完全動作
 
 ---
 

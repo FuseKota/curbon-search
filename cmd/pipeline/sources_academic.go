@@ -6,9 +6,12 @@
 // content using XML APIs and RSS feeds.
 //
 // Sources:
-//   1. arXiv         - Pre-print repository (XML API)
-//   2. Nature Communications - Scientific journal (RSS + keyword filter)
-//   3. OIES          - Oxford Institute for Energy Studies (HTML)
+//   1. arXiv                      - Pre-print repository (XML API)
+//   2. Nature Communications      - Scientific journal (RSS + keyword filter)
+//   3. OIES                       - Oxford Institute for Energy Studies (HTML)
+//   4. IOP Science (ERL)          - Environmental Research Letters (RSS + keyword filter)
+//   5. Nature Ecology & Evolution - Scientific journal (RSS + keyword filter)
+//   6. ScienceDirect              - Elsevier journal (RSS + keyword filter)
 //
 // =============================================================================
 package main
@@ -23,6 +26,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mmcdole/gofeed"
 )
 
 // =============================================================================
@@ -539,4 +543,334 @@ func parseOIESDate(text string) string {
 		}
 	}
 	return ""
+}
+
+// =============================================================================
+// 学術ジャーナル共通キーワードリスト
+// =============================================================================
+
+// carbonKeywordsAcademic contains keywords for filtering academic journal articles
+// to ensure relevance to carbon/climate topics. Shared by IOP Science (ERL),
+// Nature Ecology & Evolution, and ScienceDirect sources.
+var carbonKeywordsAcademic = []string{
+	"carbon", "emission", "greenhouse", "climate change", "net zero",
+	"decarbonization", "decarbonisation", "carbon dioxide", "CO2",
+	"carbon pricing", "carbon tax", "cap and trade", "emissions trading",
+	"carbon market", "carbon credit", "offset", "sequestration",
+	"carbon capture", "CCS", "CCUS", "negative emissions",
+	"global warming", "climate policy", "paris agreement",
+	"renewable energy", "energy transition", "fossil fuel",
+}
+
+// =============================================================================
+// IOP Science (Environmental Research Letters) Source
+// =============================================================================
+
+// collectHeadlinesIOPScience fetches articles from IOP Science Environmental Research Letters RSS
+//
+// Environmental Research Letters (ERL) is an open-access journal covering
+// environmental science. We use the journal's RSS feed with keyword filtering
+// to extract carbon/climate-related articles.
+//
+// Feed format: RDF/RSS 1.0 (gofeed handles automatically)
+// URL: https://iopscience.iop.org/journal/rss/1748-9326
+func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://iopscience.iop.org/journal/rss/1748-9326"
+
+	client := cfg.Client
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		// Get content for keyword filtering
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		// Keyword filter - ERL covers broad environmental science
+		titleLower := strings.ToLower(title)
+		excerptLower := strings.ToLower(excerpt)
+		hasKeyword := false
+		for _, kw := range carbonKeywordsAcademic {
+			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
+				hasKeyword = true
+				break
+			}
+		}
+		if !hasKeyword {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
+
+		out = append(out, Headline{
+			Source:      "IOP Science (ERL)",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] IOP Science (ERL): collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// Nature Ecology & Evolution Source
+// =============================================================================
+
+// collectHeadlinesNatureEcoEvo fetches articles from Nature Ecology & Evolution RSS
+//
+// Nature Ecology & Evolution covers ecology and evolutionary biology.
+// We use keyword filtering to extract carbon/climate-related articles.
+//
+// NOTE: Nature.com has bot protection that may block RSS requests (see Nature Comms).
+// If blocked, this will return an empty slice gracefully.
+//
+// URL: https://www.nature.com/natecolevol.rss
+func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://www.nature.com/natecolevol.rss"
+
+	client := cfg.Client
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Nature.com may block with bot protection - return empty gracefully
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Nature Eco&Evo: request failed (possible bot protection): %v\n", err)
+		}
+		return []Headline{}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Nature Eco&Evo: unexpected status %d (possible bot protection)\n", resp.StatusCode)
+		}
+		return []Headline{}, nil
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		if os.Getenv("DEBUG_SCRAPING") != "" {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Nature Eco&Evo: RSS parse failed (possible HTML challenge page): %v\n", err)
+		}
+		return []Headline{}, nil
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		// Get content for keyword filtering
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		// Keyword filter
+		titleLower := strings.ToLower(title)
+		excerptLower := strings.ToLower(excerpt)
+		hasKeyword := false
+		for _, kw := range carbonKeywordsAcademic {
+			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
+				hasKeyword = true
+				break
+			}
+		}
+		if !hasKeyword {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
+
+		out = append(out, Headline{
+			Source:      "Nature Eco&Evo",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Nature Eco&Evo: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// ScienceDirect Source
+// =============================================================================
+
+// collectHeadlinesScienceDirect fetches articles from ScienceDirect RSS feed
+//
+// ScienceDirect (Elsevier) hosts academic journals. We target the journal
+// "Resources, Conservation & Recycling Advances" (ISSN 2950-631X) which covers
+// sustainability and resource management topics.
+//
+// URL: https://rss.sciencedirect.com/publication/science/2950631X
+func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://rss.sciencedirect.com/publication/science/2950631X"
+
+	client := cfg.Client
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		// Get content for keyword filtering
+		excerpt := ""
+		if item.Content != "" {
+			excerpt = cleanHTMLTags(item.Content)
+			excerpt = strings.TrimSpace(excerpt)
+		} else if item.Description != "" {
+			excerpt = cleanHTMLTags(item.Description)
+			excerpt = strings.TrimSpace(excerpt)
+		}
+
+		// Keyword filter
+		titleLower := strings.ToLower(title)
+		excerptLower := strings.ToLower(excerpt)
+		hasKeyword := false
+		for _, kw := range carbonKeywordsAcademic {
+			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
+				hasKeyword = true
+				break
+			}
+		}
+		if !hasKeyword {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		} else if item.UpdatedParsed != nil {
+			dateStr = item.UpdatedParsed.Format(time.RFC3339)
+		}
+
+		out = append(out, Headline{
+			Source:      "ScienceDirect",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] ScienceDirect: collected %d headlines\n", len(out))
+	}
+
+	return out, nil
 }

@@ -12,7 +12,7 @@
 
 このシステムは**無料記事収集モード**で運用します：
 
-- 36の無料ソースから記事を直接収集
+- 40の無料ソースから記事を直接収集
 - OpenAI API不要（コスト効率が高い）
 - メール配信・Notion統合が主な用途
 
@@ -24,7 +24,7 @@
 
 1. **docs/architecture/COMPLETE_IMPLEMENTATION_GUIDE.md**
    - セクション8: 使用方法と実行例
-   - 全36ソースの実装詳細
+   - 全40ソースの実装詳細
 
 2. **.claude/PROJECT_CONTEXT.md**
    - プロジェクト概要とコンテキスト
@@ -219,7 +219,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 📊 プロジェクト統計
 
-- **実装ソース数**: 36（無料ソースのみ）
+- **実装ソース数**: 40（無料ソースのみ）
 - **HTTPタイムアウト**: 30秒（共有クライアント）
 - **ステータス**: 本番環境対応済み ✅
 
@@ -238,11 +238,17 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **FilterHeadlinesByHours**: 日付なし記事を保持（time.Now()フォールバック廃止）
 
 ### CLI
-- **all-free**: `-sources=all-free`で全36ソース指定可能
+- **all-free**: `-sources=all-free`で全40ソース指定可能
+
+### 新規ソース追加（2026年2月6日）
+- **RMI**: WordPress REST API（エネルギー転換シンクタンク）
+- **IOP Science (ERL)**: RSSフィード + キーワードフィルタ（環境研究レター）
+- **Nature Eco&Evo**: RSSフィード + キーワードフィルタ（bot保護により空スライス返却の場合あり）
+- **ScienceDirect**: RSSフィード + キーワードフィルタ（Elsevier学術誌）
 
 ---
 
-**最終更新**: 2026年2月4日
+**最終更新**: 2026年2月6日
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

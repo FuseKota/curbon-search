@@ -13,6 +13,7 @@
 //   5. Sandbag             - EU ETSアナリスト
 //   6. Ecosystem Marketplace - 自然気候ソリューション
 //   7. Carbon Brief        - 気候科学・政策
+//   8. RMI                 - エネルギー転換シンクタンク
 //
 // =============================================================================
 package main
@@ -60,4 +61,9 @@ func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) (
 // collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API
 func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://www.carbonbrief.org", "Carbon Brief", limit, cfg)
+}
+
+// collectHeadlinesRMI fetches articles from RMI (Rocky Mountain Institute) using WordPress REST API
+func collectHeadlinesRMI(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	return collectWordPressHeadlines("https://rmi.org", "RMI", limit, cfg)
 }

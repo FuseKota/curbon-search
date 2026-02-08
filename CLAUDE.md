@@ -246,9 +246,26 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **Nature Eco&Evo**: RSSフィード + キーワードフィルタ（bot保護により空スライス返却の場合あり）
 - **ScienceDirect**: RSSフィード + キーワードフィルタ（Elsevier学術誌）
 
+### ソース品質改善（2026年2月8日）
+
+#### コンテンツ抽出改善
+- **ScienceDirect**: 記事ページから`div.abstract.author`でAbstract取得（Highlights除外）、descriptionから日付パース追加
+- **RMI**: WordPress API→記事ページスクレイピングに変更（Gutenbergブロック対応、全文取得）
+- **PwC Japan**: 記事ページの`div.text-component`から本文Excerpt取得を追加（以前は空）
+- **JRI**: `article#main`フォールバック追加、JavaScript混入除去、キーワードフィルタ有効化
+- **Mizuho R&T**: 記事ページからExcerpt・日付取得を追加
+
+#### キーワードフィルタ
+- **JRI**: フィルタを有効化（以前はコメントアウト）、`サステナビリティ`・`エネルギー転換`等を追加
+
+#### 安定性向上
+- **IISD ENB**: 403レスポンス時のリトライ（最大2回、1秒間隔）を追加
+- **Notion**: コンテンツブロック数を100に制限（API上限対応）
+- **arXiv**: IPベースのレート制限（429）が厳しいため、他ソースと同時テスト時は注意
+
 ---
 
-**最終更新**: 2026年2月6日
+**最終更新**: 2026年2月8日
 **プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

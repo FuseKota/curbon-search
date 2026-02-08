@@ -592,14 +592,15 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 
 #### RMI (Rocky Mountain Institute)
 **実装**: `collectHeadlinesRMI()`
-**手法**: WordPress REST API
+**手法**: WordPress REST API（記事一覧） + HTMLスクレイピング（本文）
 **エンドポイント**: `https://rmi.org/wp-json/wp/v2/posts`
 **ファイル**: `sources_wordpress.go`
 
 **特徴**:
 - エネルギー転換に特化したシンクタンク
-- 標準WordPress REST API（共通関数使用）
-- 全文コンテンツ取得
+- WordPress APIで記事一覧を取得し、各記事ページをスクレイピングして全文取得
+- Gutenbergブロック（Datawrapperチャート等）によりAPI content.renderedが不完全なため、ページ直接取得に変更
+- 新旧2つのテンプレート（`div.my-12.single_news_content-wrapper` / `div.single_news_content-wrapper`）に対応
 
 **ステータス**: ✅ 完全動作
 
@@ -630,16 +631,17 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 
 **ステータス**: ⚠️ bot保護により不安定（空スライス返却で対応）
 
-#### ScienceDirect (Resources, Conservation & Recycling Advances)
+#### ScienceDirect (Total Environment Engineering)
 **実装**: `collectHeadlinesScienceDirect()`
-**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**手法**: RSS Feed（gofeed） + キーワードフィルタ + 記事ページスクレイピング
 **フィードURL**: `https://rss.sciencedirect.com/publication/science/2950631X`
 **ファイル**: `sources_academic.go`
 
 **特徴**:
 - Elsevier社の学術誌プラットフォーム
-- 持続可能性・資源管理に特化したジャーナル
 - `carbonKeywordsAcademic`によるキーワードフィルタリング
+- RSSに日付フィールドがないため、descriptionの`Publication date: Month Year`からパース
+- Abstractは記事ページの`div.abstract.author`から取得（Highlights・Graphical abstractを除外）
 
 **ステータス**: ✅ 完全動作
 

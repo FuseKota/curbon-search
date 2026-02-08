@@ -143,14 +143,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 			"ShortHeadline": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
-			"Type": notionapi.SelectPropertyConfig{
-				Type: notionapi.PropertyConfigTypeSelect,
-				Select: notionapi.Select{
-					Options: []notionapi.Option{
-						{Name: "Headline", Color: notionapi.ColorRed},
-					},
-				},
-			},
 			"Published Date": notionapi.DatePropertyConfig{
 				Type: notionapi.PropertyConfigTypeDate,
 			},
@@ -194,12 +186,6 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 			Type: notionapi.PropertyTypeSelect,
 			Select: notionapi.Option{
 				Name: h.Source,
-			},
-		},
-		"Type": notionapi.SelectProperty{
-			Type: notionapi.PropertyTypeSelect,
-			Select: notionapi.Option{
-				Name: "Headline",
 			},
 		},
 	}
@@ -423,7 +409,7 @@ func appendToEnvFile(filename, key, value string) error {
 }
 
 // FetchRecentHeadlines fetches headlines from Notion database
-// Returns headlines created within the last 'daysBack' days with Type="Headline"
+// Returns headlines created within the last 'daysBack' days
 func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int) ([]NotionHeadline, error) {
 	if nc.dbID == "" {
 		return nil, fmt.Errorf("database ID not set")
@@ -451,17 +437,6 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 		// Process results
 		for _, page := range resp.Results {
-			// Extract Type and filter for "Headline"
-			pageType := ""
-			if typeProp, ok := page.Properties["Type"].(*notionapi.SelectProperty); ok && typeProp.Select.Name != "" {
-				pageType = typeProp.Select.Name
-			}
-
-			// Skip if not a Headline
-			if pageType != "Headline" {
-				continue
-			}
-
 			// Filter by creation date
 			if !page.CreatedTime.After(cutoffDate) {
 				continue

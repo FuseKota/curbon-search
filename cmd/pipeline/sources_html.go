@@ -1587,32 +1587,51 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	// Helper function to fetch article page and extract full content
 	// Returns: About (og:description) + full body content
 	fetchArticleContent := func(articleURL string) string {
-		time.Sleep(200 * time.Millisecond) // Small delay between requests
+		time.Sleep(300 * time.Millisecond) // Delay between requests to avoid rate limiting
 
-		req, err := http.NewRequest("GET", articleURL, nil)
-		if err != nil {
-			return ""
-		}
-		req.Header.Set("User-Agent", cfg.UserAgent)
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-		req.Header.Set("Referer", newsURL)
+		var resp *http.Response
+		// Retry up to 2 times on 403 (bot protection / rate limiting)
+		for attempt := 0; attempt < 2; attempt++ {
+			if attempt > 0 {
+				time.Sleep(1 * time.Second)
+			}
+			req, err := http.NewRequest("GET", articleURL, nil)
+			if err != nil {
+				return ""
+			}
+			req.Header.Set("User-Agent", cfg.UserAgent)
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+			req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+			req.Header.Set("Referer", newsURL)
 
-		resp, err := client.Do(req)
-		if err != nil {
+			resp, err = client.Do(req)
+			if err != nil {
+				if os.Getenv("DEBUG_SCRAPING") != "" {
+					fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: failed to fetch %s: %v\n", articleURL, err)
+				}
+				return ""
+			}
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 403 {
+				if os.Getenv("DEBUG_SCRAPING") != "" {
+					fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: status %d for %s\n", resp.StatusCode, articleURL)
+				}
+				return ""
+			}
 			if os.Getenv("DEBUG_SCRAPING") != "" {
-				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: failed to fetch %s: %v\n", articleURL, err)
+				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: 403 for %s, retrying...\n", articleURL)
+			}
+		}
+		if resp.StatusCode != http.StatusOK {
+			if os.Getenv("DEBUG_SCRAPING") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: status %d for %s after retries\n", resp.StatusCode, articleURL)
 			}
 			return ""
 		}
 		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			if os.Getenv("DEBUG_SCRAPING") != "" {
-				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: status %d for %s\n", resp.StatusCode, articleURL)
-			}
-			return ""
-		}
 
 		articleDoc, err := goquery.NewDocumentFromReader(resp.Body)
 		if err != nil {

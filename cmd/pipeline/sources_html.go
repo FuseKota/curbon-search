@@ -37,11 +37,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/mmcdole/gofeed"
 )
-
-// Package-level compiled regex for performance (avoid recompiling in loops)
-var reDatePublished = regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
 
 // collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
 func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
@@ -333,7 +329,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 								}
 								jsonText := script.Text()
 								// Extract datePublished from JSON-LD
-								if matches := reDatePublished.FindStringSubmatch(jsonText); len(matches) > 1 {
+								if matches := reDatePublishedJSON.FindStringSubmatch(jsonText); len(matches) > 1 {
 									publishedAt = matches[1]
 								}
 							})
@@ -818,33 +814,16 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://verra.org/news/feed/"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
+		return nil, err
 	}
 
 	if len(feed.Items) == 0 {
 		return nil, fmt.Errorf("no items in Verra RSS feed")
 	}
 
+	client := cfg.Client
 	out := make([]Headline, 0, limit)
 
 	for _, item := range feed.Items {
@@ -866,14 +845,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 		}
 
 		// Get content from RSS
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		// If RSS content is short, fetch full article
 		if len(excerpt) < 200 {
@@ -891,7 +863,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 							bodyElem := articleDoc.Find(sel)
 							if bodyElem.Length() > 0 {
 								content := strings.TrimSpace(bodyElem.Text())
-								content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+								content = reWhitespace.ReplaceAllString(content, " ")
 								if len(content) > 100 {
 									excerpt = content
 									break
@@ -1081,7 +1053,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 		}
 
 		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
-		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+		title = reWhitespace.ReplaceAllString(title, " ")
 		title = strings.TrimSpace(title)
 
 		// ACR-specific: Remove "PUBLISHED ..." suffix from titles
@@ -1191,7 +1163,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						mainElem := articleDoc.Find("main, article, .content, body")
 						if mainElem.Length() > 0 {
 							content = strings.TrimSpace(mainElem.First().Text())
-							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+							content = reWhitespace.ReplaceAllString(content, " ")
 						}
 					}
 
@@ -1203,8 +1175,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 								return
 							}
 							jsonText := script.Text()
-							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
-							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+							if matches := reDatePublishedJSON.FindStringSubmatch(jsonText); len(matches) > 1 {
 								dateStr = matches[1]
 								foundDate = true
 							}
@@ -1297,7 +1268,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 		}
 
 		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
-		title = regexp.MustCompile(`\s+`).ReplaceAllString(title, " ")
+		title = reWhitespace.ReplaceAllString(title, " ")
 		title = strings.TrimSpace(title)
 
 		href, exists := titleLink.Attr("href")
@@ -1363,7 +1334,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						if bodyElem.Length() > 0 {
 							content = strings.TrimSpace(bodyElem.Text())
 							// Clean up content: normalize whitespace
-							content = regexp.MustCompile(`\s+`).ReplaceAllString(content, " ")
+							content = reWhitespace.ReplaceAllString(content, " ")
 							if len(content) > 50 {
 								break
 							}
@@ -1378,8 +1349,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 								return
 							}
 							jsonText := script.Text()
-							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
-							if matches := re.FindStringSubmatch(jsonText); len(matches) > 1 {
+							if matches := reDatePublishedJSON.FindStringSubmatch(jsonText); len(matches) > 1 {
 								dateStr = matches[1]
 								foundDate = true
 							}
@@ -1897,8 +1867,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 						text := script.Text()
 						// Look for datePublished pattern
 						if strings.Contains(text, "datePublished") {
-							re := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
-							if match := re.FindStringSubmatch(text); len(match) > 1 {
+							if match := reDatePublishedJSON.FindStringSubmatch(text); len(match) > 1 {
 								dateStr = match[1]
 								foundDate = true
 							}
@@ -2006,29 +1975,12 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://puro.earth/blog/our-blogs-1/feed"
 
+	feed, err := fetchRSSFeed(feedURL, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Atom parse failed: %w", err)
-	}
-
 	out := make([]Headline, 0, limit)
 
 	for _, item := range feed.Items {
@@ -2088,7 +2040,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 							if len(strings.Join(contentParts, "")) < 200 {
 								fullText := strings.TrimSpace(contentElem.Text())
 								// Normalize whitespace (multiple spaces/newlines to single newline)
-								fullText = regexp.MustCompile(`[\s]+`).ReplaceAllString(fullText, " ")
+								fullText = reWhitespace.ReplaceAllString(fullText, " ")
 								// Split into paragraphs at logical breaks (sentences ending with period followed by capital)
 								fullText = regexp.MustCompile(`\. ([A-Z])`).ReplaceAllString(fullText, ".\n\n$1")
 								if len(fullText) > 100 {
@@ -2113,8 +2065,8 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 				excerpt = item.Content
 			}
 			// Clean up HTML tags
-			excerpt = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(excerpt, "")
-			excerpt = regexp.MustCompile(`\s+`).ReplaceAllString(excerpt, " ")
+			excerpt = reHTMLTags.ReplaceAllString(excerpt, "")
+			excerpt = reWhitespace.ReplaceAllString(excerpt, " ")
 			excerpt = strings.TrimSpace(excerpt)
 		}
 

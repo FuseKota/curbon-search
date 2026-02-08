@@ -103,11 +103,16 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mmcdole/gofeed"
 )
 
 // Package-level compiled regex for performance (avoid recompiling on every call)
 var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
 var reShortcodes = regexp.MustCompile(`\[/?[a-z_]+[^\]]*\]`)
+var reWhitespace = regexp.MustCompile(`\s+`)
+var reDatePublishedJSON = regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+var reJapaneseDateYMD = regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+var reMultipleNewlines = regexp.MustCompile(`\n{3,}`) // 3つ以上の連続改行
 
 // =============================================================================
 // ソースレジストリ（Source Registry）
@@ -622,6 +627,69 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	return result
 }
 
+// matchesKeywords は title または excerpt が keywords のいずれかを含むかチェック
+//
+// キーワードフィルタリングが必要なソース（arXiv, IOP Science, Nature Eco&Evo,
+// ScienceDirect, Euractiv, JRI, Env Ministry, Mizuho R&T）で共通使用。
+func matchesKeywords(title, excerpt string, keywords []string) bool {
+	titleLower := strings.ToLower(title)
+	excerptLower := strings.ToLower(excerpt)
+	for _, kw := range keywords {
+		kwLower := strings.ToLower(kw)
+		if strings.Contains(titleLower, kwLower) || strings.Contains(excerptLower, kwLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchRSSFeed は指定URLからRSS/Atomフィードを取得してパース
+//
+// 共有HTTPクライアントを使用してフィードをフェッチし、gofeedでパースする。
+// sources_rss.go, sources_html.go, sources_academic.go の8箇所で共通使用。
+func fetchRSSFeed(feedURL string, cfg headlineSourceConfig) (*gofeed.Feed, error) {
+	client := cfg.Client
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	return feed, nil
+}
+
+// extractRSSExcerpt は gofeed.Item から Content/Description を優先取得して整形
+//
+// Content フィールドが空でなければ Content を、なければ Description を使用。
+// HTMLタグを除去してトリム。
+func extractRSSExcerpt(item *gofeed.Item) string {
+	raw := item.Content
+	if raw == "" {
+		raw = item.Description
+	}
+	if raw == "" {
+		return ""
+	}
+	text := cleanHTMLTags(raw)
+	return strings.TrimSpace(text)
+}
+
 // cleanHTMLTags removes HTML tags and decodes HTML entities
 func cleanHTMLTags(htmlStr string) string {
 	// Remove HTML tags (using pre-compiled regex for performance)
@@ -631,4 +699,19 @@ func cleanHTMLTags(htmlStr string) string {
 	// Decode HTML entities (including Japanese characters)
 	text = html.UnescapeString(text)
 	return text
+}
+
+// cleanExtractedText は goquery .Text() の出力を整理する
+// タブ・連続空白・空行を除去し、きれいなテキストにする
+func cleanExtractedText(raw string) string {
+	lines := strings.Split(raw, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			cleaned = append(cleaned, line)
+		}
+	}
+	result := strings.Join(cleaned, "\n")
+	return strings.TrimSpace(result)
 }

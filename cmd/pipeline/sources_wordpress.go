@@ -21,26 +21,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 )
-
-var reMultipleNewlines = regexp.MustCompile(`\n{3,}`) // 3つ以上の連続改行
-
-// cleanExtractedText は goquery .Text() の出力を整理する
-// タブ・連続空白・空行を除去し、きれいなテキストにする
-func cleanExtractedText(raw string) string {
-	lines := strings.Split(raw, "\n")
-	var cleaned []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			cleaned = append(cleaned, line)
-		}
-	}
-	result := strings.Join(cleaned, "\n")
-	return strings.TrimSpace(result)
-}
 
 // collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
 func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {

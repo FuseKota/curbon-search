@@ -147,17 +147,7 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 		}
 
 		// Keyword filter: only include carbon/climate-related articles
-		titleLower := strings.ToLower(title)
-		excerptLower := strings.ToLower(excerpt)
-		containsKeyword := false
-		for _, kw := range carbonKeywordsJapan {
-			kwLower := strings.ToLower(kw)
-			if strings.Contains(titleLower, kwLower) || strings.Contains(excerptLower, kwLower) {
-				containsKeyword = true
-				break
-			}
-		}
-		if !containsKeyword {
+		if !matchesKeywords(title, excerpt, carbonKeywordsJapan) {
 			continue
 		}
 
@@ -247,16 +237,7 @@ func collectHeadlinesEnvMinistry(limit int, cfg headlineSourceConfig) ([]Headlin
 		}
 
 		// Check if title contains carbon-related keywords
-		titleLower := strings.ToLower(title)
-		containsKeyword := false
-		for _, kw := range carbonKeywords {
-			if strings.Contains(titleLower, strings.ToLower(kw)) {
-				containsKeyword = true
-				break
-			}
-		}
-
-		if !containsKeyword {
+		if !matchesKeywords(title, "", carbonKeywords) {
 			return
 		}
 
@@ -454,8 +435,8 @@ func collectHeadlinesMETI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		"排出", "温暖化", "気候", "蓄電", "電池",
 	}
 
-	// Date regex for Japanese date format
-	dateRe := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+	// Date regex for Japanese date format (package-level)
+	dateRe := reJapaneseDateYMD
 
 	out := make([]Headline, 0, limit)
 
@@ -598,7 +579,7 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string) 
 	}
 
 	// Clean up whitespace
-	excerpt = regexp.MustCompile(`\s+`).ReplaceAllString(excerpt, " ")
+	excerpt = reWhitespace.ReplaceAllString(excerpt, " ")
 	excerpt = strings.TrimSpace(excerpt)
 
 	// Truncate to 2000 characters
@@ -849,7 +830,7 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 	}
 
 	out := make([]Headline, 0, limit)
-	datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+	datePattern := reJapaneseDateYMD
 
 	// Extract articles from links
 	doc.Find("a[href*='/business/'], a[href*='/publication/']").Each(func(i int, s *goquery.Selection) {
@@ -863,16 +844,7 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 		}
 
 		// Check if title contains carbon/sustainability keywords
-		titleLower := strings.ToLower(title)
-		containsKeyword := false
-		for _, kw := range carbonKeywords {
-			if strings.Contains(titleLower, strings.ToLower(kw)) {
-				containsKeyword = true
-				break
-			}
-		}
-
-		if !containsKeyword {
+		if !matchesKeywords(title, "", carbonKeywords) {
 			return
 		}
 
@@ -956,7 +928,7 @@ func fetchMizuhoArticleDetail(articleURL string, client *http.Client, userAgent 
 	}
 
 	// Extract date from <time> tag
-	datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+	datePattern := reJapaneseDateYMD
 	doc.Find("time").Each(func(i int, s *goquery.Selection) {
 		if dateStr != "" {
 			return

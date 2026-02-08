@@ -161,16 +161,7 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 		summaryClean = strings.Join(strings.Fields(summaryClean), " ")
 
 		// Apply keyword filter to ensure paper is actually about carbon/climate
-		titleLower := strings.ToLower(title)
-		summaryLower := strings.ToLower(summaryClean)
-		hasKeyword := false
-		for _, kw := range carbonKeywordsArXiv {
-			if strings.Contains(titleLower, kw) || strings.Contains(summaryLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-		if !hasKeyword {
+		if !matchesKeywords(title, summaryClean, carbonKeywordsArXiv) {
 			continue
 		}
 
@@ -419,7 +410,7 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 	// Try to get date from JSON-LD
 	doc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 		text := script.Text()
-		if dateMatch := regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`).FindStringSubmatch(text); len(dateMatch) > 1 {
+		if dateMatch := reDatePublishedJSON.FindStringSubmatch(text); len(dateMatch) > 1 {
 			if t, err := time.Parse("2006-01-02", dateMatch[1]); err == nil {
 				date = t.Format(time.RFC3339)
 			} else if t, err := time.Parse(time.RFC3339, dateMatch[1]); err == nil {
@@ -581,27 +572,9 @@ var carbonKeywordsAcademic = []string{
 func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://iopscience.iop.org/journal/rss/1748-9326"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
+		return nil, err
 	}
 
 	out := make([]Headline, 0, limit)
@@ -617,26 +590,10 @@ func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline
 		}
 
 		// Get content for keyword filtering
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		// Keyword filter - ERL covers broad environmental science
-		titleLower := strings.ToLower(title)
-		excerptLower := strings.ToLower(excerpt)
-		hasKeyword := false
-		for _, kw := range carbonKeywordsAcademic {
-			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-		if !hasKeyword {
+		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 
@@ -736,26 +693,10 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 		}
 
 		// Get content for keyword filtering
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		// Keyword filter
-		titleLower := strings.ToLower(title)
-		excerptLower := strings.ToLower(excerpt)
-		hasKeyword := false
-		for _, kw := range carbonKeywordsAcademic {
-			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-		if !hasKeyword {
+		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 
@@ -800,29 +741,12 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://rss.sciencedirect.com/publication/science/2950631X"
 
+	feed, err := fetchRSSFeed(feedURL, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
-	}
-
 	out := make([]Headline, 0, limit)
 
 	for _, item := range feed.Items {
@@ -836,26 +760,10 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 		}
 
 		// Get content for keyword filtering
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		// Keyword filter
-		titleLower := strings.ToLower(title)
-		excerptLower := strings.ToLower(excerpt)
-		hasKeyword := false
-		for _, kw := range carbonKeywordsAcademic {
-			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-		if !hasKeyword {
+		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 

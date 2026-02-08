@@ -16,11 +16,8 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
-
-	"github.com/mmcdole/gofeed"
 )
 
 // collectHeadlinesPoliticoEU は Politico EU の Energy & Climate セクションから記事を収集
@@ -43,28 +40,9 @@ import (
 func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.politico.eu/section/energy/feed/"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	// RSSフィードをパース
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
+		return nil, err
 	}
 
 	if len(feed.Items) == 0 {
@@ -96,17 +74,7 @@ func collectHeadlinesPoliticoEU(limit int, cfg headlineSourceConfig) ([]Headline
 		}
 
 		// 記事の全文を取得（content:encoded から、なければ description から）
-		// Notionに保存する際に全文が必要なため、切り詰めない
-		excerpt := ""
-		if item.Content != "" {
-			// content:encoded から全文を取得（HTMLタグを除去）
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			// content がない場合は description を使用
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		out = append(out, Headline{
 			Source:      "Politico EU",
@@ -144,27 +112,9 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 	// Use main feed (section feeds are Cloudflare-protected)
 	feedURL := "https://www.euractiv.com/feed/"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
+		return nil, err
 	}
 
 	if len(feed.Items) == 0 {
@@ -184,26 +134,10 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 		}
 
 		// Get content for keyword filtering
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		// Filter by keywords - main feed has all topics
-		titleLower := strings.ToLower(title)
-		excerptLower := strings.ToLower(excerpt)
-		hasKeyword := false
-		for _, kw := range carbonKeywordsEuractiv {
-			if strings.Contains(titleLower, kw) || strings.Contains(excerptLower, kw) {
-				hasKeyword = true
-				break
-			}
-		}
-		if !hasKeyword {
+		if !matchesKeywords(title, excerpt, carbonKeywordsEuractiv) {
 			continue
 		}
 
@@ -241,27 +175,9 @@ func collectHeadlinesEuractiv(limit int, cfg headlineSourceConfig) ([]Headline, 
 func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.gov.uk/government/publications.atom?topics%5B%5D=uk-emissions-trading-scheme"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Atom parse failed: %w", err)
+		return nil, err
 	}
 
 	out := make([]Headline, 0, limit)
@@ -316,27 +232,9 @@ func collectHeadlinesUKETS(limit int, cfg headlineSourceConfig) ([]Headline, err
 func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml"
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", feedURL, nil)
+	feed, err := fetchRSSFeed(feedURL, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	fp := gofeed.NewParser()
-	feed, err := fp.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("RSS parse failed: %w", err)
+		return nil, err
 	}
 
 	if len(feed.Items) == 0 {
@@ -366,14 +264,7 @@ func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, er
 		}
 
 		// Get content - UN News usually has good descriptions
-		excerpt := ""
-		if item.Content != "" {
-			excerpt = cleanHTMLTags(item.Content)
-			excerpt = strings.TrimSpace(excerpt)
-		} else if item.Description != "" {
-			excerpt = cleanHTMLTags(item.Description)
-			excerpt = strings.TrimSpace(excerpt)
-		}
+		excerpt := extractRSSExcerpt(item)
 
 		out = append(out, Headline{
 			Source:      "UN News",

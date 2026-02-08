@@ -236,19 +236,89 @@ var carbonKeywordsNature = []string{
 // collectHeadlinesNatureComms fetches climate-related articles from Nature Communications RSS
 //
 // Nature Communications is a peer-reviewed open-access journal covering all areas
-// of natural sciences. We use the climate-change subject feed which is pre-filtered.
+// of natural sciences. We use the climate-change subject feed which is pre-filtered
+// by Nature's subject taxonomy, so no additional keyword filtering is needed.
 //
-// NOTE: 2026-02: Nature.com has bot protection that returns HTML challenge pages
-// inconsistently. This source is temporarily disabled pending further investigation.
+// The subject feed provides titles, URLs, and dates but no descriptions.
+// Abstracts are fetched from each article page (id="Abs1" section).
+//
+// Note: nature.com uses Fastly bot protection that detects Go's TLS fingerprint
+// and returns a JavaScript challenge page. We use curl as a workaround since
+// curl's TLS fingerprint is accepted by the server.
 //
 // URL: https://www.nature.com/subjects/climate-change/ncomms.rss
 func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// Temporarily disabled due to bot protection issues
-	// Nature.com returns HTML challenge pages inconsistently
-	if os.Getenv("DEBUG_SCRAPING") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Nature Communications: temporarily disabled due to bot protection\n")
+	feedURL := "https://www.nature.com/subjects/climate-change/ncomms.rss"
+
+	// Nature.com blocks Go's TLS fingerprint with a JS challenge page.
+	// Use curl to fetch the RSS feed instead.
+	body, err := fetchViaCurl(feedURL, cfg.UserAgent)
+	if err != nil {
+		return nil, fmt.Errorf("curl fetch failed: %w", err)
 	}
-	return []Headline{}, nil
+
+	fp := gofeed.NewParser()
+	feed, err := fp.ParseString(body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Nature Communications RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Fetch abstract from article page via curl
+		excerpt := fetchNatureAbstract(articleURL, cfg.UserAgent)
+
+		out = append(out, Headline{
+			Source:      "Nature Communications",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	return out, nil
+}
+
+// fetchNatureAbstract fetches the abstract from a Nature article page.
+// Uses curl to bypass TLS fingerprint detection.
+func fetchNatureAbstract(articleURL string, userAgent string) string {
+	body, err := fetchViaCurl(articleURL, userAgent)
+	if err != nil {
+		return ""
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return ""
+	}
+
+	// Extract abstract from Abs1 section
+	abstract := doc.Find("#Abs1-content p, #Abs1 p").First().Text()
+	return strings.TrimSpace(abstract)
 }
 
 // =============================================================================

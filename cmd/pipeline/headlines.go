@@ -54,9 +54,9 @@
 //  28. JPX（日本取引所）  - カーボン関連株式ニュース
 //
 // ▼ RSS/Atomフィードソース（3ソース）- sources_rss.go
-//  29. Politico EU        - EU政策・エネルギー・気候変動ニュース
-//  36. UN News            - 国連ニュース気候変動セクション（UNFCCC代替）
-//  38. Euractiv           - EU政策ニュース（メインフィード + キーワードフィルタ）
+//  29. Politico EU          - EU政策・エネルギー・気候変動ニュース
+//  38. Euractiv             - EU政策ニュース（メインフィード + キーワードフィルタ）
+//  42. Carbon Market Watch  - カーボン市場監視NGO（RSSフィード）
 //
 // ▼ 学術・研究機関ソース（6ソース）- sources_academic.go
 //  30. arXiv              - プレプリントリポジトリ
@@ -73,8 +73,8 @@
 //  35. Australia CER      - オーストラリア・クリーンエネルギー規制局
 //
 // ▼ 一時無効化中のソース
-//  - Carbon Market Watch  - 403 Forbiddenエラー
-//  - UNFCCC              - Incapsula保護 (UN Newsで代替)
+//  - UNFCCC              - Incapsula (Imperva) 保護により全エンドポイントブロック
+//  - UN News Climate     - コンテンツ抽出の改善が必要
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -98,6 +98,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -166,11 +167,13 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"mizuho-rt":    collectHeadlinesMizuhoRT,
 
 	// =========================================================================
-	// sources_rss.go - RSS/Atom フィードソース (2)
+	// sources_rss.go - RSS/Atom フィードソース (3)
 	// =========================================================================
-	"politico-eu": collectHeadlinesPoliticoEU,
-	"euractiv":    collectHeadlinesEuractiv,
-	// "un-news": collectHeadlinesUNNews, // 2026-02: Pending - need to improve content extraction
+	"politico-eu":         collectHeadlinesPoliticoEU,
+	"euractiv":            collectHeadlinesEuractiv,
+	"carbon-market-watch": collectHeadlinesCarbonMarketWatch,
+	// "un-news": collectHeadlinesUNNews, // 2026-02: コンテンツ抽出の改善が必要
+	// "unfccc": collectHeadlinesUNFCCC, // 2026-01: Incapsula (Imperva) 保護 - 全エンドポイントブロック
 
 	// =========================================================================
 	// sources_academic.go - 学術・研究機関ソース (6)
@@ -201,7 +204,6 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"world-bank":           collectHeadlinesWorldBank,
 	"newclimate":           collectHeadlinesNewClimate,
 	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
-	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden
 
 	// VCM認証団体
 	"verra":         collectHeadlinesVerra,
@@ -212,8 +214,6 @@ var sourceCollectors = map[string]HeadlineCollector{
 	// 国際機関
 	"iisd":          collectHeadlinesIISD,
 	"climate-focus": collectHeadlinesClimateFocus,
-	// "unfccc": collectHeadlinesUNFCCC, // 2026-01: Incapsula protection
-
 	// CDR関連
 	"puro-earth": collectHeadlinesPuroEarth,
 	"isometric":  collectHeadlinesIsometric,
@@ -688,6 +688,22 @@ func extractRSSExcerpt(item *gofeed.Item) string {
 	}
 	text := cleanHTMLTags(raw)
 	return strings.TrimSpace(text)
+}
+
+// fetchViaCurl fetches a URL using curl to bypass TLS fingerprint detection.
+// Some sites (e.g., nature.com with Fastly) block Go's net/http TLS fingerprint
+// but allow curl. This function shells out to curl as a workaround.
+func fetchViaCurl(targetURL string, userAgent string) (string, error) {
+	cmd := exec.Command("curl", "-sL",
+		"-H", "User-Agent: "+userAgent,
+		"--max-time", "30",
+		targetURL,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("curl failed for %s: %w", targetURL, err)
+	}
+	return string(output), nil
 }
 
 // cleanHTMLTags removes HTML tags and decodes HTML entities

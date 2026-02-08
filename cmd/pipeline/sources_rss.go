@@ -10,6 +10,7 @@
 //   2. Euractiv ETS - EU ETS関連ニュース
 //   3. UK ETS - UK政府ETS関連ニュース（Atom Feed）
 //   4. UN News Climate - 国連ニュース気候変動セクション
+//   5. Carbon Market Watch - カーボン市場監視NGO
 //
 // =============================================================================
 package main
@@ -268,6 +269,62 @@ func collectHeadlinesUNNews(limit int, cfg headlineSourceConfig) ([]Headline, er
 
 		out = append(out, Headline{
 			Source:      "UN News",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	return out, nil
+}
+
+// collectHeadlinesCarbonMarketWatch collects headlines from Carbon Market Watch RSS feed
+//
+// Carbon Market Watch is a Brussels-based NGO that monitors carbon markets
+// and advocates for fair and effective climate policy. Their website blocks
+// direct HTML scraping (403), but the WordPress RSS feed is accessible.
+// The feed includes full article content via content:encoded.
+//
+// URL: https://carbonmarketwatch.org/feed/
+func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://carbonmarketwatch.org/feed/"
+
+	feed, err := fetchRSSFeed(feedURL, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Carbon Market Watch RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Full article content from content:encoded, fallback to description
+		excerpt := extractRSSExcerpt(item)
+
+		out = append(out, Headline{
+			Source:      "Carbon Market Watch",
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,

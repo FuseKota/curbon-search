@@ -10,8 +10,7 @@
 //   2. IETA               - 国際排出量取引協会
 //   3. Energy Monitor     - エネルギー転換ニュース
 //   4. World Bank         - 世界銀行気候変動
-//   5. Carbon Market Watch - NGO監視団体（一時無効化中）
-//   6. NewClimate         - 気候研究機関
+//   5. NewClimate         - 気候研究機関
 //   7. Carbon Knowledge Hub - 教育プラットフォーム
 //   8. Verra              - VCS規格運営団体
 //   9. Gold Standard      - 高品質カーボンクレジット規格
@@ -447,100 +446,6 @@ func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline,
 		})
 	}
 
-	return out, nil
-}
-
-// collectHeadlinesCarbonMarketWatch collects headlines from Carbon Market Watch
-// NOTE: 2026-01: Currently disabled due to 403 Forbidden errors
-func collectHeadlinesCarbonMarketWatch(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	newsURL := "https://carbonmarketwatch.org/publications/"
-
-	client := cfg.Client
-	req, err := http.NewRequest("GET", newsURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
-	out := make([]Headline, 0, limit)
-
-	// Parse publications/articles
-	doc.Find("article, div.post, div.entry, div.publication").Each(func(i int, s *goquery.Selection) {
-		if len(out) >= limit {
-			return
-		}
-
-		link := s.Find("a[href*='/publications/'], a.entry-title, h2 a, h3 a").First()
-		if link.Length() == 0 {
-			link = s.Find("a").First()
-		}
-
-		title := strings.TrimSpace(link.Text())
-		if title == "" {
-			titleElem := s.Find("h2, h3, h4, .title, .entry-title")
-			title = strings.TrimSpace(titleElem.Text())
-		}
-
-		href, exists := link.Attr("href")
-		if !exists || title == "" || len(title) < 10 {
-			return
-		}
-
-		// Build absolute URL
-		articleURL := href
-		if !strings.HasPrefix(href, "http") {
-			articleURL = "https://carbonmarketwatch.org" + href
-		}
-
-		// Extract date (empty string if not found)
-		dateStr := ""
-		dateElem := s.Find("time, .date, .published")
-		if dateElem.Length() > 0 {
-			if dateAttr, exists := dateElem.Attr("datetime"); exists {
-				dateStr = dateAttr
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				if t, err := time.Parse("January 2, 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-				} else if t, err := time.Parse("2 January 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-				}
-			}
-		}
-
-		// Extract excerpt
-		excerpt := ""
-		excerptElem := s.Find("p, .excerpt, .summary, .entry-summary")
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.First().Text())
-		}
-
-		out = append(out, Headline{
-			Source:      "Carbon Market Watch",
-			Title:       title,
-			URL:         articleURL,
-			PublishedAt: dateStr,
-			Excerpt:     excerpt,
-			IsHeadline:  true,
-		})
-	})
-
-	// Return empty slice if no articles found (not an error)
 	return out, nil
 }
 

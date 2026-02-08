@@ -27,6 +27,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -110,8 +111,14 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 					if articleResp.StatusCode == http.StatusOK {
 						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 						if err == nil {
-							bodyElem := articleDoc.Find("div.field-body")
-							content = strings.TrimSpace(bodyElem.Text())
+							var parts []string
+							articleDoc.Find(".paragraph--type--text").Each(func(_ int, s *goquery.Selection) {
+								t := strings.TrimSpace(s.Text())
+								if t != "" {
+									parts = append(parts, t)
+								}
+							})
+							content = strings.Join(parts, "\n\n")
 						}
 					}
 					articleResp.Body.Close() // Always close body when err == nil
@@ -217,9 +224,15 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 					if articleResp.StatusCode == http.StatusOK {
 						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 						if err == nil {
-							// Try common content selectors
-							bodyElem := articleDoc.Find("article, .content, .post-content, .entry-content").First()
-							content = strings.TrimSpace(bodyElem.Text())
+							// Extract intro + body text from news detail sections
+							var parts []string
+							articleDoc.Find(".section-news-detail .intro, .section-news-detail section.bg-white").Each(func(_ int, s *goquery.Selection) {
+								t := strings.TrimSpace(s.Text())
+								if t != "" {
+									parts = append(parts, t)
+								}
+							})
+							content = strings.Join(parts, "\n\n")
 						}
 					}
 					articleResp.Body.Close() // Always close body when err == nil
@@ -359,96 +372,73 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 
 // collectHeadlinesWorldBank collects headlines from World Bank Climate Change publications
 func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	newsURL := "https://www.worldbank.org/en/topic/climatechange"
+	// World Bank News Search APIでcarbon関連記事のURL・日付を取得し、
+	// 各ページをスクレイピングしてタイトル・本文を取得する
+	apiURL := fmt.Sprintf(
+		"https://search.worldbank.org/api/v2/news?format=json&qterm=%%22carbon+pricing%%22+OR+%%22carbon+market%%22+OR+%%22carbon+credit%%22+OR+%%22emissions+trading%%22&rows=%d&os=0&srt=lnchdt&order=desc&fl=url,lnchdt,title,descr&lang_exact=English",
+		limit,
+	)
 
-	client := cfg.Client
-	req, err := http.NewRequest("GET", newsURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
+	var result struct {
+		Documents map[string]json.RawMessage `json:"documents"`
 	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
-	// Keywords for carbon pricing related content
-	carbonKeywords := []string{
-		"carbon pricing", "carbon tax", "carbon credit", "emissions trading",
-		"cap and trade", "carbon market", "climate finance", "carbon border",
-		"CBAM", "ETS", "carbon levy", "green bonds", "climate bonds",
+	if err := httpGetJSON(apiURL, cfg, &result); err != nil {
+		return nil, fmt.Errorf("failed to fetch World Bank API: %w", err)
 	}
 
 	out := make([]Headline, 0, limit)
-
-	// Parse articles (World Bank format)
-	// Look for articles in featured and research sections
-	doc.Find("div.featured h3 a, div.research h3 a, div[class*='lp__'] h3 a").Each(func(i int, link *goquery.Selection) {
+	for _, raw := range result.Documents {
 		if len(out) >= limit {
-			return
+			break
+		}
+		var doc struct {
+			URL    string `json:"url"`
+			Lnchdt string `json:"lnchdt"`
+			Title  struct {
+				Cdata string `json:"cdata!"`
+			} `json:"title"`
+			Descr struct {
+				Cdata string `json:"cdata!"`
+			} `json:"descr"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil || doc.URL == "" {
+			continue
 		}
 
-		title := strings.TrimSpace(link.Text())
-		href, exists := link.Attr("href")
-		if !exists || title == "" {
-			return
-		}
+		// HTTPをHTTPSに変換
+		articleURL := strings.Replace(doc.URL, "http://", "https://", 1)
 
-		// Check if title contains carbon-related keywords
-		titleLower := strings.ToLower(title)
-		containsKeyword := false
-		for _, kw := range carbonKeywords {
-			if strings.Contains(titleLower, strings.ToLower(kw)) {
-				containsKeyword = true
-				break
-			}
-		}
+		dateStr := doc.Lnchdt // すでにRFC3339形式
 
-		if !containsKeyword {
-			return
-		}
+		// APIにタイトルがあればそれを使用、なければページから取得
+		title := doc.Title.Cdata
+		excerpt := doc.Descr.Cdata
 
-		// Build absolute URL
-		articleURL := href
-		if !strings.HasPrefix(href, "http") {
-			articleURL = "https://www.worldbank.org" + href
-		}
-
-		// Extract date if available (empty string if not found)
-		dateStr := ""
-		// Try to find date in parent elements
-		parent := link.Parent().Parent()
-		dateElem := parent.Find("time, span.date, div.date")
-		if dateElem.Length() > 0 {
-			dateText := strings.TrimSpace(dateElem.Text())
-			if dateAttr, exists := dateElem.Attr("datetime"); exists {
-				dateStr = dateAttr
-			} else if dateText != "" {
-				// Try to parse common date formats
-				if t, err := time.Parse("January 2, 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-				} else if t, err := time.Parse("Jan 2, 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
+		// ページをスクレイピングしてタイトル・本文を補完
+		pageDoc, err := fetchDoc(articleURL, cfg)
+		if err == nil {
+			// タイトルが空の場合、ページから取得
+			if title == "" {
+				h1 := pageDoc.Find("h1").First()
+				if h1.Length() > 0 {
+					title = strings.TrimSpace(h1.Text())
 				}
 			}
+			// 本文を<p>タグから取得
+			var parts []string
+			pageDoc.Find("p").Each(func(_ int, s *goquery.Selection) {
+				text := strings.TrimSpace(s.Text())
+				if len(text) > 50 {
+					parts = append(parts, text)
+				}
+			})
+			if bodyText := strings.Join(parts, "\n\n"); len(bodyText) > len(excerpt) {
+				excerpt = bodyText
+			}
 		}
 
-		// Extract excerpt from parent element
-		excerpt := ""
-		excerptElem := parent.Find("p, div.description, div.summary")
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.First().Text())
+		if title == "" {
+			continue
 		}
 
 		out = append(out, Headline{
@@ -459,9 +449,8 @@ func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline,
 			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
-	})
+	}
 
-	// Return empty slice if no articles found (not an error)
 	return out, nil
 }
 
@@ -624,11 +613,28 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 			}
 		}
 
-		// Extract excerpt
+		// Fetch date and content from article page
 		excerpt := ""
-		excerptElem := parent.Find("p, .description, .summary")
-		if excerptElem.Length() > 0 {
-			excerpt = strings.TrimSpace(excerptElem.First().Text())
+		articleDoc, err := fetchDoc(articleURL, cfg)
+		if err == nil {
+			// Extract date from event-details calendar
+			if dateStr == "" {
+				articleDoc.Find(".event-details__name--calendar").Each(func(_ int, s *goquery.Selection) {
+					if dateStr != "" {
+						return
+					}
+					valElem := s.Parent().Find(".event-details__value")
+					dateText := strings.TrimSpace(valElem.Text())
+					if t, err := time.Parse("02 Jan 2006", dateText); err == nil {
+						dateStr = t.Format(time.RFC3339)
+					}
+				})
+			}
+			// Extract content from node__content
+			nodeContent := articleDoc.Find(".node__content")
+			if nodeContent.Length() > 0 {
+				excerpt = strings.TrimSpace(nodeContent.Text())
+			}
 		}
 
 		out = append(out, Headline{
@@ -730,58 +736,62 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 			return
 		}
 
-		// Extract date from parent container (empty string if not found)
+		seen[articleURL] = true
+
+		// 各記事ページから日付・本文を取得（Next.js SSR + __NEXT_DATA__）
 		dateStr := ""
-		container := link.ParentsFiltered("[class*='css-']").First()
-		if container.Length() > 0 {
-			// Look for date element with css-1fr5xea or similar classes
-			dateElem := container.Find("[class*='css-1fr'], time, .date, [class*='date']")
-			if dateElem.Length() > 0 {
-				dateText := strings.TrimSpace(dateElem.First().Text())
-				// Parse "14 Nov 2025" or similar formats
-				for _, format := range []string{"2 Jan 2006", "_2 Jan 2006", "Jan 2, 2006", "2006-01-02"} {
-					if t, err := time.Parse(format, dateText); err == nil {
-						dateStr = t.Format(time.RFC3339)
-						break
+		excerpt := ""
+		articleDoc, err := fetchDoc(articleURL, cfg)
+		if err == nil {
+			// __NEXT_DATA__ JSONからfrontMatterを取得
+			articleDoc.Find("script#__NEXT_DATA__").Each(func(_ int, s *goquery.Selection) {
+				var nextData struct {
+					Props struct {
+						PageProps struct {
+							Source struct {
+								Frontmatter struct {
+									Date        string `json:"date"`
+									Description string `json:"description"`
+								} `json:"frontmatter"`
+							} `json:"source"`
+						} `json:"pageProps"`
+					} `json:"props"`
+				}
+				if err := json.Unmarshal([]byte(s.Text()), &nextData); err == nil {
+					fm := nextData.Props.PageProps.Source.Frontmatter
+					if fm.Date != "" {
+						if t, err := time.Parse("2006-01-02", fm.Date); err == nil {
+							dateStr = t.Format(time.RFC3339)
+						}
 					}
+					if fm.Description != "" {
+						excerpt = fm.Description
+					}
+				}
+			})
+			// SSRプリレンダリングされた本文からテキストを補完
+			// Next.jsアプリのため<main>タグはなく、div#__nextにコンテンツがある
+			mainContent := articleDoc.Find("div#__next")
+			if mainContent.Length() > 0 {
+				mainContent.Find("script, style, nav, header, footer, noscript").Remove()
+				bodyText := strings.TrimSpace(mainContent.Text())
+				if len(bodyText) > len(excerpt) {
+					lines := strings.Split(bodyText, "\n")
+					var cleaned []string
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if line != "" {
+							cleaned = append(cleaned, line)
+						}
+					}
+					// 1行目はパンくずリスト・タイトル・メタ情報が結合しているのでスキップ
+					if len(cleaned) > 1 {
+						cleaned = cleaned[1:]
+					}
+					excerpt = strings.Join(cleaned, "\n")
 				}
 			}
 		}
-
-		// Extract category/type
-		category := ""
-		if container.Length() > 0 {
-			typeElem := container.Find("[class*='css-3aw'], .type, .category, [class*='tag']")
-			if typeElem.Length() > 0 {
-				category = strings.TrimSpace(typeElem.First().Text())
-			}
-		}
-
-		// Build excerpt
-		excerpt := ""
-		if category != "" {
-			excerpt = "Type: " + category
-		}
-
-		// Determine content type from URL
-		contentType := ""
-		switch {
-		case strings.Contains(href, "/factsheet/"):
-			contentType = "Factsheet"
-		case strings.Contains(href, "/story/"):
-			contentType = "Story"
-		case strings.Contains(href, "/audio/"):
-			contentType = "Audio"
-		case strings.Contains(href, "/news/"):
-			contentType = "News"
-		case strings.Contains(href, "/data-tracker/"):
-			contentType = "Data Tracker"
-		}
-		if contentType != "" && excerpt == "" {
-			excerpt = "Type: " + contentType
-		}
-
-		seen[articleURL] = true
 
 		out = append(out, Headline{
 			Source:      "Carbon Knowledge Hub",

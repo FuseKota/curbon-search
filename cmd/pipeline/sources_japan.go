@@ -44,6 +44,7 @@ var carbonKeywordsJapan = []string{
 	"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
 	"カーボンクレジット", "クレジット市場", "carbon", "climate",
 	"JCM", "二国間クレジット", "カーボンニュートラル", "地球温暖化", "パリ協定", "COP",
+	"サステナビリティ", "エネルギー転換", "再生可能エネルギー", "グリーン",
 }
 
 // collectHeadlinesJRI は JRI（日本総合研究所）の RSSフィードから見出しを収集
@@ -99,56 +100,65 @@ func collectHeadlinesJRI(limit int, cfg headlineSourceConfig) ([]Headline, error
 			break
 		}
 
-		// Check if title contains carbon-related keywords
 		title := item.Title
-		_ = carbonKeywordsJapan // unused for now - filtering disabled
-		// titleLower := strings.ToLower(title)
-		// containsKeyword := false
-		// for _, kw := range carbonKeywordsJapan {
-		// 	if strings.Contains(titleLower, strings.ToLower(kw)) {
-		// 		containsKeyword = true
-		// 		break
-		// 	}
-		// }
-
-		// For now, include all articles (filtering can be enabled later)
-		// Uncomment to filter only carbon-related articles:
-		// if !containsKeyword {
-		// 	continue
-		// }
 
 		publishedAt := ""
 		if item.PublishedParsed != nil {
 			publishedAt = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Fetch full article content
+		// Fetch article page and extract content
 		excerpt := ""
-		if item.Link != "" {
-			contentResp, err := client.Get(item.Link)
+		if item.Link != "" && !strings.HasSuffix(item.Link, ".pdf") {
+			doc, err := fetchDoc(item.Link, cfg)
 			if err == nil {
-				if contentResp.StatusCode == http.StatusOK {
-					contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
-					if err == nil {
-						// Extract content from article page
-						// JRI uses various selectors for article content
-						contentDoc.Find("div.detail, div.content, div.main-content, article").Each(func(_ int, s *goquery.Selection) {
-							if excerpt == "" {
-								text := strings.TrimSpace(s.Text())
-								if len(text) > 100 { // Only use if substantial content
-									excerpt = text
-								}
-							}
-						})
-					}
+				// JRI page structure:
+				//   - div.cont03: report pages (contains full text)
+				//   - article#main: opinion/column pages (main content area)
+				sel := doc.Find("div.cont03")
+				if sel.Length() == 0 {
+					sel = doc.Find("article#main")
 				}
-				contentResp.Body.Close() // Close immediately, not defer in loop
+				sel.Find("script, style, div.content-utility").Remove()
+				text := sel.Text()
+				// Clean up: remove noise lines (navigation, category labels)
+				lines := strings.Split(text, "\n")
+				var contentLines []string
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					// Skip short navigation/label lines
+					if len([]rune(line)) < 20 {
+						continue
+					}
+					contentLines = append(contentLines, line)
+				}
+				if len(contentLines) > 0 {
+					excerpt = strings.Join(contentLines, "\n")
+				}
 			}
 		}
 
 		// If we couldn't get excerpt, use description from RSS
 		if excerpt == "" && item.Description != "" {
 			excerpt = cleanHTMLTags(item.Description)
+		}
+
+		// Keyword filter: only include carbon/climate-related articles
+		titleLower := strings.ToLower(title)
+		excerptLower := strings.ToLower(excerpt)
+		containsKeyword := false
+		for _, kw := range carbonKeywordsJapan {
+			kwLower := strings.ToLower(kw)
+			if strings.Contains(titleLower, kwLower) || strings.Contains(excerptLower, kwLower) {
+				containsKeyword = true
+				break
+			}
+		}
+		if !containsKeyword {
+			continue
 		}
 
 		out = append(out, Headline{
@@ -346,7 +356,7 @@ func collectHeadlinesJPX(limit int, cfg headlineSourceConfig) ([]Headline, error
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Get content/description
+		// Get content: RSS description/content is empty, so scrape article page
 		excerpt := ""
 		if item.Description != "" {
 			excerpt = html.UnescapeString(item.Description)
@@ -355,6 +365,15 @@ func collectHeadlinesJPX(limit int, cfg headlineSourceConfig) ([]Headline, error
 		if item.Content != "" && excerpt == "" {
 			excerpt = html.UnescapeString(item.Content)
 			excerpt = strings.TrimSpace(excerpt)
+		}
+		if excerpt == "" && item.Link != "" {
+			doc, err := fetchDoc(item.Link, cfg)
+			if err == nil {
+				sel := doc.Find("p.component-text")
+				if sel.Length() > 0 {
+					excerpt = strings.TrimSpace(sel.Text())
+				}
+			}
 		}
 
 		out = append(out, Headline{
@@ -760,12 +779,29 @@ func collectHeadlinesPwCJapan(limit int, cfg headlineSourceConfig) ([]Headline, 
 				}
 			}
 
+			// Fetch excerpt from article page
+			excerpt := ""
+			if doc, err := fetchDoc(articleURL, cfg); err == nil {
+				doc.Find("script, style").Remove()
+				sel := doc.Find("div.text-component")
+				if sel.Length() > 0 {
+					var parts []string
+					sel.Each(func(_ int, s *goquery.Selection) {
+						t := strings.TrimSpace(s.Text())
+						if t != "" {
+							parts = append(parts, t)
+						}
+					})
+					excerpt = strings.Join(parts, "\n")
+				}
+			}
+
 			out = append(out, Headline{
 				Source:      "PwC Japan",
 				Title:       title,
 				URL:         articleURL,
 				PublishedAt: publishedAt,
-				Excerpt:     "",
+				Excerpt:     excerpt,
 				IsHeadline:  true,
 			})
 		}
@@ -870,16 +906,74 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 			}
 		}
 
+		// Fetch excerpt and date from article page
+		excerpt, pageDate := fetchMizuhoArticleDetail(articleURL, client, cfg.UserAgent)
+		if pageDate != "" && dateStr == "" {
+			dateStr = pageDate
+		}
+
 		out = append(out, Headline{
 			Source:      "Mizuho Research & Technologies",
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			Excerpt:     "",
+			Excerpt:     excerpt,
 			IsHeadline:  true,
 		})
 	})
 
 	// Return empty slice if no articles found (not an error)
 	return out, nil
+}
+
+// fetchMizuhoArticleDetail fetches excerpt and date from a Mizuho article page.
+func fetchMizuhoArticleDetail(articleURL string, client *http.Client, userAgent string) (excerpt string, dateStr string) {
+	req, err := http.NewRequest("GET", articleURL, nil)
+	if err != nil {
+		return "", ""
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", ""
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return "", ""
+	}
+
+	// Extract excerpt from report-detail_post
+	post := doc.Find(".report-detail_post")
+	if post.Length() > 0 {
+		excerpt = strings.TrimSpace(post.Text())
+	}
+
+	// Extract date from <time> tag
+	datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+	doc.Find("time").Each(func(i int, s *goquery.Selection) {
+		if dateStr != "" {
+			return
+		}
+		t := strings.TrimSpace(s.Text())
+		if matches := datePattern.FindStringSubmatch(t); len(matches) == 4 {
+			month := matches[2]
+			day := matches[3]
+			if len(month) == 1 {
+				month = "0" + month
+			}
+			if len(day) == 1 {
+				day = "0" + day
+			}
+			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", matches[1], month, day)
+		}
+	})
+
+	return excerpt, dateStr
 }

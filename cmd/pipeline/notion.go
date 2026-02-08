@@ -286,7 +286,8 @@ func splitIntoRichTextBlocks(text string) []notionapi.RichText {
 
 // createContentBlocks splits long text into Notion paragraph blocks
 func createContentBlocks(content string) notionapi.Blocks {
-	const maxBlockSize = 2000
+	const maxBlockSize  = 2000
+	const maxBlockCount = 100 // Notion API limit
 	blocks := notionapi.Blocks{}
 
 	paragraphs := []string{}
@@ -309,6 +310,9 @@ func createContentBlocks(content string) notionapi.Blocks {
 	}
 
 	for _, para := range paragraphs {
+		if len(blocks) >= maxBlockCount {
+			break
+		}
 		if len(para) <= maxBlockSize {
 			blocks = append(blocks, notionapi.ParagraphBlock{
 				BasicBlock: notionapi.BasicBlock{
@@ -327,6 +331,9 @@ func createContentBlocks(content string) notionapi.Blocks {
 			})
 		} else {
 			for i := 0; i < len(para); i += maxBlockSize {
+				if len(blocks) >= maxBlockCount {
+					break
+				}
 				end := i + maxBlockSize
 				if end > len(para) {
 					end = len(para)

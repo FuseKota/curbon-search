@@ -512,8 +512,11 @@ func collectHeadlinesMETI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			fmt.Fprintf(os.Stderr, "[DEBUG] METI Shingikai: %s (path=%v, keyword=%v)\n", title[:min(50, len(title))], isEnergyPath, hasKeyword)
 		}
 
-		// Fetch article page for excerpt (2nd stage fetch)
-		excerpt := fetchMETIArticleExcerpt(client, articleURL, cfg.UserAgent)
+		// Fetch article page for excerpt and date (2nd stage fetch)
+		excerpt, articleDate := fetchMETIArticleExcerpt(client, articleURL, cfg.UserAgent, title)
+		if articleDate != "" {
+			dateStr = articleDate
+		}
 
 		out = append(out, Headline{
 			Source:      "METI Shingikai",
@@ -528,30 +531,48 @@ func collectHeadlinesMETI(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// fetchMETIArticleExcerpt fetches the article page and extracts text content
-// Returns empty string if the page only contains PDFs or fetch fails
-func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string) string {
+// fetchMETIArticleExcerpt fetches the article page and extracts text content and date
+// Returns (excerpt, dateStr). Empty strings if the page only contains PDFs or fetch fails
+func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, title string) (string, string) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	// Use standard browser User-Agent
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return "", ""
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return ""
+		return "", ""
 	}
+
+	// Extract date from "最終更新日：YYYY年MM月DD日"
+	dateStr := ""
+	bodyText := doc.Find("body").Text()
+	if dateMatch := reJapaneseDateYMD.FindStringSubmatch(bodyText); dateMatch != nil {
+		// Use the last match (最終更新日 is typically at the bottom)
+		allMatches := reJapaneseDateYMD.FindAllStringSubmatch(bodyText, -1)
+		if len(allMatches) > 0 {
+			last := allMatches[len(allMatches)-1]
+			year := last[1]
+			month := fmt.Sprintf("%02d", atoi(last[2]))
+			day := fmt.Sprintf("%02d", atoi(last[3]))
+			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
+		}
+	}
+
+	// Remove unwanted elements (JS notice, breadcrumbs, print button, navigation)
+	doc.Find("script, style, noscript, header, footer, nav, .jsOn, #topicpath, .topicpath, .breadcrumb, .breadcrumbs, #pankuzu, .print, .print-area").Remove()
 
 	// Try to find main content area
 	var excerpt string
@@ -578,16 +599,32 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string) 
 		excerpt = strings.TrimSpace(doc.Find("body").Text())
 	}
 
-	// Clean up whitespace
+	// Clean HTML tags and whitespace
+	excerpt = cleanHTMLTags(excerpt)
 	excerpt = reWhitespace.ReplaceAllString(excerpt, " ")
 	excerpt = strings.TrimSpace(excerpt)
+
+	// Remove leading "印刷" button text
+	excerpt = strings.TrimPrefix(excerpt, "印刷")
+	excerpt = strings.TrimSpace(excerpt)
+
+	// Remove breadcrumb text (e.g. "ホーム 審議会・研究会 ... タイトル タイトル")
+	// by finding "開催日" which marks the start of actual content
+	if idx := strings.Index(excerpt, "開催日"); idx > 0 {
+		excerpt = excerpt[idx:]
+	} else if title != "" {
+		// Fallback: remove everything up to and including the last occurrence of the title
+		if idx := strings.LastIndex(excerpt, title); idx >= 0 {
+			excerpt = strings.TrimSpace(excerpt[idx+len(title):])
+		}
+	}
 
 	// Truncate to 2000 characters
 	if len(excerpt) > 2000 {
 		excerpt = excerpt[:2000]
 	}
 
-	return excerpt
+	return excerpt, dateStr
 }
 
 // atoi converts string to int, returns 0 on error

@@ -1706,8 +1706,11 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			return
 		}
 
-		// Skip if this is just the main publications page
+		// Skip if this is just the main publications page, pagination, or staging URL
 		if href == publicationsURL || href == "https://climatefocus.com/publications/" {
+			return
+		}
+		if strings.Contains(href, "sf_paged=") || strings.Contains(href, "wpengine.com") {
 			return
 		}
 

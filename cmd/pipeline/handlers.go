@@ -25,6 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // =============================================================================
@@ -323,4 +325,47 @@ func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
 	fmt.Fprintln(os.Stderr, "========================================")
 	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
 	fmt.Fprintln(os.Stderr, "========================================")
+}
+
+// =============================================================================
+// エラー通知ハンドラ
+// =============================================================================
+
+// sendErrorNotification は収集エラーをメールで通知する
+//
+// EMAIL_FROM, EMAIL_PASSWORD, EMAIL_TO が設定されている場合のみ送信する。
+// 環境変数が未設定の場合はstderrにログを出力するのみ。
+func sendErrorNotification(errors []string, headlineCount int) {
+	from := os.Getenv("EMAIL_FROM")
+	password := os.Getenv("EMAIL_PASSWORD")
+	to := os.Getenv("EMAIL_TO")
+
+	if from == "" || password == "" || to == "" {
+		fmt.Fprintln(os.Stderr, "[WARN] Email env vars not set, skipping error notification email")
+		return
+	}
+
+	sender, err := NewEmailSender(from, password, to)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to create email sender: %v\n", err)
+		return
+	}
+
+	subject := fmt.Sprintf("[Carbon Relay] %d source(s) failed - %s",
+		len(errors), time.Now().Format("2006-01-02 15:04"))
+
+	var body strings.Builder
+	body.WriteString("Carbon Relay source collection errors:\n\n")
+	for _, e := range errors {
+		body.WriteString("  " + e + "\n")
+	}
+	body.WriteString(fmt.Sprintf("\nSuccessfully collected: %d headlines\n", headlineCount))
+	body.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
+
+	msg := sender.buildEmailMessage(subject, body.String())
+	if err := sender.sendWithRetry(msg); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to send error notification email: %v\n", err)
+	} else {
+		fmt.Fprintln(os.Stderr, "[INFO] Error notification email sent")
+	}
 }

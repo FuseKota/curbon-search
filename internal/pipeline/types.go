@@ -131,8 +131,9 @@ type NotionHeadline struct {
 //   /wp-json/wp/v2/posts エンドポイントで記事一覧を取得できる
 //
 type WPPost struct {
-	Title   struct{ Rendered string `json:"rendered"` } `json:"title"`   // 記事タイトル（HTMLエンコード済み）
-	Link    string                                      `json:"link"`    // 記事URL
-	Date    string                                      `json:"date"`    // 公開日時
-	Content struct{ Rendered string `json:"rendered"` } `json:"content"` // 記事本文（HTML形式）
+	Title   struct{ Rendered string `json:"rendered"` } `json:"title"`    // 記事タイトル（HTMLエンコード済み）
+	Link    string                                      `json:"link"`     // 記事URL
+	Date    string                                      `json:"date"`     // 公開日時
+	DateGMT string                                      `json:"date_gmt"` // 公開日時（GMT）
+	Content struct{ Rendered string `json:"rendered"` } `json:"content"`  // 記事本文（HTML形式）
 }

@@ -136,8 +136,8 @@ type EmailModeConfig struct {
 // フラグ解析
 // =============================================================================
 
-// デフォルトソースリスト
-const defaultSources = "carbonpulse,qci,carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,icap,ieta,energy-monitor,jri,env-ministry,pwc-japan,mizuho-rt"
+// DefaultSources はデフォルトソースリスト（全41アクティブソース）
+const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,nature-ecoevo,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {
@@ -145,7 +145,7 @@ func ParseFlags() *PipelineConfig {
 
 	// Input flags
 	flag.StringVar(&cfg.Input.HeadlinesFile, "headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
-	flag.StringVar(&cfg.Input.SourcesRaw, "sources", defaultSources, "sources to scrape when --headlines is empty")
+	flag.StringVar(&cfg.Input.SourcesRaw, "sources", DefaultSources, "sources to scrape when --headlines is empty")
 	flag.IntVar(&cfg.Input.PerSource, "perSource", 30, "max headlines to collect per source")
 
 	// Search flags

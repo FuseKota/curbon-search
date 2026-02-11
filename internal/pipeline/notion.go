@@ -182,15 +182,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 			"ShortHeadline": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
-			"Type": notionapi.SelectPropertyConfig{
-				Type: notionapi.PropertyConfigTypeSelect,
-				Select: notionapi.Select{
-					Options: []notionapi.Option{
-						{Name: "Headline", Color: notionapi.ColorRed},
-						{Name: "Related Free", Color: notionapi.ColorGreen},
-					},
-				},
-			},
 			"Score": notionapi.NumberPropertyConfig{
 				Type: notionapi.PropertyConfigTypeNumber,
 				Number: notionapi.NumberFormat{
@@ -302,12 +293,6 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 				Name: h.Source,
 			},
 		},
-		"Type": notionapi.SelectProperty{
-			Type: notionapi.PropertyTypeSelect,
-			Select: notionapi.Option{
-				Name: "Headline",
-			},
-		},
 	}
 
 	// Add Published Date if available
@@ -397,12 +382,6 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 			Type: notionapi.PropertyTypeSelect,
 			Select: notionapi.Option{
 				Name: rf.Source,
-			},
-		},
-		"Type": notionapi.SelectProperty{
-			Type: notionapi.PropertyTypeSelect,
-			Select: notionapi.Option{
-				Name: "Related Free",
 			},
 		},
 		"Score": notionapi.NumberProperty{
@@ -634,17 +613,6 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 		// Process results
 		for _, page := range resp.Results {
-			// Extract Type and filter for "Headline"
-			pageType := ""
-			if typeProp, ok := page.Properties["Type"].(*notionapi.SelectProperty); ok && typeProp.Select.Name != "" {
-				pageType = typeProp.Select.Name
-			}
-
-			// Skip if not a Headline
-			if pageType != "Headline" {
-				continue
-			}
-
 			// Filter by creation date
 			if !page.CreatedTime.After(cutoffDate) {
 				continue

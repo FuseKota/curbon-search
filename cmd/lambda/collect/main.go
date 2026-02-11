@@ -2,7 +2,7 @@
 // Lambda: collect-headlines
 // =============================================================================
 //
-// 16の無料ソースから記事を収集し、Notion DBに保存するLambda関数
+// 全ソースから記事を収集し、Notion DBに保存するLambda関数
 //
 // 環境変数:
 //   - NOTION_TOKEN:       Notion API Token (必須)
@@ -10,6 +10,9 @@
 //   - SOURCES:            収集するソース (デフォルト: all-free)
 //   - PER_SOURCE:         ソースあたりの記事数 (デフォルト: 100)
 //   - HOURS_BACK:         何時間以内の記事を取得するか (デフォルト: 24、0=フィルタなし)
+//   - EMAIL_FROM:         エラー通知メール送信元 (任意)
+//   - EMAIL_PASSWORD:     Gmailアプリパスワード (任意)
+//   - EMAIL_TO:           エラー通知メール送信先 (任意)
 //
 // =============================================================================
 package main
@@ -21,6 +24,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
 
@@ -34,6 +38,9 @@ type LambdaConfig struct {
 	HoursBack        int // 何時間以内の記事を取得するか（0=フィルタなし）
 	NotionToken      string
 	NotionDatabaseID string
+	EmailFrom        string // エラー通知用（任意）
+	EmailPassword    string // エラー通知用（任意）
+	EmailTo          string // エラー通知用（任意）
 }
 
 // Response はLambdaレスポンス
@@ -65,10 +72,20 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 	sources := parseSources(cfg.Sources)
 	headlineCfg := pipeline.DefaultHeadlineConfig()
 
-	headlines, err := pipeline.CollectFromSources(sources, cfg.PerSource, headlineCfg)
+	result, err := pipeline.CollectFromSources(sources, cfg.PerSource, headlineCfg)
 	if err != nil {
 		log.Printf("Error collecting headlines: %v", err)
 		return Response{StatusCode: 500, Message: err.Error()}, err
+	}
+	headlines := result.Headlines
+
+	// エラーがあればログに記録し、メールで通知
+	if len(result.Errors) > 0 {
+		log.Printf("WARNING: %d source(s) failed:", len(result.Errors))
+		for _, e := range result.Errors {
+			log.Printf("  %s", e)
+		}
+		sendErrorNotification(cfg, result.Errors, len(headlines))
 	}
 
 	log.Printf("Collected %d headlines (before time filter)", len(headlines))
@@ -141,19 +158,60 @@ func loadConfig() LambdaConfig {
 		HoursBack:        hoursBack,
 		NotionToken:      os.Getenv("NOTION_TOKEN"),
 		NotionDatabaseID: os.Getenv("NOTION_DATABASE_ID"),
+		EmailFrom:        os.Getenv("EMAIL_FROM"),
+		EmailPassword:    os.Getenv("EMAIL_PASSWORD"),
+		EmailTo:          os.Getenv("EMAIL_TO"),
 	}
 }
 
 // parseSources はソース文字列をパースしてスライスで返す
+// "all-free" を指定すると全ソースに展開される
 func parseSources(sourcesRaw string) []string {
 	var result []string
 	for _, s := range strings.Split(sourcesRaw, ",") {
 		s = strings.TrimSpace(strings.ToLower(s))
-		if s != "" {
-			result = append(result, s)
+		if s == "" {
+			continue
 		}
+		if s == "all-free" {
+			return strings.Split(pipeline.DefaultSources, ",")
+		}
+		result = append(result, s)
 	}
 	return result
+}
+
+// sendErrorNotification はエラー通知メールを送信する
+// EMAIL_FROM, EMAIL_PASSWORD, EMAIL_TO が設定されている場合のみ送信
+func sendErrorNotification(cfg LambdaConfig, errors []string, headlineCount int) {
+	if cfg.EmailFrom == "" || cfg.EmailPassword == "" || cfg.EmailTo == "" {
+		log.Println("Email env vars not set, skipping error notification email")
+		return
+	}
+
+	sender, err := pipeline.NewEmailSender(cfg.EmailFrom, cfg.EmailPassword, cfg.EmailTo)
+	if err != nil {
+		log.Printf("Failed to create email sender: %v", err)
+		return
+	}
+
+	subject := fmt.Sprintf("[Carbon Relay] %d source(s) failed - %s",
+		len(errors), time.Now().Format("2006-01-02 15:04"))
+
+	var body strings.Builder
+	body.WriteString("Carbon Relay source collection errors:\n\n")
+	for _, e := range errors {
+		body.WriteString("  " + e + "\n")
+	}
+	body.WriteString(fmt.Sprintf("\nSuccessfully collected: %d headlines\n", headlineCount))
+	body.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
+
+	msg := sender.BuildEmailMessage(subject, body.String())
+	if err := sender.SendWithRetry(msg); err != nil {
+		log.Printf("Failed to send error notification email: %v", err)
+	} else {
+		log.Println("Error notification email sent")
+	}
 }
 
 func main() {

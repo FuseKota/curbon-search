@@ -145,10 +145,10 @@ func (es *EmailSender) SendHeadlinesSummary(ctx context.Context, headlines []Not
 		len(headlines))
 
 	// RFC 5322準拠のメッセージを構築
-	msg := es.buildEmailMessage(subject, body)
+	msg := es.BuildEmailMessage(subject, body)
 
 	// リトライ付きで送信
-	return es.sendWithRetry(msg)
+	return es.SendWithRetry(msg)
 }
 
 // =============================================================================
@@ -233,7 +233,7 @@ func (es *EmailSender) generateEmailBody(headlines []NotionHeadline) string {
 //	メール本文...
 //
 // 注意: ヘッダーと本文は空行（\r\n）で区切る
-func (es *EmailSender) buildEmailMessage(subject, body string) []byte {
+func (es *EmailSender) BuildEmailMessage(subject, body string) []byte {
 	var msg strings.Builder
 
 	msg.WriteString(fmt.Sprintf("From: %s\r\n", es.config.From))
@@ -260,7 +260,7 @@ func (es *EmailSender) buildEmailMessage(subject, body string) []byte {
 //	3回目失敗: 8秒待機
 //
 // これにより、一時的なネットワーク障害やサーバー過負荷に対応できる
-func (es *EmailSender) sendWithRetry(msg []byte) error {
+func (es *EmailSender) SendWithRetry(msg []byte) error {
 	maxRetries := 3 // 最大リトライ回数
 	var lastErr error
 
@@ -384,10 +384,10 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 		len(filtered))
 
 	// RFC 5322準拠のメッセージを構築
-	msg := es.buildEmailMessage(subject, body)
+	msg := es.BuildEmailMessage(subject, body)
 
 	// リトライ付きで送信
-	return es.sendWithRetry(msg)
+	return es.SendWithRetry(msg)
 }
 
 // generateShortHeadlinesBody は50文字ヘッドラインのメール本文を生成する

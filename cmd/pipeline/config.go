@@ -96,7 +96,7 @@ type EmailModeConfig struct {
 // =============================================================================
 
 // デフォルトソースリスト（全41アクティブソース）
-// 2026-02-09更新: Carbon Market WatchをRSS方式で復活
+// 2026-02-11更新: METI審議会を復帰（excerpt・日付抽出改善済み）
 const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,nature-ecoevo,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す

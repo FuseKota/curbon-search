@@ -73,8 +73,8 @@
 //  35. Australia CER      - オーストラリア・クリーンエネルギー規制局
 //
 // ▼ 一時無効化中のソース
-//  - UNFCCC              - Incapsula (Imperva) 保護により全エンドポイントブロック
-//  - UN News Climate     - コンテンツ抽出の改善が必要
+//   - UNFCCC              - Incapsula (Imperva) 保護により全エンドポイントブロック
+//   - UN News Climate     - コンテンツ抽出の改善が必要
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -157,7 +157,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"rmi":                   collectHeadlinesRMI,
 
 	// =========================================================================
-	// sources_japan.go - 日本語ソース (6)
+	// sources_japan.go - 日本語ソース (5)
 	// =========================================================================
 	"jri":          collectHeadlinesJRI,
 	"env-ministry": collectHeadlinesEnvMinistry,
@@ -178,12 +178,12 @@ var sourceCollectors = map[string]HeadlineCollector{
 	// =========================================================================
 	// sources_academic.go - 学術・研究機関ソース (6)
 	// =========================================================================
-	"arxiv":           collectHeadlinesArXiv,
-	"nature-comms":    collectHeadlinesNatureComms,
-	"oies":            collectHeadlinesOIES,
-	"iopscience":      collectHeadlinesIOPScience,
-	"nature-ecoevo":   collectHeadlinesNatureEcoEvo,
-	"sciencedirect":   collectHeadlinesScienceDirect,
+	"arxiv":         collectHeadlinesArXiv,
+	"nature-comms":  collectHeadlinesNatureComms,
+	"oies":          collectHeadlinesOIES,
+	"iopscience":    collectHeadlinesIOPScience,
+	"nature-ecoevo": collectHeadlinesNatureEcoEvo,
+	"sciencedirect": collectHeadlinesScienceDirect,
 
 	// =========================================================================
 	// sources_regional_ets.go - 地域排出量取引システム (5)
@@ -265,24 +265,45 @@ func defaultHeadlineConfig() headlineSourceConfig {
 // 【使用例】
 //
 //	headlines, err := CollectFromSources([]string{"carbonherald", "carbon-brief"}, 10, cfg)
-func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfig) ([]Headline, error) {
-	var headlines []Headline
+// CollectResult は収集結果とエラー情報を保持する
+type CollectResult struct {
+	Headlines []Headline
+	Errors    []string
+}
+
+func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfig) (*CollectResult, error) {
+	result := &CollectResult{}
 
 	for _, src := range sources {
 		collector, ok := sourceCollectors[src]
 		if !ok {
-			return nil, fmt.Errorf("unknown source: %s", src)
+			errMsg := fmt.Sprintf("[ERROR] unknown source: %s", src)
+			fmt.Fprintln(os.Stderr, errMsg)
+			result.Errors = append(result.Errors, errMsg)
+			continue
 		}
 
 		hs, err := collector(perSource, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("collecting %s: %w", src, err)
+			errMsg := fmt.Sprintf("[ERROR] collecting %s: %v", src, err)
+			fmt.Fprintln(os.Stderr, errMsg)
+			result.Errors = append(result.Errors, errMsg)
+			continue
 		}
 
-		headlines = append(headlines, hs...)
+		result.Headlines = append(result.Headlines, hs...)
 	}
 
-	return uniqueHeadlinesByURL(headlines), nil
+	if len(result.Errors) > 0 {
+		fmt.Fprintf(os.Stderr, "\n[WARN] %d source(s) failed (collected %d headlines from %d sources):\n",
+			len(result.Errors), len(result.Headlines), len(sources)-len(result.Errors))
+		for _, e := range result.Errors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+	}
+
+	result.Headlines = uniqueHeadlinesByURL(result.Headlines)
+	return result, nil
 }
 
 // FilterHeadlinesByHours は指定された時間以内に公開された記事のみをフィルタリングする
@@ -336,7 +357,9 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 			}
 		}
 
-		if pubTime.After(cutoff) {
+		// cutoff〜現在の範囲内の記事のみ保持（未来日付の記事を除外）
+		now := time.Now()
+		if pubTime.After(cutoff) && !pubTime.After(now) {
 			filtered = append(filtered, h)
 		}
 	}

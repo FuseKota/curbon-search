@@ -11,51 +11,79 @@
 //   - sources_html.go             - HTMLスクレイピングソース
 //   - sources_japan.go            - 日本語ソース
 //   - sources_rss.go              - RSSフィードソース
+//   - sources_academic.go         - 学術・研究機関ソース
+//   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】
+// 【実装ソース一覧】（全38ソース、有効35ソース）
 // =============================================================================
 //
-// ▼ 無料ソース - WordPress REST API（7ソース）- sources_wordpress.go
-//   1. CarbonCredits.jp    - 日本のカーボンクレジット情報
-//   2. Carbon Herald       - CDR技術ニュース
-//   3. Climate Home News   - 国際気候政策
-//   4. CarbonCredits.com   - 教育・啓発コンテンツ
-//   5. Sandbag             - EU ETSアナリスト
-//   6. Ecosystem Marketplace - 自然気候ソリューション
-//   7. Carbon Brief        - 気候科学・政策
+// ▼ 無料ソース - WordPress REST API（8ソース）- sources_wordpress.go
+//  1. CarbonCredits.jp    - 日本のカーボンクレジット情報
+//  2. Carbon Herald       - CDR技術ニュース
+//  3. Climate Home News   - 国際気候政策
+//  4. CarbonCredits.com   - 教育・啓発コンテンツ
+//  5. Sandbag             - EU ETSアナリスト
+//  6. Ecosystem Marketplace - 自然気候ソリューション
+//  7. Carbon Brief        - 気候科学・政策
+//  8. RMI                 - エネルギー転換シンクタンク
 //
-// ▼ 無料ソース - HTMLスクレイピング（6ソース）- sources_html.go
-//   8. ICAP               - 国際カーボンアクションパートナーシップ
-//   9. IETA               - 国際排出量取引協会
-//   10. Energy Monitor     - エネルギー転換ニュース
-//   11. World Bank         - 世界銀行気候変動
-//   12. NewClimate Institute - 気候研究機関
-//   13. Carbon Knowledge Hub - 教育プラットフォーム
+// ▼ 無料ソース - HTMLスクレイピング（12ソース）- sources_html.go
+//  10. ICAP               - 国際カーボンアクションパートナーシップ
+//  11. IETA               - 国際排出量取引協会
+//  12. Energy Monitor     - エネルギー転換ニュース
+//  13. World Bank         - 世界銀行気候変動
+//  14. NewClimate Institute - 気候研究機関
+//  15. Carbon Knowledge Hub - 教育プラットフォーム
+//  16. Verra              - VCS規格運営団体
+//  17. Gold Standard      - 高品質カーボンクレジット規格
+//  18. ACR                - American Carbon Registry
+//  19. CAR                - Climate Action Reserve
+//  20. IISD ENB           - 環境交渉速報
+//  21. Climate Focus      - 気候政策コンサルティング
+//  22. Isometric          - 炭素除去検証
 //
 // ▼ 無料ソース - 日本語ソース（5ソース）- sources_japan.go
-//   14. JRI（日本総研）    - RSSフィード
-//   15. 環境省             - プレスリリース
-//   16. METI（経産省）     - 審議会ページ
-//   17. PwC Japan          - コンサルティングレポート
-//   18. Mizuho R&T         - 金融調査レポート
+//  23. JRI（日本総研）    - RSSフィード
+//  24. 環境省             - プレスリリース
+//  25. METI（経産省）     - SME Agency RSS
+//  26. PwC Japan          - コンサルティングレポート
+//  27. Mizuho R&T         - 金融調査レポート
 //
 // ▼ その他 - sources_japan.go
-//   19. JPX（日本取引所）  - カーボン関連株式ニュース
+//  28. JPX（日本取引所）  - カーボン関連株式ニュース
 //
-// ▼ 欧州政策ソース - sources_rss.go
-//   20. Politico EU        - EU政策・エネルギー・気候変動ニュース
+// ▼ RSS/Atomフィードソース（3ソース）- sources_rss.go
+//  29. Politico EU          - EU政策・エネルギー・気候変動ニュース
+//  38. Euractiv             - EU政策ニュース（メインフィード + キーワードフィルタ）
+//  42. Carbon Market Watch  - カーボン市場監視NGO（RSSフィード）
+//
+// ▼ 学術・研究機関ソース（6ソース）- sources_academic.go
+//  30. arXiv              - プレプリントリポジトリ
+//  31. Nature Communications - 科学ジャーナル（キーワードフィルタ）
+//  37. OIES               - オックスフォードエネルギー研究所（プログラムページ経由）
+//  39. IOP Science (ERL)  - 環境研究レター（RSSフィード + キーワードフィルタ）
+//  40. Nature Eco&Evo     - 生態学・進化学（RSSフィード + キーワードフィルタ）
+//  41. ScienceDirect      - Elsevier学術誌（RSSフィード + キーワードフィルタ）
+//
+// ▼ 地域ETSソース（4ソース）- sources_regional_ets.go
+//  32. EU ETS             - 欧州委員会ETSニュース
+//  33. California CARB    - カリフォルニア大気資源局
+//  34. RGGI               - 北東部州温室効果ガスイニシアティブ
+//  35. Australia CER      - オーストラリア・クリーンエネルギー規制局
+//
+// ▼ 一時無効化中のソース
+//   - UNFCCC              - Incapsula (Imperva) 保護により全エンドポイントブロック
+//   - UN News Climate     - コンテンツ抽出の改善が必要
 //
 // =============================================================================
 // 【デバッグ方法】
 // =============================================================================
 //
 // 環境変数でデバッグ情報を出力:
-//   DEBUG_SCRAPING=1  - スクレイピング処理の詳細ログ
-//   DEBUG_HTML=1      - 取得したHTMLの構造を出力
 //
-// 使用例:
-//   DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
+//	DEBUG_SCRAPING=1  - スクレイピング処理の詳細ログ
+//	DEBUG_HTML=1      - 取得したHTMLの構造を出力
 //
 // =============================================================================
 package pipeline
@@ -66,12 +94,22 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mmcdole/gofeed"
 )
+
+// Package-level compiled regex for performance (avoid recompiling on every call)
+var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
+var reShortcodes = regexp.MustCompile(`\[/?[a-z_]+[^\]]*\]`)
+var reWhitespace = regexp.MustCompile(`\s+`)
+var reDatePublishedJSON = regexp.MustCompile(`"datePublished"\s*:\s*"([^"]+)"`)
+var reJapaneseDateYMD = regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+var reMultipleNewlines = regexp.MustCompile(`\n{3,}`) // 3つ以上の連続改行
 
 // =============================================================================
 // ソースレジストリ（Source Registry）
@@ -102,7 +140,9 @@ type HeadlineCollector func(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 // キー: ソース識別子（CLIの-sourcesで指定する文字列）
 // 値:  対応する収集関数
 var sourceCollectors = map[string]HeadlineCollector{
-	// WordPress REST APIソース - sources_wordpress.go
+	// =========================================================================
+	// sources_wordpress.go - WordPress REST API ソース (8)
+	// =========================================================================
 	"carboncredits.jp":      collectHeadlinesCarbonCreditsJP,
 	"carbonherald":          collectHeadlinesCarbonHerald,
 	"climatehomenews":       collectHeadlinesClimateHomeNews,
@@ -110,28 +150,69 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"sandbag":               collectHeadlinesSandbag,
 	"ecosystem-marketplace": collectHeadlinesEcosystemMarketplace,
 	"carbon-brief":          collectHeadlinesCarbonBrief,
+	"rmi":                   collectHeadlinesRMI,
 
-	// HTMLスクレイピングソース - sources_html.go
-	"icap":                 collectHeadlinesICAP,
-	"ieta":                 collectHeadlinesIETA,
-	"energy-monitor":       collectHeadlinesEnergyMonitor,
-	"world-bank":           collectHeadlinesWorldBank,
-	// "carbon-market-watch": collectHeadlinesCarbonMarketWatch, // 2026-01: 403 Forbidden エラーのため一時無効化
-	"newclimate":           collectHeadlinesNewClimate,
-	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
-
-	// 日本語ソース - sources_japan.go
+	// =========================================================================
+	// sources_japan.go - 日本語ソース (5)
+	// =========================================================================
 	"jri":          collectHeadlinesJRI,
 	"env-ministry": collectHeadlinesEnvMinistry,
+	"jpx":          collectHeadlinesJPX,
 	"meti":         collectHeadlinesMETI,
 	"pwc-japan":    collectHeadlinesPwCJapan,
 	"mizuho-rt":    collectHeadlinesMizuhoRT,
 
-	// その他 - sources_japan.go
-	"jpx": collectHeadlinesJPX,
+	// =========================================================================
+	// sources_rss.go - RSS/Atom フィードソース (3)
+	// =========================================================================
+	"politico-eu":         collectHeadlinesPoliticoEU,
+	"euractiv":            collectHeadlinesEuractiv,
+	"carbon-market-watch": collectHeadlinesCarbonMarketWatch,
+	// "un-news": collectHeadlinesUNNews, // 2026-02: コンテンツ抽出の改善が必要
+	// "unfccc": collectHeadlinesUNFCCC, // 2026-01: Incapsula (Imperva) 保護 - 全エンドポイントブロック
 
-	// 欧州政策ソース（RSSフィード）- sources_rss.go
-	"politico-eu": collectHeadlinesPoliticoEU,
+	// =========================================================================
+	// sources_academic.go - 学術・研究機関ソース (6)
+	// =========================================================================
+	"arxiv":         collectHeadlinesArXiv,
+	"nature-comms":  collectHeadlinesNatureComms,
+	"oies":          collectHeadlinesOIES,
+	"iopscience":    collectHeadlinesIOPScience,
+	"nature-ecoevo": collectHeadlinesNatureEcoEvo,
+	"sciencedirect": collectHeadlinesScienceDirect,
+
+	// =========================================================================
+	// sources_regional_ets.go - 地域排出量取引システム (5)
+	// =========================================================================
+	"eu-ets":        collectHeadlinesEUETS,
+	"uk-ets":        collectHeadlinesUKETSHTML, // HTML版（Atom feedが空のため）
+	"carb":          collectHeadlinesCARB,
+	"rggi":          collectHeadlinesRGGI,
+	"australia-cer": collectHeadlinesAustraliaCER,
+
+	// =========================================================================
+	// sources_html.go - HTMLスクレイピングソース (14)
+	// =========================================================================
+	// ニュースメディア・シンクタンク
+	"icap":                 collectHeadlinesICAP,
+	"ieta":                 collectHeadlinesIETA,
+	"energy-monitor":       collectHeadlinesEnergyMonitor,
+	"world-bank":           collectHeadlinesWorldBank,
+	"newclimate":           collectHeadlinesNewClimate,
+	"carbon-knowledge-hub": collectHeadlinesCarbonKnowledgeHub,
+
+	// VCM認証団体
+	"verra":         collectHeadlinesVerra,
+	"gold-standard": collectHeadlinesGoldStandard,
+	"acr":           collectHeadlinesACR,
+	"car":           collectHeadlinesCAR,
+
+	// 国際機関
+	"iisd":          collectHeadlinesIISD,
+	"climate-focus": collectHeadlinesClimateFocus,
+	// CDR関連
+	"puro-earth": collectHeadlinesPuroEarth,
+	"isometric":  collectHeadlinesIsometric,
 }
 
 // =============================================================================
@@ -142,13 +223,23 @@ var sourceCollectors = map[string]HeadlineCollector{
 type HeadlineSourceConfig struct {
 	UserAgent string        // HTTPリクエスト時のUser-Agentヘッダー
 	Timeout   time.Duration // HTTPリクエストのタイムアウト時間
+	Client    *http.Client  // 共有HTTPクライアント（コネクションプーリング有効）
 }
 
 // DefaultHeadlineConfig はデフォルトの見出し収集設定を返す
 func DefaultHeadlineConfig() HeadlineSourceConfig {
+	timeout := 30 * time.Second // 30秒タイムアウト（一部のサイトは遅い）
 	return HeadlineSourceConfig{
 		UserAgent: "Mozilla/5.0 (compatible; carbon-relay/1.0; +https://example.invalid)",
-		Timeout:   20 * time.Second, // デフォルト20秒タイムアウト
+		Timeout:   timeout,
+		Client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 }
 
@@ -170,24 +261,45 @@ func DefaultHeadlineConfig() HeadlineSourceConfig {
 // 【使用例】
 //
 //	headlines, err := CollectFromSources([]string{"carbonherald", "carbon-brief"}, 10, cfg)
-func CollectFromSources(sources []string, perSource int, cfg HeadlineSourceConfig) ([]Headline, error) {
-	var headlines []Headline
+// CollectResult は収集結果とエラー情報を保持する
+type CollectResult struct {
+	Headlines []Headline
+	Errors    []string
+}
+
+func CollectFromSources(sources []string, perSource int, cfg HeadlineSourceConfig) (*CollectResult, error) {
+	result := &CollectResult{}
 
 	for _, src := range sources {
 		collector, ok := sourceCollectors[src]
 		if !ok {
-			return nil, fmt.Errorf("unknown source: %s", src)
+			errMsg := fmt.Sprintf("[ERROR] unknown source: %s", src)
+			fmt.Fprintln(os.Stderr, errMsg)
+			result.Errors = append(result.Errors, errMsg)
+			continue
 		}
 
 		hs, err := collector(perSource, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("collecting %s: %w", src, err)
+			errMsg := fmt.Sprintf("[ERROR] collecting %s: %v", src, err)
+			fmt.Fprintln(os.Stderr, errMsg)
+			result.Errors = append(result.Errors, errMsg)
+			continue
 		}
 
-		headlines = append(headlines, hs...)
+		result.Headlines = append(result.Headlines, hs...)
 	}
 
-	return uniqueHeadlinesByURL(headlines), nil
+	if len(result.Errors) > 0 {
+		fmt.Fprintf(os.Stderr, "\n[WARN] %d source(s) failed (collected %d headlines from %d sources):\n",
+			len(result.Errors), len(result.Headlines), len(sources)-len(result.Errors))
+		for _, e := range result.Errors {
+			fmt.Fprintf(os.Stderr, "  %s\n", e)
+		}
+	}
+
+	result.Headlines = uniqueHeadlinesByURL(result.Headlines)
+	return result, nil
 }
 
 // FilterHeadlinesByHours は指定された時間以内に公開された記事のみをフィルタリングする
@@ -200,7 +312,8 @@ func CollectFromSources(sources []string, perSource int, cfg HeadlineSourceConfi
 //   - 指定時間以内に公開された記事のリスト
 //
 // 【注意】
-//   - PublishedAtが空または解析できない記事は除外される
+//   - PublishedAtが空の記事はフィルタをスキップして保持される（日付不明のため除外しない）
+//   - PublishedAtが解析できない記事は除外される
 //   - PublishedAtはRFC3339形式を想定（例: "2026-01-05T12:00:00Z"）
 //
 // 【使用例】
@@ -217,7 +330,10 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 
 	for _, h := range headlines {
 		if h.PublishedAt == "" {
-			continue // 日付がない記事は除外
+			// 日付が不明な記事はフィルタをスキップして保持
+			// （time.Now()フォールバックを廃止したため、古い記事が誤って含まれることはない）
+			filtered = append(filtered, h)
+			continue
 		}
 
 		// RFC3339形式でパース試行
@@ -237,7 +353,9 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 			}
 		}
 
-		if pubTime.After(cutoff) {
+		// cutoff〜現在の範囲内の記事のみ保持（未来日付の記事を除外）
+		now := time.Now()
+		if pubTime.After(cutoff) && !pubTime.After(now) {
 			filtered = append(filtered, h)
 		}
 	}
@@ -253,7 +371,7 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 // WordPress REST API 共通処理
 // =============================================================================
 //
-// WordPress REST APIを使用するソース（7ソース）の共通処理を提供します。
+// WordPress REST APIを使用するソース（8ソース）の共通処理を提供します。
 //
 // =============================================================================
 
@@ -275,7 +393,8 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 //	)
 func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	// WordPress REST API endpoint - get full content for free articles
-	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date,content", baseURL, limit)
+	// Use date_gmt for consistent UTC timestamps across all WordPress sources
+	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date_gmt,content", baseURL, limit)
 
 	// httpGetJSON is defined in utils.go
 	var posts []WPPost
@@ -296,11 +415,18 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg Headli
 		content := cleanHTMLTags(p.Content.Rendered)
 		content = strings.TrimSpace(content)
 
+		// Convert date_gmt to RFC3339 format with UTC timezone indicator
+		// WordPress date_gmt format: "2026-01-05T14:42:50"
+		publishedAt := ""
+		if p.DateGMT != "" {
+			publishedAt = p.DateGMT + "Z" // Add Z suffix to indicate UTC
+		}
+
 		out = append(out, Headline{
 			Source:      sourceName,
 			Title:       title,
 			URL:         p.Link,
-			PublishedAt: p.Date, // WordPress API returns RFC3339 format
+			PublishedAt: publishedAt,
 			Excerpt:     content, // Store full content in Excerpt field for free articles
 			IsHeadline:  true,
 		})
@@ -308,6 +434,59 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg Headli
 
 	if os.Getenv("DEBUG_SCRAPING") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] %s: collected %d headlines\n", sourceName, len(out))
+	}
+
+	return out, nil
+}
+
+// collectWordPressHeadlinesCustomType はカスタム投稿タイプからWordPress記事を収集する
+//
+// 一部のWordPressサイトは標準の「posts」ではなくカスタム投稿タイプを使用している。
+// 例: Ecosystem Marketplaceは「featured-articles」を使用。
+//
+// 【引数】
+//   - baseURL:    WordPressサイトのベースURL
+//   - sourceName: ソース名
+//   - postType:   カスタム投稿タイプ（例: "featured-articles"）
+//   - limit:      取得する記事の最大数
+//   - cfg:        HTTP設定
+func collectWordPressHeadlinesCustomType(baseURL, sourceName, postType string, limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
+	// WordPress REST API endpoint with custom post type
+	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/%s?per_page=%d&_fields=title,link,date_gmt,content", baseURL, postType, limit)
+
+	var posts []WPPost
+	if err := httpGetJSON(apiURL, cfg, &posts); err != nil {
+		return nil, fmt.Errorf("failed to fetch %s API: %w", sourceName, err)
+	}
+
+	out := make([]Headline, 0, len(posts))
+	for _, p := range posts {
+		title := cleanHTMLTags(p.Title.Rendered)
+		title = strings.TrimSpace(title)
+		if title == "" {
+			continue
+		}
+
+		content := cleanHTMLTags(p.Content.Rendered)
+		content = strings.TrimSpace(content)
+
+		publishedAt := ""
+		if p.DateGMT != "" {
+			publishedAt = p.DateGMT + "Z"
+		}
+
+		out = append(out, Headline{
+			Source:      sourceName,
+			Title:       title,
+			URL:         p.Link,
+			PublishedAt: publishedAt,
+			Excerpt:     content,
+			IsHeadline:  true,
+		})
+	}
+
+	if os.Getenv("DEBUG_SCRAPING") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] %s: collected %d headlines from custom type '%s'\n", sourceName, len(out), postType)
 	}
 
 	return out, nil
@@ -339,7 +518,7 @@ func min2(a, b int) int {
 //
 //	パースされたHTMLドキュメント、エラー
 func fetchDoc(u string, cfg HeadlineSourceConfig) (*goquery.Document, error) {
-	client := &http.Client{Timeout: cfg.Timeout} // タイムアウト付きHTTPクライアント
+	client := cfg.Client // 共有HTTPクライアントを使用
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
@@ -423,21 +602,19 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	}
 
 	// Strategy 1: Check for <p> tags in parent elements
-	if excerpt.Len() == 0 {
-		parent := linkSel.Parent()
-		parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
-			if excerpt.Len() >= maxChars {
-				return
+	parent := linkSel.Parent()
+	parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
+		if excerpt.Len() >= maxChars {
+			return
+		}
+		text := strings.TrimSpace(s.Text())
+		if text != "" && len(text) > 20 {
+			if excerpt.Len() > 0 {
+				excerpt.WriteString(" ")
 			}
-			text := strings.TrimSpace(s.Text())
-			if text != "" && len(text) > 20 {
-				if excerpt.Len() > 0 {
-					excerpt.WriteString(" ")
-				}
-				excerpt.WriteString(text)
-			}
-		})
-	}
+			excerpt.WriteString(text)
+		}
+	})
 
 	// Strategy 2: Check for <div class="excerpt"> or similar
 	if excerpt.Len() == 0 {
@@ -469,12 +646,107 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	return result
 }
 
+// matchesKeywords は title または excerpt が keywords のいずれかを含むかチェック
+//
+// キーワードフィルタリングが必要なソース（arXiv, IOP Science, Nature Eco&Evo,
+// ScienceDirect, Euractiv, JRI, Env Ministry, Mizuho R&T）で共通使用。
+func matchesKeywords(title, excerpt string, keywords []string) bool {
+	titleLower := strings.ToLower(title)
+	excerptLower := strings.ToLower(excerpt)
+	for _, kw := range keywords {
+		kwLower := strings.ToLower(kw)
+		if strings.Contains(titleLower, kwLower) || strings.Contains(excerptLower, kwLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchRSSFeed は指定URLからRSS/Atomフィードを取得してパース
+//
+// 共有HTTPクライアントを使用してフィードをフェッチし、gofeedでパースする。
+// sources_rss.go, sources_html.go, sources_academic.go の8箇所で共通使用。
+func fetchRSSFeed(feedURL string, cfg HeadlineSourceConfig) (*gofeed.Feed, error) {
+	client := cfg.Client
+	req, err := http.NewRequest("GET", feedURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("request creation failed: %w", err)
+	}
+	req.Header.Set("User-Agent", cfg.UserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
+	fp := gofeed.NewParser()
+	feed, err := fp.Parse(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("RSS parse failed: %w", err)
+	}
+
+	return feed, nil
+}
+
+// extractRSSExcerpt は gofeed.Item から Content/Description を優先取得して整形
+//
+// Content フィールドが空でなければ Content を、なければ Description を使用。
+// HTMLタグを除去してトリム。
+func extractRSSExcerpt(item *gofeed.Item) string {
+	raw := item.Content
+	if raw == "" {
+		raw = item.Description
+	}
+	if raw == "" {
+		return ""
+	}
+	text := cleanHTMLTags(raw)
+	return strings.TrimSpace(text)
+}
+
+// fetchViaCurl fetches a URL using curl to bypass TLS fingerprint detection.
+// Some sites (e.g., nature.com with Fastly) block Go's net/http TLS fingerprint
+// but allow curl. This function shells out to curl as a workaround.
+func fetchViaCurl(targetURL string, userAgent string) (string, error) {
+	cmd := exec.Command("curl", "-sL",
+		"-H", "User-Agent: "+userAgent,
+		"--max-time", "30",
+		targetURL,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("curl failed for %s: %w", targetURL, err)
+	}
+	return string(output), nil
+}
+
 // cleanHTMLTags removes HTML tags and decodes HTML entities
 func cleanHTMLTags(htmlStr string) string {
-	// Remove HTML tags
-	re := regexp.MustCompile(`<[^>]*>`)
-	text := re.ReplaceAllString(htmlStr, "")
+	// Remove HTML tags (using pre-compiled regex for performance)
+	text := reHTMLTags.ReplaceAllString(htmlStr, "")
+	// Remove WordPress/Divi shortcodes like [et_pb_section ...] [/et_pb_section]
+	text = reShortcodes.ReplaceAllString(text, "")
 	// Decode HTML entities (including Japanese characters)
 	text = html.UnescapeString(text)
 	return text
+}
+
+// cleanExtractedText は goquery .Text() の出力を整理する
+// タブ・連続空白・空行を除去し、きれいなテキストにする
+func cleanExtractedText(raw string) string {
+	lines := strings.Split(raw, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			cleaned = append(cleaned, line)
+		}
+	}
+	result := strings.Join(cleaned, "\n")
+	return strings.TrimSpace(result)
 }

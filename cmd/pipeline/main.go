@@ -91,18 +91,24 @@ func main() {
 
 	// --- 1) Collect or read headlines ---
 	var headlines []Headline
+	var collectErrors []string
 	if cfg.Input.HeadlinesFile != "" {
 		if err := readJSONFile(cfg.Input.HeadlinesFile, &headlines); err != nil {
 			fatalf("reading headlines: %v", err)
 		}
 	} else {
 		headlineCfg := defaultHeadlineConfig()
-		// ソースレジストリを使用して収集（headlines.goのCollectFromSourcesを呼び出し）
-		var err error
-		headlines, err = CollectFromSources(cfg.Input.Sources(), cfg.Input.PerSource, headlineCfg)
+		result, err := CollectFromSources(cfg.Input.Sources(), cfg.Input.PerSource, headlineCfg)
 		if err != nil {
 			fatalf("collecting headlines: %v", err)
 		}
+		headlines = result.Headlines
+		collectErrors = result.Errors
+	}
+
+	// エラーがあればメールで通知（環境変数が設定されている場合のみ）
+	if len(collectErrors) > 0 {
+		sendErrorNotification(collectErrors, len(headlines))
 	}
 
 	if len(headlines) == 0 {

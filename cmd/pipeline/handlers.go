@@ -104,12 +104,6 @@ func fetchNotionHeadlines(clipper *NotionClipper, daysBack int) []NotionHeadline
 		fatalf("ERROR fetching headlines from Notion: %v", err)
 	}
 
-	if len(headlines) == 0 {
-		fmt.Fprintf(os.Stderr, "⚠️  No headlines found in the last %d days\n", daysBack)
-		fmt.Fprintln(os.Stderr, "========================================")
-		return nil
-	}
-
 	fmt.Fprintf(os.Stderr, "Fetched %d headlines from Notion (last %d days)\n", len(headlines), daysBack)
 	return headlines
 }
@@ -145,11 +139,8 @@ func handleShortEmailSend(emailDaysBack int) {
 	// Create Notion clipper and fetch headlines
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
-	if headlines == nil {
-		return
-	}
 
-	// Create email sender and send
+	// Create email sender and send（0件でも送信する）
 	sender, from, to := createEmailSender()
 	ctx := context.Background()
 	if err := sender.SendShortHeadlinesDigest(ctx, headlines); err != nil {

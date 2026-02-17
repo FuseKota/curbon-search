@@ -76,16 +76,7 @@ func Handler(ctx context.Context, event interface{}) (Response, error) {
 
 	log.Printf("Fetched %d headlines from Notion (last %d days)", len(headlines), cfg.DaysBack)
 
-	if len(headlines) == 0 {
-		return Response{
-			StatusCode: 200,
-			Message:    "No headlines to send",
-			Fetched:    0,
-			Sent:       false,
-		}, nil
-	}
-
-	// 3. メール送信
+	// 3. メール送信（0件でも送信する）
 	sender, err := pipeline.NewEmailSender(cfg.EmailFrom, cfg.EmailPassword, cfg.EmailTo)
 	if err != nil {
 		log.Printf("Error creating email sender: %v", err)

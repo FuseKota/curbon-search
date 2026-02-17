@@ -131,18 +131,18 @@ func NewEmailSender(from, password, to string) (*EmailSender, error) {
 //  3. RFC 5322準拠のメッセージを構築
 //  4. リトライ付きで送信
 func (es *EmailSender) SendHeadlinesSummary(ctx context.Context, headlines []NotionHeadline) error {
+	var body, subject string
 	if len(headlines) == 0 {
-		return fmt.Errorf("no headlines to send")
+		subject = fmt.Sprintf("Carbon News Headlines - %s (0 articles)",
+			time.Now().Format("2006-01-02"))
+		body = fmt.Sprintf("Carbon News Headlines Summary\nGenerated: %s\n\n========================================\nNo headlines found for this period.\n========================================\n",
+			time.Now().Format("2006-01-02 15:04:05"))
+	} else {
+		body = es.generateEmailBody(headlines)
+		subject = fmt.Sprintf("Carbon News Headlines - %s (%d articles)",
+			time.Now().Format("2006-01-02"),
+			len(headlines))
 	}
-
-	// メール本文を生成
-	body := es.generateEmailBody(headlines)
-
-	// 件名を生成
-	// 例: "Carbon News Headlines - 2026-01-05 (15 articles)"
-	subject := fmt.Sprintf("Carbon News Headlines - %s (%d articles)",
-		time.Now().Format("2006-01-02"),
-		len(headlines))
 
 	// RFC 5322準拠のメッセージを構築
 	msg := es.BuildEmailMessage(subject, body)
@@ -355,10 +355,6 @@ func containsCarbonKeyword(text string) bool {
 //	2. Japan launches new GX initiative...
 //	   https://carboncredits.jp/...
 func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines []NotionHeadline) error {
-	if len(headlines) == 0 {
-		return fmt.Errorf("no headlines to send")
-	}
-
 	// カーボンキーワードでフィルタリング + ShortHeadlineが"-"のものを除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
 	for _, h := range headlines {
@@ -371,17 +367,18 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 		}
 	}
 
+	var body, subject string
 	if len(filtered) == 0 {
-		return fmt.Errorf("no carbon-related headlines found after filtering")
+		subject = fmt.Sprintf("Carbon Headlines Digest - %s (0 articles)",
+			time.Now().Format("2006-01-02"))
+		body = fmt.Sprintf("Carbon Headlines Digest - %s\nTotal: 0 articles\n\nNo carbon-related headlines found for this period.\n",
+			time.Now().Format("2006-01-02"))
+	} else {
+		body = es.generateShortHeadlinesBody(filtered)
+		subject = fmt.Sprintf("Carbon Headlines Digest - %s (%d articles)",
+			time.Now().Format("2006-01-02"),
+			len(filtered))
 	}
-
-	// メール本文を生成
-	body := es.generateShortHeadlinesBody(filtered)
-
-	// 件名を生成
-	subject := fmt.Sprintf("Carbon Headlines Digest - %s (%d articles)",
-		time.Now().Format("2006-01-02"),
-		len(filtered))
 
 	// RFC 5322準拠のメッセージを構築
 	msg := es.BuildEmailMessage(subject, body)

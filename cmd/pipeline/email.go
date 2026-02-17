@@ -258,10 +258,6 @@ func containsCarbonKeyword(text string) bool {
 //	2. Japan launches new GX initiative...
 //	   https://carboncredits.jp/...
 func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines []NotionHeadline) error {
-	if len(headlines) == 0 {
-		return fmt.Errorf("no headlines to send")
-	}
-
 	// カーボンキーワードでフィルタリング + ShortHeadlineが"-"のものを除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
 	for _, h := range headlines {
@@ -274,17 +270,18 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 		}
 	}
 
+	var body, subject string
 	if len(filtered) == 0 {
-		return fmt.Errorf("no carbon-related headlines found after filtering")
+		subject = fmt.Sprintf("炭素関連記事一覧 - %s (0 記事)",
+			time.Now().Format("2006-01-02"))
+		body = fmt.Sprintf("炭素関連記事一覧 - %s\n合計: 0 記事\n\nこの期間にカーボン関連の記事は見つかりませんでした。\n",
+			time.Now().Format("2006-01-02"))
+	} else {
+		body = es.generateShortHeadlinesBody(filtered)
+		subject = fmt.Sprintf("炭素関連記事一覧 - %s (%d 記事)",
+			time.Now().Format("2006-01-02"),
+			len(filtered))
 	}
-
-	// メール本文を生成
-	body := es.generateShortHeadlinesBody(filtered)
-
-	// 件名を生成
-	subject := fmt.Sprintf("炭素関連記事一覧 - %s (%d 記事)",
-		time.Now().Format("2006-01-02"),
-		len(filtered))
 
 	// RFC 5322準拠のメッセージを構築
 	msg := es.buildEmailMessage(subject, body)

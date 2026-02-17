@@ -176,10 +176,10 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 					},
 				},
 			},
-			"AI Summary": notionapi.RichTextPropertyConfig{
+			"Article Summary 1500": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
-			"ShortHeadline": notionapi.RichTextPropertyConfig{
+			"Article Summary 300": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
 			"Score": notionapi.NumberPropertyConfig{
@@ -233,7 +233,7 @@ func (nc *NotionClipper) ensureShortHeadlineProperty(ctx context.Context) error 
 	}
 
 	// ShortHeadlineプロパティが既に存在する場合はスキップ（AI機能設定を保持）
-	if _, exists := db.Properties["ShortHeadline"]; exists {
+	if _, exists := db.Properties["Article Summary 300"]; exists {
 		if os.Getenv("DEBUG_SCRAPING") != "" {
 			fmt.Fprintf(os.Stderr, "[DEBUG] ShortHeadline property already exists, skipping update\n")
 		}
@@ -244,7 +244,7 @@ func (nc *NotionClipper) ensureShortHeadlineProperty(ctx context.Context) error 
 	// ShortHeadlineプロパティが存在しない場合のみ追加
 	_, err = nc.client.Database.Update(ctx, nc.dbID, &notionapi.DatabaseUpdateRequest{
 		Properties: notionapi.PropertyConfigs{
-			"ShortHeadline": notionapi.RichTextPropertyConfig{
+			"Article Summary 300": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
 		},
@@ -314,11 +314,11 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	// (split into multiple RichText blocks if needed due to 2000 char limit)
 	if h.Excerpt != "" {
 		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
-		properties["AI Summary"] = notionapi.RichTextProperty{
+		properties["Article Summary 1500"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: richTextBlocks,
 		}
-		properties["ShortHeadline"] = notionapi.RichTextProperty{
+		properties["Article Summary 300"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: richTextBlocks,
 		}
@@ -407,7 +407,7 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 
 	// Add full content to AI Summary field (split into multiple RichText blocks if needed)
 	if rf.Excerpt != "" {
-		properties["AI Summary"] = notionapi.RichTextProperty{
+		properties["Article Summary 1500"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: splitIntoRichTextBlocks(rf.Excerpt),
 		}
@@ -638,7 +638,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 			// Extract AI Summary
 			aiSummary := ""
-			if summaryProp, ok := page.Properties["AI Summary"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
+			if summaryProp, ok := page.Properties["Article Summary 1500"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
 				// Concatenate all rich text segments
 				for _, rt := range summaryProp.RichText {
 					aiSummary += rt.PlainText
@@ -647,7 +647,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 			// Extract ShortHeadline (50文字ヘッドライン)
 			shortHeadline := ""
-			if shortProp, ok := page.Properties["ShortHeadline"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
+			if shortProp, ok := page.Properties["Article Summary 300"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
 				for _, rt := range shortProp.RichText {
 					shortHeadline += rt.PlainText
 				}

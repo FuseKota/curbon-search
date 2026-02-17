@@ -137,10 +137,10 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 					},
 				},
 			},
-			"AI Summary": notionapi.RichTextPropertyConfig{
+			"Article Summary 1500": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
-			"ShortHeadline": notionapi.RichTextPropertyConfig{
+			"Article Summary 300": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
 			"Published Date": notionapi.DatePropertyConfig{
@@ -207,11 +207,11 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	// (split into multiple RichText blocks if needed due to 2000 char limit)
 	if h.Excerpt != "" {
 		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
-		properties["AI Summary"] = notionapi.RichTextProperty{
+		properties["Article Summary 1500"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: richTextBlocks,
 		}
-		properties["ShortHeadline"] = notionapi.RichTextProperty{
+		properties["Article Summary 300"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: richTextBlocks,
 		}
@@ -462,7 +462,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 			// Extract AI Summary
 			aiSummary := ""
-			if summaryProp, ok := page.Properties["AI Summary"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
+			if summaryProp, ok := page.Properties["Article Summary 1500"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
 				// Concatenate all rich text segments
 				for _, rt := range summaryProp.RichText {
 					aiSummary += rt.PlainText
@@ -471,7 +471,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 			// Extract ShortHeadline (50文字ヘッドライン)
 			shortHeadline := ""
-			if shortProp, ok := page.Properties["ShortHeadline"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
+			if shortProp, ok := page.Properties["Article Summary 300"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
 				for _, rt := range shortProp.RichText {
 					shortHeadline += rt.PlainText
 				}

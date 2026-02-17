@@ -1,8 +1,8 @@
-# ソース復旧試行レポート（2026-02-09）
+# ソース復旧・改善レポート（2026-02-09）
 
 ## 概要
 
-以前403エラーやボット保護で無効化されていたソースについて、改めてアクセス可能か調査・修正を行った。
+以前403エラーやボット保護で無効化されていたソースの復旧試行と、既存ソースの品質改善・バグ修正を行った。
 
 **作業期間**: 2026-02-09
 **実装者**: Claude Code
@@ -223,12 +223,102 @@ Total articles: 10
 
 ---
 
+## 5. Climate Focus - バグ修正
+
+### 問題
+
+`a[href*='/publications/']` セレクタがページネーションリンクやステージング環境URLも取得してしまい、不正な記事が生成されていた。
+
+### 発生した不正記事
+
+| タイトル | URL | Excerpt |
+|---------|-----|---------|
+| `?Sf_paged=2` | `publications/?sf_paged=2` | 空 |
+| `?Sf_paged=26` | `publications/?sf_paged=26` | 空 |
+| `Publications` | `climatefocus.wpengine.com/publications/` | 空 |
+
+### 原因
+
+- ページネーションリンク（`div.nav-links`内の`?sf_paged=N`）が`a[href*='/publications/']`にマッチ
+- リンクテキストが`"2"`, `"26"`等で10文字未満だがURLからタイトル生成のフォールバックが発動
+- ステージング環境URL（`wpengine.com`）もセレクタにマッチ
+
+### 修正内容
+
+- `sf_paged=` を含むURLをスキップ（ページネーション除外）
+- `wpengine.com` を含むURLをスキップ（ステージング環境除外）
+
+### 修正後テスト結果
+
+```
+Total: 5件（すべて正常）
+1. [941 chars] Carbon Market 2025 Review And Outlook (2026-01-27)
+2. [1965 chars] Article 6 Implementation Checklist Tool (2025-12-01)
+3. [2029 chars] Carbon Projects Brazil Amazon Guide (2025-11-20)
+4. [267 chars] From Forest Pledges To Paris Delivery (2025-11-17)
+5. [1501 chars] Food Forward NDCs 3.0 (2025-11-17)
+```
+
+---
+
+## 6. METI審議会 - 一時無効化
+
+### 問題
+
+METI審議会（`meti`ソース）は記事に日付情報がなく、`FilterHeadlinesByHours`の「日付なし記事は保持」ルールにより、時間フィルタ使用時に常に全30件が含まれてしまう。本番テスト（48時間フィルタ）で全38件中30件がMETI審議会という偏った結果になった。
+
+### 対応
+
+- `headlines.go` のsourceMapでコメントアウト
+- `config.go` のdefaultSourcesから除外（41→40ソース）
+- 日付取得の改善後に再有効化を検討
+
+---
+
+## 7. FilterHeadlinesByHours - 未来日付除外の修正
+
+### 問題
+
+`FilterHeadlinesByHours`が未来の公開日付を持つ記事を除外していなかった。ScienceDirectの先行公開記事（日付: `2026-03-01`）が48時間フィルタを通過してしまっていた。
+
+### 原因
+
+フィルタ条件が `pubTime.After(cutoff)` のみで、cutoff時刻より後であれば未来日付でも保持されていた。
+
+### 修正内容
+
+```go
+// 修正前
+if pubTime.After(cutoff) {
+
+// 修正後
+now := time.Now()
+if pubTime.After(cutoff) && !pubTime.After(now) {
+```
+
+cutoff〜現在時刻の範囲内のみ保持するよう変更。
+
+### 修正後テスト結果（48時間フィルタ）
+
+```
+総記事数: 12（ScienceDirect 2件が正しく除外）
+ソース数: 5
+
+  Euractiv: 4件  avg 3236文字
+  Carbon Herald: 3件  avg 2414文字
+  RMI: 2件  avg 21791文字
+  IISD ENB: 2件  avg 2385文字
+  Politico EU: 1件  avg 2129文字
+```
+
+---
+
 ## 変更ファイル一覧
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `cmd/pipeline/sources_rss.go` | Carbon Market Watch RSS実装を追加、Euractiv記事ページスクレイピング・キーワード改善 |
-| `cmd/pipeline/sources_html.go` | Carbon Market Watch旧実装を削除 |
-| `cmd/pipeline/headlines.go` | sourceMap更新、コメント整理、`fetchViaCurl()` 追加 |
+| `cmd/pipeline/sources_rss.go` | Carbon Market Watch RSS実装追加、Euractiv記事ページスクレイピング・キーワード改善 |
+| `cmd/pipeline/sources_html.go` | Carbon Market Watch旧実装削除、Climate Focusページネーション除外 |
+| `cmd/pipeline/headlines.go` | sourceMap更新、`fetchViaCurl()`追加、METI無効化、`FilterHeadlinesByHours`未来日付除外 |
 | `cmd/pipeline/sources_academic.go` | Nature Communications: curl方式で復活、Abstract取得追加 |
-| `cmd/pipeline/config.go` | デフォルトソースに `carbon-market-watch` 追加 |
+| `cmd/pipeline/config.go` | `carbon-market-watch`追加、`meti`除外（41→40ソース） |

@@ -179,7 +179,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"nature-comms":  collectHeadlinesNatureComms,
 	"oies":          collectHeadlinesOIES,
 	"iopscience":    collectHeadlinesIOPScience,
-	"nature-ecoevo": collectHeadlinesNatureEcoEvo,
+	// "nature-ecoevo": collectHeadlinesNatureEcoEvo, // 2026-02: 有料記事のため停止
 	"sciencedirect": collectHeadlinesScienceDirect,
 
 	// =========================================================================

@@ -108,6 +108,7 @@ import (
 )
 
 // Package-level compiled regex for performance (avoid recompiling on every call)
+var reScriptTags = regexp.MustCompile(`(?s)<script[^>]*>.*?</script>`)
 var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
 var reShortcodes = regexp.MustCompile(`\[/?[a-z_]+[^\]]*\]`)
 var reWhitespace = regexp.MustCompile(`\s+`)
@@ -731,8 +732,10 @@ func fetchViaCurl(targetURL string, userAgent string) (string, error) {
 
 // cleanHTMLTags removes HTML tags and decodes HTML entities
 func cleanHTMLTags(htmlStr string) string {
+	// Remove <script>...</script> blocks entirely (content included)
+	text := reScriptTags.ReplaceAllString(htmlStr, "")
 	// Remove HTML tags (using pre-compiled regex for performance)
-	text := reHTMLTags.ReplaceAllString(htmlStr, "")
+	text = reHTMLTags.ReplaceAllString(text, "")
 	// Remove WordPress/Divi shortcodes like [et_pb_section ...] [/et_pb_section]
 	text = reShortcodes.ReplaceAllString(text, "")
 	// Decode HTML entities (including Japanese characters)

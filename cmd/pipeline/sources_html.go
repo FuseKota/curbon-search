@@ -1412,23 +1412,41 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	}
 
 	// First, visit the homepage to get session cookies
-	req, err := http.NewRequest("GET", newsURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request creation failed: %w", err)
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	// Retry up to 3 times with exponential backoff (AWS IPs often get 403)
+	var resp *http.Response
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			delay := time.Duration(attempt) * 2 * time.Second
+			if os.Getenv("DEBUG_SCRAPING") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG] IISD ENB: homepage 403, retrying in %v (attempt %d/3)...\n", delay, attempt+1)
+			}
+			time.Sleep(delay)
+		}
+		req, err := http.NewRequest("GET", newsURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("request creation failed: %w", err)
+		}
+		req.Header.Set("User-Agent", cfg.UserAgent)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		req.Header.Set("Cache-Control", "no-cache")
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		resp, err = client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %w", err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 403 {
+			return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status: %d (after 3 retries)", resp.StatusCode)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
@@ -1462,13 +1480,13 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	// Helper function to fetch article page and extract full content
 	// Returns: About (og:description) + full body content
 	fetchArticleContent := func(articleURL string) string {
-		time.Sleep(300 * time.Millisecond) // Delay between requests to avoid rate limiting
+		time.Sleep(500 * time.Millisecond) // Delay between requests to avoid rate limiting
 
 		var resp *http.Response
-		// Retry up to 2 times on 403 (bot protection / rate limiting)
-		for attempt := 0; attempt < 2; attempt++ {
+		// Retry up to 3 times on 403 (bot protection / rate limiting)
+		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
-				time.Sleep(1 * time.Second)
+				time.Sleep(time.Duration(attempt) * 2 * time.Second)
 			}
 			req, err := http.NewRequest("GET", articleURL, nil)
 			if err != nil {

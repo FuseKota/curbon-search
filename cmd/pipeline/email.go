@@ -320,7 +320,11 @@ func (es *EmailSender) generateShortHeadlinesBody(headlines []NotionHeadline) st
 			}
 		}
 
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, displayText))
+		typeLabel := ""
+		if h.Type != "" {
+			typeLabel = fmt.Sprintf("[%s] ", h.Type)
+		}
+		sb.WriteString(fmt.Sprintf("%d. %s%s\n", i+1, typeLabel, displayText))
 		sb.WriteString(fmt.Sprintf("   %s\n\n", h.URL))
 	}
 

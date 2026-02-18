@@ -673,6 +673,12 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				source = sourceProp.Select.Name
 			}
 
+			// Extract Type (Academic/News)
+			articleType := ""
+			if typeProp, ok := page.Properties["Type"].(*notionapi.SelectProperty); ok && typeProp.Select.Name != "" {
+				articleType = typeProp.Select.Name
+			}
+
 			// Extract Article Summary 1500
 			aiSummary := ""
 			if summaryProp, ok := page.Properties["Article Summary 1500"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
@@ -697,6 +703,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				Title:         title,
 				URL:           url,
 				Source:        source,
+				Type:          articleType,
 				AISummary:     aiSummary,
 				ShortHeadline: shortHeadline,
 				CreatedAt:     createdAt,

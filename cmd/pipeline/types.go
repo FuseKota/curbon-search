@@ -72,6 +72,7 @@ type NotionHeadline struct {
 	Title         string // 記事タイトル
 	URL           string // 記事URL
 	Source        string // ソース名
+	Type          string // 記事タイプ（Academic/News）
 	AISummary     string // Article Summary 1500（詳細要約）
 	ShortHeadline string // Article Summary 300（短い要約、Notion AIで生成）
 	CreatedAt     string // 作成日時（RFC3339形式）

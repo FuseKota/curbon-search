@@ -349,6 +349,61 @@ func collectHeadlinesUNNews(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 	return out, nil
 }
 
+// collectHeadlinesCarbonBrief collects headlines from Carbon Brief RSS feed
+//
+// Carbon Brief is a UK-based website covering the latest developments in
+// climate science, climate policy and energy policy. Previously used WordPress
+// REST API, but switched to RSS for content:encoded full article extraction.
+//
+// URL: https://www.carbonbrief.org/feed/
+func collectHeadlinesCarbonBrief(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
+	feedURL := "https://www.carbonbrief.org/feed/"
+
+	feed, err := fetchRSSFeed(feedURL, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, fmt.Errorf("no items in Carbon Brief RSS feed")
+	}
+
+	out := make([]Headline, 0, limit)
+
+	for _, item := range feed.Items {
+		if len(out) >= limit {
+			break
+		}
+
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+
+		articleURL := item.Link
+
+		// Parse date
+		dateStr := ""
+		if item.PublishedParsed != nil {
+			dateStr = item.PublishedParsed.Format(time.RFC3339)
+		}
+
+		// Full article content from content:encoded, fallback to description.
+		excerpt := extractRSSExcerpt(item)
+
+		out = append(out, Headline{
+			Source:      "Carbon Brief",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
+			IsHeadline:  true,
+		})
+	}
+
+	return out, nil
+}
+
 // collectHeadlinesCarbonMarketWatch collects headlines from Carbon Market Watch RSS feed
 //
 // Carbon Market Watch is a Brussels-based NGO that monitors carbon markets

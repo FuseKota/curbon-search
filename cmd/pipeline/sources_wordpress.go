@@ -64,10 +64,7 @@ func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) (
 	)
 }
 
-// collectHeadlinesCarbonBrief fetches articles from Carbon Brief using WordPress REST API
-func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	return collectWordPressHeadlines("https://www.carbonbrief.org", "Carbon Brief", limit, cfg)
-}
+// NOTE: collectHeadlinesCarbonBrief はRSS方式に移行 → sources_rss.go を参照
 
 // collectHeadlinesRMI fetches articles from RMI (Rocky Mountain Institute)
 //

@@ -281,7 +281,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ---
 
 **最終更新**: 2026年2月9日
-**プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
+**プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 
 ---

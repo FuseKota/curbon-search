@@ -95,9 +95,10 @@ type EmailModeConfig struct {
 // フラグ解析
 // =============================================================================
 
-// デフォルトソースリスト（全40アクティブソース）
+// デフォルトソースリスト（全38アクティブソース）
 // 2026-02-17更新: nature-ecoevo を停止（有料記事のため）
-const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
+// 2026-02-18更新: env-ministry, meti を停止
+const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {

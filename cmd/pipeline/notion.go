@@ -48,6 +48,14 @@ import (
 	"github.com/jomei/notionapi" // Notion API クライアントライブラリ
 )
 
+// academicSources は査読付き学術論文・プレプリントのソース
+var academicSources = map[string]bool{
+	"arXiv":              true,
+	"Nature Communications": true,
+	"IOP Science (ERL)":  true,
+	"ScienceDirect":      true,
+}
+
 // =============================================================================
 // 設定・構造体
 // =============================================================================
@@ -143,6 +151,15 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 			"Article Summary 300": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
 			},
+			"Type": notionapi.SelectPropertyConfig{
+				Type: notionapi.PropertyConfigTypeSelect,
+				Select: notionapi.Select{
+					Options: []notionapi.Option{
+						{Name: "News", Color: notionapi.ColorBlue},
+						{Name: "Academic", Color: notionapi.ColorGreen},
+					},
+				},
+			},
 			"Published Date": notionapi.DatePropertyConfig{
 				Type: notionapi.PropertyConfigTypeDate,
 			},
@@ -188,6 +205,16 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 				Name: h.Source,
 			},
 		},
+	}
+
+	// Set Type property: Academic for scholarly sources, News for everything else
+	typeName := "News"
+	if academicSources[h.Source] {
+		typeName = "Academic"
+	}
+	properties["Type"] = notionapi.SelectProperty{
+		Type:   notionapi.PropertyTypeSelect,
+		Select: notionapi.Option{Name: typeName},
 	}
 
 	// Add Published Date if available

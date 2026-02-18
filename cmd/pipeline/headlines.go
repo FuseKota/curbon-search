@@ -161,9 +161,9 @@ var sourceCollectors = map[string]HeadlineCollector{
 	// sources_japan.go - 日本語ソース (5)
 	// =========================================================================
 	"jri":          collectHeadlinesJRI,
-	"env-ministry": collectHeadlinesEnvMinistry,
+	// "env-ministry": collectHeadlinesEnvMinistry, // 2026-02-18: 停止
 	"jpx":          collectHeadlinesJPX,
-	"meti":         collectHeadlinesMETI,
+	// "meti":         collectHeadlinesMETI,         // 2026-02-18: 停止
 	"pwc-japan":    collectHeadlinesPwCJapan,
 	"mizuho-rt":    collectHeadlinesMizuhoRT,
 

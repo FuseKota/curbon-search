@@ -125,7 +125,7 @@ type EmailModeConfig struct {
 	// SendShortEmail がtrueの場合、50文字ダイジェストを送信
 	SendShortEmail bool
 
-	// ListShortHeadlines がtrueの場合、ShortHeadline診断を表示
+	// ListShortHeadlines がtrueの場合、Article Summary 300診断を表示
 	ListShortHeadlines bool
 
 	// DaysBack はメール用の取得期間（日数）
@@ -172,7 +172,7 @@ func ParseFlags() *PipelineConfig {
 	// Email flags
 	flag.BoolVar(&cfg.Email.SendEmail, "sendEmail", false, "send headlines summary via email")
 	flag.BoolVar(&cfg.Email.SendShortEmail, "sendShortEmail", false, "send 50-char short headlines digest via email")
-	flag.BoolVar(&cfg.Email.ListShortHeadlines, "listShortHeadlines", false, "list ShortHeadline values from NotionDB (diagnostic)")
+	flag.BoolVar(&cfg.Email.ListShortHeadlines, "listShortHeadlines", false, "list Article Summary 300 values from NotionDB (diagnostic)")
 	flag.IntVar(&cfg.Email.DaysBack, "emailDaysBack", 1, "fetch headlines from last N days for email")
 
 	flag.Parse()

@@ -66,14 +66,14 @@ type FreeArticle struct {
 //
 // 【使用場面】
 //   - email.goでNotionから最近の記事を取得してメール本文を生成
-//   - SendShortHeadlinesDigest()で50文字ヘッドラインメールを送信
+//   - SendShortHeadlinesDigest()でArticle Summary 300メールを送信
 //
 type NotionHeadline struct {
 	Title         string // 記事タイトル
 	URL           string // 記事URL
 	Source        string // ソース名
-	AISummary     string // AIによる要約
-	ShortHeadline string // 50文字ヘッドライン（Notion AIで生成）
+	AISummary     string // Article Summary 1500（詳細要約）
+	ShortHeadline string // Article Summary 300（短い要約、Notion AIで生成）
 	CreatedAt     string // 作成日時（RFC3339形式）
 }
 

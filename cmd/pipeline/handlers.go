@@ -7,7 +7,7 @@
 // 【このファイルで提供する機能】
 //   - handleEmailSend:          フルメールサマリー送信
 //   - handleShortEmailSend:     50文字ヘッドラインダイジェスト送信
-//   - handleListShortHeadlines: ShortHeadline診断表示
+//   - handleListShortHeadlines: Article Summary 300診断表示
 //   - handleJSONOutput:         JSON出力
 //   - handleNotionClip:         Notionに記事を保存
 //
@@ -157,13 +157,13 @@ func handleShortEmailSend(emailDaysBack int) {
 // 診断ハンドラ
 // =============================================================================
 
-// handleListShortHeadlines はNotionDBのShortHeadline値を一覧表示する
+// handleListShortHeadlines はNotionDBのArticle Summary 300値を一覧表示する
 //
 // Notion AIによるフィルタリング結果を確認するための診断機能。
-// ShortHeadlineの状態（要約あり、"-"、空）でグループ化して表示する。
+// Article Summary 300の状態（要約あり、"-"、空）でグループ化して表示する。
 func handleListShortHeadlines(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "\n========================================")
-	fmt.Fprintln(os.Stderr, "📋 Listing ShortHeadline Values from NotionDB")
+	fmt.Fprintln(os.Stderr, "📋 Listing Article Summary 300 Values from NotionDB")
 	fmt.Fprintln(os.Stderr, "========================================")
 
 	// Create Notion clipper and fetch headlines
@@ -175,7 +175,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 
 	fmt.Fprintf(os.Stderr, "Found %d headlines (last %d days)\n\n", len(headlines), emailDaysBack)
 
-	// Group by ShortHeadline status
+	// Group by Article Summary 300 status
 	var withSummary, withDash, empty []NotionHeadline
 	for _, h := range headlines {
 		switch {
@@ -202,7 +202,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 		for i, h := range withSummary {
 			fmt.Fprintf(os.Stderr, "[%d] %s\n", i+1, h.Source)
 			fmt.Fprintf(os.Stderr, "    Title: %s\n", truncateString(h.Title, 60))
-			fmt.Fprintf(os.Stderr, "    ShortHeadline: %s\n", h.ShortHeadline)
+			fmt.Fprintf(os.Stderr, "    Article Summary 300: %s\n", h.ShortHeadline)
 			fmt.Fprintln(os.Stderr, "")
 		}
 	}
@@ -220,7 +220,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 
 	// Display empty headlines
 	if len(empty) > 0 {
-		fmt.Fprintln(os.Stderr, "⏳ Headlines without ShortHeadline (need Notion AI processing):")
+		fmt.Fprintln(os.Stderr, "⏳ Headlines without Article Summary 300 (need Notion AI processing):")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
 		for i, h := range empty {
 			fmt.Fprintf(os.Stderr, "[%d] %s\n", i+1, h.Source)

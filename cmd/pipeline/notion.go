@@ -203,7 +203,7 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		}
 	}
 
-	// Add full content to AI Summary and ShortHeadline fields
+	// Add full content to Article Summary 1500 and Article Summary 300 fields
 	// (split into multiple RichText blocks if needed due to 2000 char limit)
 	if h.Excerpt != "" {
 		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
@@ -460,7 +460,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				source = sourceProp.Select.Name
 			}
 
-			// Extract AI Summary
+			// Extract Article Summary 1500
 			aiSummary := ""
 			if summaryProp, ok := page.Properties["Article Summary 1500"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
 				// Concatenate all rich text segments
@@ -469,7 +469,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				}
 			}
 
-			// Extract ShortHeadline (50文字ヘッドライン)
+			// Extract Article Summary 300 (50文字ヘッドライン)
 			shortHeadline := ""
 			if shortProp, ok := page.Properties["Article Summary 300"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
 				for _, rt := range shortProp.RichText {

@@ -313,7 +313,7 @@ func (es *EmailSender) send(msg []byte) error {
 
 // carbonKeywordsForFilter はカーボン関連記事のフィルタリング用キーワード
 //
-// タイトルまたはAISummaryにこれらのキーワードが含まれる記事のみを
+// タイトルまたはArticle Summary 1500にこれらのキーワードが含まれる記事のみを
 // メール送信対象とする。
 var carbonKeywordsForFilter = []string{
 	// 日本語キーワード
@@ -355,10 +355,10 @@ func containsCarbonKeyword(text string) bool {
 //	2. Japan launches new GX initiative...
 //	   https://carboncredits.jp/...
 func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines []NotionHeadline) error {
-	// カーボンキーワードでフィルタリング + ShortHeadlineが"-"のものを除外
+	// カーボンキーワードでフィルタリング + Article Summary 300が"-"のものを除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
 	for _, h := range headlines {
-		// ShortHeadlineが"-"系の場合は除外（Notion AIが要約できなかった記事）
+		// Article Summary 300が"-"系の場合は除外（Notion AIが要約できなかった記事）
 		if h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
 			continue
 		}
@@ -387,7 +387,7 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 	return es.SendWithRetry(msg)
 }
 
-// generateShortHeadlinesBody は50文字ヘッドラインのメール本文を生成する
+// generateShortHeadlinesBody はArticle Summary 300のメール本文を生成する
 //
 // 【出力フォーマット】
 //
@@ -405,7 +405,7 @@ func (es *EmailSender) generateShortHeadlinesBody(headlines []NotionHeadline) st
 
 	// 各記事
 	for i, h := range headlines {
-		// ShortHeadlineがあればそれを使用、なければTitleを50文字に切り詰め
+		// Article Summary 300があればそれを使用、なければTitleを50文字に切り詰め
 		displayText := h.ShortHeadline
 		if displayText == "" {
 			// フォールバック: タイトルを50文字に切り詰め

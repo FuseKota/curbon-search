@@ -278,9 +278,22 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **Euractiv**: ペイウォール検出（Lorem ipsum）+ RSS descriptionフォールバック
 - **Euractiv**: `"ets"`キーワードの部分文字列一致問題を修正（`"eu ets"`, `"emissions trading"`等に変更）
 
+### Notion・メール改善（2026年2月28日）
+
+#### プロパティ削除
+- **Article Summary 1500**: Notionプロパティを廃止（CreateDatabase、ClipHeadline、ClipRelatedFree、FetchRecentHeadlinesから削除）
+- **AISummary**: `NotionHeadline`構造体からフィールドを削除
+
+#### フィルタリング簡素化
+- **carbonKeywordsForFilter / containsCarbonKeyword()**: メール送信時のカーボンキーワードフィルタを廃止
+- ダイジェストメールのフィルタはArticle Summary 300の"-"除外のみに簡素化
+
+#### コンテンツ抽出改善
+- **Carbon Brief**: Excerpt切り詰めを1,000文字→3,000文字に拡大
+
 ---
 
-**最終更新**: 2026年2月9日
+**最終更新**: 2026年2月28日
 **プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

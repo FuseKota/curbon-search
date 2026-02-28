@@ -6,8 +6,6 @@
 //
 // 【設定グループ】
 //   - InputConfig:    入力ソース設定
-//   - SearchConfig:   OpenAI検索設定
-//   - MatchingConfig: スコアリング設定
 //   - OutputConfig:   出力設定
 //   - EmailConfig:    メール設定
 //
@@ -25,11 +23,9 @@ import (
 
 // PipelineConfig はパイプラインの全設定を保持する
 type PipelineConfig struct {
-	Input    InputConfig
-	Search   SearchConfig
-	Matching MatchingConfig
-	Output   OutputConfig
-	Email    EmailModeConfig
+	Input  InputConfig
+	Output OutputConfig
+	Email  EmailModeConfig
 }
 
 // InputConfig は入力ソースに関する設定
@@ -54,47 +50,6 @@ func (c *InputConfig) Sources() []string {
 		}
 	}
 	return result
-}
-
-// SearchConfig はOpenAI検索に関する設定
-type SearchConfig struct {
-	// QueriesPerHeadline は見出しあたりのクエリ数（0で検索無効）
-	QueriesPerHeadline int
-
-	// SearchPerHeadline は見出しあたりの候補上限
-	SearchPerHeadline int
-
-	// ResultsPerQuery はクエリあたりの結果数
-	ResultsPerQuery int
-
-	// Provider は検索プロバイダ（"openai" | "brave"）
-	Provider string
-
-	// OpenAIModel は使用するOpenAIモデル
-	OpenAIModel string
-
-	// OpenAITool は使用するOpenAIツール（"web_search" | "web_search_preview"）
-	OpenAITool string
-}
-
-// IsEnabled は検索が有効かどうかを返す
-func (c *SearchConfig) IsEnabled() bool {
-	return c.QueriesPerHeadline > 0
-}
-
-// MatchingConfig はスコアリングに関する設定
-type MatchingConfig struct {
-	// DaysBack は新しさの考慮期間（0で無効）
-	DaysBack int
-
-	// TopK は見出しあたりの関連記事上限
-	TopK int
-
-	// MinScore は最小スコア閾値
-	MinScore float64
-
-	// StrictMarket は市場シグナル一致を必須にするか
-	StrictMarket bool
 }
 
 // OutputConfig は出力に関する設定
@@ -149,20 +104,6 @@ func ParseFlags() *PipelineConfig {
 	flag.StringVar(&cfg.Input.HeadlinesFile, "headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 	flag.StringVar(&cfg.Input.SourcesRaw, "sources", DefaultSources, "sources to scrape when --headlines is empty")
 	flag.IntVar(&cfg.Input.PerSource, "perSource", 30, "max headlines to collect per source")
-
-	// Search flags
-	flag.IntVar(&cfg.Search.SearchPerHeadline, "searchPerHeadline", 25, "max candidate results kept per headline")
-	flag.IntVar(&cfg.Search.QueriesPerHeadline, "queriesPerHeadline", 3, "max queries to issue per headline")
-	flag.IntVar(&cfg.Search.ResultsPerQuery, "resultsPerQuery", 10, "results per query")
-	flag.StringVar(&cfg.Search.Provider, "searchProvider", "openai", "search provider: openai|brave")
-	flag.StringVar(&cfg.Search.OpenAIModel, "openaiModel", "gpt-4o-mini", "OpenAI model to use")
-	flag.StringVar(&cfg.Search.OpenAITool, "openaiTool", "web_search", "OpenAI tool type: web_search|web_search_preview")
-
-	// Matching flags
-	flag.IntVar(&cfg.Matching.DaysBack, "daysBack", 60, "recency window in days (0 disables)")
-	flag.IntVar(&cfg.Matching.TopK, "topK", 3, "max relatedFree per headline")
-	flag.Float64Var(&cfg.Matching.MinScore, "minScore", 0.32, "minimum score threshold")
-	flag.BoolVar(&cfg.Matching.StrictMarket, "strictMarket", true, "require market match if headline has market signal")
 
 	// Output flags
 	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write matched output JSON to this path (default: stdout)")

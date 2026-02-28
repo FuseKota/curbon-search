@@ -390,6 +390,8 @@ func collectHeadlinesCarbonBrief(limit int, cfg headlineSourceConfig) ([]Headlin
 
 		// Full article content from content:encoded, fallback to description.
 		excerpt := extractRSSExcerpt(item)
+		// Truncate to 1000 chars for Notion AI summarization
+		excerpt = truncateString(excerpt, 1000)
 
 		out = append(out, Headline{
 			Source:      "Carbon Brief",

@@ -34,7 +34,6 @@
 //   │ URL            │ URL          │ 記事URL                        │
 //   │ Source         │ Select       │ ソース名（22種類のオプション） │
 //   │ Type           │ Select       │ Headline / Related Free        │
-//   │ Article Summary 1500 │ RichText │ 記事の要約・本文               │
 //   │ Score          │ Number       │ マッチングスコア（0-1）        │
 //   │ Published Date │ Date         │ 記事の公開日                   │
 //   └────────────────┴──────────────┴────────────────────────────────┘
@@ -183,9 +182,6 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 						{Name: "Free Article", Color: notionapi.ColorDefault},
 					},
 				},
-			},
-			"Article Summary 1500": notionapi.RichTextPropertyConfig{
-				Type: notionapi.PropertyConfigTypeRichText,
 			},
 			"Article Summary 300": notionapi.RichTextPropertyConfig{
 				Type: notionapi.PropertyConfigTypeRichText,
@@ -337,14 +333,10 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		}
 	}
 
-	// Add full content to Article Summary 1500 and Article Summary 300 fields
+	// Add full content to Article Summary 300 field
 	// (split into multiple RichText blocks if needed due to 2000 char limit)
 	if h.Excerpt != "" {
 		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
-		properties["Article Summary 1500"] = notionapi.RichTextProperty{
-			Type:     notionapi.PropertyTypeRichText,
-			RichText: richTextBlocks,
-		}
 		properties["Article Summary 300"] = notionapi.RichTextProperty{
 			Type:     notionapi.PropertyTypeRichText,
 			RichText: richTextBlocks,
@@ -439,14 +431,6 @@ func (nc *NotionClipper) ClipRelatedFree(ctx context.Context, rf RelatedFree) er
 			}
 		} else if os.Getenv("DEBUG_SCRAPING") != "" {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Failed to parse PublishedAt '%s': %v\n", rf.PublishedAt, err)
-		}
-	}
-
-	// Add full content to Article Summary 1500 field (split into multiple RichText blocks if needed)
-	if rf.Excerpt != "" {
-		properties["Article Summary 1500"] = notionapi.RichTextProperty{
-			Type:     notionapi.PropertyTypeRichText,
-			RichText: splitIntoRichTextBlocks(rf.Excerpt),
 		}
 	}
 
@@ -679,15 +663,6 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				articleType = typeProp.Select.Name
 			}
 
-			// Extract Article Summary 1500
-			aiSummary := ""
-			if summaryProp, ok := page.Properties["Article Summary 1500"].(*notionapi.RichTextProperty); ok && len(summaryProp.RichText) > 0 {
-				// Concatenate all rich text segments
-				for _, rt := range summaryProp.RichText {
-					aiSummary += rt.PlainText
-				}
-			}
-
 			// Extract Article Summary 300 (50文字ヘッドライン)
 			shortHeadline := ""
 			if shortProp, ok := page.Properties["Article Summary 300"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
@@ -704,7 +679,6 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				URL:           url,
 				Source:        source,
 				Type:          articleType,
-				AISummary:     aiSummary,
 				ShortHeadline: shortHeadline,
 				CreatedAt:     createdAt,
 			})

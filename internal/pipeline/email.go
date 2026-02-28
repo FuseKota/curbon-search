@@ -191,18 +191,11 @@ func (es *EmailSender) generateEmailBody(headlines []NotionHeadline) string {
 		sb.WriteString(fmt.Sprintf("    URL: %s\n", h.URL))
 		sb.WriteString("\n")
 
-		// AI要約がある場合は表示
-		if h.AISummary != "" {
-			sb.WriteString("    Summary:\n")
-			// 要約テキストをインデント
-			summaryLines := strings.Split(h.AISummary, "\n")
-			for _, line := range summaryLines {
-				if strings.TrimSpace(line) != "" {
-					sb.WriteString(fmt.Sprintf("    %s\n", line))
-				}
-			}
+		// ShortHeadlineがある場合は表示
+		if h.ShortHeadline != "" {
+			sb.WriteString(fmt.Sprintf("    Summary: %s\n", h.ShortHeadline))
 		} else {
-			sb.WriteString("    Summary: (No AI summary available)\n")
+			sb.WriteString("    Summary: (No summary available)\n")
 		}
 
 		sb.WriteString("\n")
@@ -311,36 +304,10 @@ func (es *EmailSender) send(msg []byte) error {
 // 50文字ヘッドラインメール送信
 // =============================================================================
 
-// carbonKeywordsForFilter はカーボン関連記事のフィルタリング用キーワード
-//
-// タイトルまたはArticle Summary 1500にこれらのキーワードが含まれる記事のみを
-// メール送信対象とする。
-var carbonKeywordsForFilter = []string{
-	// 日本語キーワード
-	"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
-	"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
-	"カーボンクレジット", "クレジット市場", "JCM", "二国間クレジット",
-	"カーボンニュートラル", "地球温暖化", "パリ協定", "COP",
-	// 英語キーワード
-	"carbon", "climate", "emission", "offset", "credit",
-	"EUA", "VCM", "CDR", "CORSIA", "CBAM",
-}
-
-// containsCarbonKeyword はテキストにカーボン関連キーワードが含まれるかチェック
-func containsCarbonKeyword(text string) bool {
-	textLower := strings.ToLower(text)
-	for _, kw := range carbonKeywordsForFilter {
-		if strings.Contains(textLower, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
-}
-
 // SendShortHeadlinesDigest は50文字ヘッドラインのダイジェストメールを送信する
 //
 // 【処理の流れ】
-//  1. カーボンキーワードでフィルタリング
+//  1. Article Summary 300が"-"の記事を除外
 //  2. 番号付きリスト + URL形式で本文生成
 //  3. リトライ付きで送信
 //
@@ -355,16 +322,14 @@ func containsCarbonKeyword(text string) bool {
 //	2. Japan launches new GX initiative...
 //	   https://carboncredits.jp/...
 func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines []NotionHeadline) error {
-	// カーボンキーワードでフィルタリング + Article Summary 300が"-"のものを除外
+	// Article Summary 300が"-"のものを除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
 	for _, h := range headlines {
 		// Article Summary 300が"-"系の場合は除外（Notion AIが要約できなかった記事）
 		if h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
 			continue
 		}
-		if containsCarbonKeyword(h.Title) || containsCarbonKeyword(h.AISummary) {
-			filtered = append(filtered, h)
-		}
+		filtered = append(filtered, h)
 	}
 
 	var body, subject string

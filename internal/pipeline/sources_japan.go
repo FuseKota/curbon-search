@@ -849,35 +849,23 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	// Keywords for carbon/GX-related reports
-	carbonKeywords := []string{
-		"カーボン", "脱炭素", "サステナビリティ", "GX", "カーボンニュートラル",
-		"気候変動", "温室効果ガス", "CO2", "排出量", "GHG", "クレジット",
-		"カーボンプライシング", "ETS", "排出量取引", "CSRD", "スコープ3",
-		"再生可能エネルギー", "グリーン", "環境", "COP", "パリ協定",
-		"carbon", "decarboniz", "sustainability", "climate", "emission",
-	}
-
 	out := make([]Headline, 0, limit)
 	datePattern := reJapaneseDateYMD
 
-	// Extract articles from links
-	doc.Find("a[href*='/business/'], a[href*='/publication/']").Each(func(i int, s *goquery.Selection) {
+	// Extract articles from list items
+	doc.Find(".section__news-list-item").Each(func(i int, item *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		title := strings.TrimSpace(s.Text())
+		// Get title and URL from link
+		link := item.Find(".section__news-link")
+		title := strings.TrimSpace(link.Text())
 		if title == "" {
 			return
 		}
 
-		// Check if title contains carbon/sustainability keywords
-		if !matchesKeywords(title, "", carbonKeywords) {
-			return
-		}
-
-		href, exists := s.Attr("href")
+		href, exists := link.Attr("href")
 		if !exists || href == "" {
 			return
 		}
@@ -888,23 +876,20 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			articleURL = "https://www.mizuho-rt.co.jp" + href
 		}
 
-		// Extract date from surrounding text (empty string if not found)
+		// Extract date from .section__news-date
 		dateStr := ""
-		parent := s.Parent()
-		if parent != nil {
-			parentText := parent.Text()
-			if matches := datePattern.FindStringSubmatch(parentText); len(matches) == 4 {
-				year := matches[1]
-				month := matches[2]
-				day := matches[3]
-				if len(month) == 1 {
-					month = "0" + month
-				}
-				if len(day) == 1 {
-					day = "0" + day
-				}
-				dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
+		dateText := strings.TrimSpace(item.Find(".section__news-date").Text())
+		if matches := datePattern.FindStringSubmatch(dateText); len(matches) == 4 {
+			year := matches[1]
+			month := matches[2]
+			day := matches[3]
+			if len(month) == 1 {
+				month = "0" + month
 			}
+			if len(day) == 1 {
+				day = "0" + day
+			}
+			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
 		}
 
 		// Fetch excerpt and date from article page

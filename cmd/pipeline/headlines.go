@@ -292,11 +292,17 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 			continue
 		}
 
+		if len(hs) == 0 {
+			warnMsg := fmt.Sprintf("[WARN] %s returned 0 headlines", src)
+			fmt.Fprintln(os.Stderr, warnMsg)
+			result.Errors = append(result.Errors, warnMsg)
+		}
+
 		result.Headlines = append(result.Headlines, hs...)
 	}
 
 	if len(result.Errors) > 0 {
-		fmt.Fprintf(os.Stderr, "\n[WARN] %d source(s) failed (collected %d headlines from %d sources):\n",
+		fmt.Fprintf(os.Stderr, "\n[WARN] %d source(s) had issues (collected %d headlines from %d sources):\n",
 			len(result.Errors), len(result.Headlines), len(sources)-len(result.Errors))
 		for _, e := range result.Errors {
 			fmt.Fprintf(os.Stderr, "  %s\n", e)

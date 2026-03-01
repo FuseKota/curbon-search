@@ -256,13 +256,20 @@ func handleJSONOutput(headlines []Headline, cfg *OutputConfig) {
 // Notionハンドラ
 // =============================================================================
 
+// NotionClipResult はNotion保存の結果を表す
+type NotionClipResult struct {
+	Clipped int
+	Failed  int
+	Errors  []string // "[Notion] 'タイトル': エラー内容" 形式
+}
+
 // handleNotionClip は見出しをNotionデータベースに保存する
 //
 // 【処理の流れ】
 //  1. Notion環境変数を確認
 //  2. 必要に応じて新規データベースを作成
 //  3. 各見出しをクリップ
-func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
+func handleNotionClip(headlines []Headline, cfg *OutputConfig) *NotionClipResult {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
 	fmt.Fprintln(os.Stderr, "========================================")
@@ -303,30 +310,44 @@ func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
 
 	// 各見出しをクリップ
 	fmt.Fprintln(os.Stderr, "\nClipping articles...")
-	clippedCount := 0
+	notionResult := &NotionClipResult{}
 	for _, h := range headlines {
 		if err := clipper.ClipHeadline(ctx, h); err != nil {
 			warnf("failed to clip headline '%s': %v", h.Title, err)
+			notionResult.Failed++
+			notionResult.Errors = append(notionResult.Errors,
+				fmt.Sprintf("[Notion] '%s': %v", truncateString(h.Title, 50), err))
 			continue
 		}
-		clippedCount++
+		notionResult.Clipped++
 		fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s\n", truncateString(h.Title, 50))
 	}
 
 	fmt.Fprintln(os.Stderr, "========================================")
-	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
+	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", notionResult.Clipped)
+	if notionResult.Failed > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  Failed %d headlines\n", notionResult.Failed)
+	}
 	fmt.Fprintln(os.Stderr, "========================================")
+	return notionResult
 }
 
 // =============================================================================
 // エラー通知ハンドラ
 // =============================================================================
 
-// sendErrorNotification は収集エラーをメールで通知する
+// sendErrorNotification は収集・Notion保存の問題をメールで通知する
 //
+// collectResultとnotionResultの両方を確認し、問題がなければメール送信しない。
 // EMAIL_FROM, EMAIL_PASSWORD, EMAIL_TO が設定されている場合のみ送信する。
-// 環境変数が未設定の場合はstderrにログを出力するのみ。
-func sendErrorNotification(errors []string, headlineCount int) {
+func sendErrorNotification(collectResult *CollectResult, notionResult *NotionClipResult) {
+	// 問題があるかチェック
+	hasCollectIssues := collectResult != nil && len(collectResult.Errors) > 0
+	hasNotionIssues := notionResult != nil && notionResult.Failed > 0
+	if !hasCollectIssues && !hasNotionIssues {
+		return
+	}
+
 	from := os.Getenv("EMAIL_FROM")
 	password := os.Getenv("EMAIL_PASSWORD")
 	to := os.Getenv("EMAIL_TO")
@@ -342,16 +363,75 @@ func sendErrorNotification(errors []string, headlineCount int) {
 		return
 	}
 
-	subject := fmt.Sprintf("[Carbon Relay] %d source(s) failed - %s",
-		len(errors), time.Now().Format("2006-01-02 15:04"))
+	// issue数をカウント
+	issueCount := 0
+	if hasCollectIssues {
+		issueCount += len(collectResult.Errors)
+	}
+	if hasNotionIssues {
+		issueCount += notionResult.Failed
+	}
+
+	subject := fmt.Sprintf("[Carbon Relay] %d issue(s) - %s",
+		issueCount, time.Now().Format("2006-01-02 15:04"))
 
 	var body strings.Builder
-	body.WriteString("Carbon Relay source collection errors:\n\n")
-	for _, e := range errors {
-		body.WriteString("  " + e + "\n")
+
+	// === 収集結果 ===
+	if collectResult != nil {
+		body.WriteString("=== 収集結果 ===\n")
+
+		successCount := 0
+		successArticles := 0
+		emptyCount := 0
+		errorCount := 0
+		for _, sr := range collectResult.SourceResults {
+			switch sr.Status {
+			case "success":
+				successCount++
+				successArticles += sr.Count
+			case "empty":
+				emptyCount++
+			case "error":
+				errorCount++
+			}
+		}
+
+		body.WriteString(fmt.Sprintf("総ソース数: %d\n", len(collectResult.SourceResults)))
+		body.WriteString(fmt.Sprintf("成功: %d (計 %d 記事) / 0件: %d / エラー: %d\n",
+			successCount, successArticles, emptyCount, errorCount))
+
+		// 問題のあったソースを表示
+		var problemSources []string
+		for _, sr := range collectResult.SourceResults {
+			switch sr.Status {
+			case "error":
+				problemSources = append(problemSources,
+					fmt.Sprintf("  [ERROR] %s: %s", sr.Name, sr.ErrorMsg))
+			case "empty":
+				problemSources = append(problemSources,
+					fmt.Sprintf("  [WARN]  %s: 0 headlines", sr.Name))
+			}
+		}
+		if len(problemSources) > 0 {
+			body.WriteString("\n--- 問題のあったソース ---\n")
+			for _, ps := range problemSources {
+				body.WriteString(ps + "\n")
+			}
+		}
 	}
-	body.WriteString(fmt.Sprintf("\nSuccessfully collected: %d headlines\n", headlineCount))
-	body.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
+
+	// === Notion保存結果 ===
+	if hasNotionIssues {
+		body.WriteString("\n=== Notion保存結果 ===\n")
+		body.WriteString(fmt.Sprintf("成功: %d / 失敗: %d\n",
+			notionResult.Clipped, notionResult.Failed))
+		for _, e := range notionResult.Errors {
+			body.WriteString("  " + e + "\n")
+		}
+	}
+
+	body.WriteString(fmt.Sprintf("\nTimestamp: %s\n", time.Now().Format(time.RFC3339)))
 
 	msg := sender.buildEmailMessage(subject, body.String())
 	if err := sender.sendWithRetry(msg); err != nil {

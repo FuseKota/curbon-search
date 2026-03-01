@@ -267,9 +267,18 @@ func defaultHeadlineConfig() headlineSourceConfig {
 //
 //	headlines, err := CollectFromSources([]string{"carbonherald", "carbon-brief"}, 10, cfg)
 // CollectResult は収集結果とエラー情報を保持する
+// SourceResult は個別ソースの収集結果を表す
+type SourceResult struct {
+	Name     string // ソース識別子
+	Count    int    // 取得記事数
+	Status   string // "success", "error", "empty"
+	ErrorMsg string // Status=="error"の場合のみ
+}
+
 type CollectResult struct {
-	Headlines []Headline
-	Errors    []string
+	Headlines     []Headline
+	Errors        []string       // 後方互換（stderrログ用）
+	SourceResults []SourceResult // ソース別詳細
 }
 
 func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfig) (*CollectResult, error) {
@@ -281,6 +290,9 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 			errMsg := fmt.Sprintf("[ERROR] unknown source: %s", src)
 			fmt.Fprintln(os.Stderr, errMsg)
 			result.Errors = append(result.Errors, errMsg)
+			result.SourceResults = append(result.SourceResults, SourceResult{
+				Name: src, Status: "error", ErrorMsg: "unknown source",
+			})
 			continue
 		}
 
@@ -289,6 +301,9 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 			errMsg := fmt.Sprintf("[ERROR] collecting %s: %v", src, err)
 			fmt.Fprintln(os.Stderr, errMsg)
 			result.Errors = append(result.Errors, errMsg)
+			result.SourceResults = append(result.SourceResults, SourceResult{
+				Name: src, Status: "error", ErrorMsg: fmt.Sprintf("%v", err),
+			})
 			continue
 		}
 
@@ -296,6 +311,13 @@ func CollectFromSources(sources []string, perSource int, cfg headlineSourceConfi
 			warnMsg := fmt.Sprintf("[WARN] %s returned 0 headlines", src)
 			fmt.Fprintln(os.Stderr, warnMsg)
 			result.Errors = append(result.Errors, warnMsg)
+			result.SourceResults = append(result.SourceResults, SourceResult{
+				Name: src, Count: 0, Status: "empty",
+			})
+		} else {
+			result.SourceResults = append(result.SourceResults, SourceResult{
+				Name: src, Count: len(hs), Status: "success",
+			})
 		}
 
 		result.Headlines = append(result.Headlines, hs...)

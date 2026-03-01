@@ -91,7 +91,7 @@ func main() {
 
 	// --- 1) Collect or read headlines ---
 	var headlines []Headline
-	var collectErrors []string
+	var collectResult *CollectResult
 	if cfg.Input.HeadlinesFile != "" {
 		if err := readJSONFile(cfg.Input.HeadlinesFile, &headlines); err != nil {
 			fatalf("reading headlines: %v", err)
@@ -103,15 +103,12 @@ func main() {
 			fatalf("collecting headlines: %v", err)
 		}
 		headlines = result.Headlines
-		collectErrors = result.Errors
-	}
-
-	// エラーがあればメールで通知（環境変数が設定されている場合のみ）
-	if len(collectErrors) > 0 {
-		sendErrorNotification(collectErrors, len(headlines))
+		collectResult = result
 	}
 
 	if len(headlines) == 0 {
+		// fatalf前にエラー通知を送る
+		sendErrorNotification(collectResult, nil)
 		fatalf("no headlines collected")
 	}
 
@@ -127,9 +124,13 @@ func main() {
 	handleJSONOutput(headlines, &cfg.Output)
 
 	// --- 3) Clip to Notion (if enabled) ---
+	var notionResult *NotionClipResult
 	if cfg.Output.NotionClip {
-		handleNotionClip(headlines, &cfg.Output)
+		notionResult = handleNotionClip(headlines, &cfg.Output)
 	}
+
+	// --- 4) エラー通知（全処理完了後） ---
+	sendErrorNotification(collectResult, notionResult)
 }
 
 // Handlers are defined in handlers.go:

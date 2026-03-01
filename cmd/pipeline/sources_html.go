@@ -830,7 +830,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 	seen := make(map[string]bool)
 
 	// Gold Standard uses h4.title for article titles and time element for dates
-	doc.Find("a[href*='/news/']").Each(func(_ int, link *goquery.Selection) {
+	doc.Find("a[href*='/news/'], a[href*='/events/'], a[href*='/consultations/'], a[href*='/publications/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
@@ -841,7 +841,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 		}
 
 		// Skip non-article links
-		if href == "/news/" || href == "/newsroom" {
+		if href == "/news/" || href == "/events/" || href == "/consultations/" || href == "/publications/" || href == "/newsroom" {
 			return
 		}
 
@@ -863,18 +863,34 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 
 		seen[articleURL] = true
 
-		// Find date from nearby time element (empty string if not found)
+		// Find date from time element in the parent article
 		dateStr := ""
-		parent := link.Parent()
-		for i := 0; i < 5; i++ {
-			timeElem := parent.Find("time")
+		article := link.Closest("article")
+		if article.Length() > 0 {
+			timeElem := article.Find("time")
 			if timeElem.Length() > 0 {
-				if datetime, exists := timeElem.Attr("datetime"); exists {
-					dateStr = datetime
-					break
+				// Prefer datetime attribute (ISO format)
+				if dt, exists := timeElem.Attr("datetime"); exists && dt != "" {
+					if t, err := time.Parse("2006-01-02T15:04:05-0700", dt); err == nil {
+						dateStr = t.UTC().Format(time.RFC3339)
+					} else if t, err := time.Parse("2006-01-02T15:04:05", dt); err == nil {
+						dateStr = t.Format(time.RFC3339)
+					}
+				}
+				// Fallback to text content
+				if dateStr == "" {
+					rawDate := strings.TrimSpace(timeElem.Text())
+					if idx := strings.Index(rawDate, " | "); idx > 0 {
+						rawDate = rawDate[:idx]
+					} else if idx := strings.Index(rawDate, " - "); idx > 0 {
+						rawDate = rawDate[:idx]
+					}
+					rawDate = strings.TrimSpace(rawDate)
+					if t, err := time.Parse("Jan 2, 2006", rawDate); err == nil {
+						dateStr = t.Format(time.RFC3339)
+					}
 				}
 			}
-			parent = parent.Parent()
 		}
 
 		// Fetch full article content from individual page
@@ -890,6 +906,19 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 					// Gold Standard uses <main> for article body
 					bodyElem := articleDoc.Find("main")
 					content = strings.TrimSpace(bodyElem.Text())
+
+					// Fallback: get date from article page if not found in listing
+					if dateStr == "" {
+						if pgTime := articleDoc.Find("time[datetime]"); pgTime.Length() > 0 {
+							if dt, exists := pgTime.Attr("datetime"); exists && dt != "" {
+								if t, err := time.Parse("2006-01-02T15:04:05-0700", dt); err == nil {
+									dateStr = t.UTC().Format(time.RFC3339)
+								} else if t, err := time.Parse("2006-01-02T15:04:05", dt); err == nil {
+									dateStr = t.Format(time.RFC3339)
+								}
+							}
+						}
+					}
 				}
 			}
 		}

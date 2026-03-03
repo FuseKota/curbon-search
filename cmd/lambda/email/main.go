@@ -1,5 +1,5 @@
 // =============================================================================
-// Lambda: send-email
+// Lambda: メール送信
 // =============================================================================
 //
 // Notion DBから記事を取得し、メール送信するLambda関数
@@ -36,7 +36,7 @@ type LambdaConfig struct {
 	EmailPassword    string
 	EmailTo          string
 	DaysBack         int
-	EmailType        string // "full" or "short"
+	EmailType        string // "full" または "short"
 }
 
 // Response はLambdaレスポンス

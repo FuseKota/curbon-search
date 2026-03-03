@@ -24,32 +24,32 @@ import (
 	"strings"
 )
 
-// collectHeadlinesCarbonCreditsJP collects headlines from carboncredits.jp using WordPress REST API
+// collectHeadlinesCarbonCreditsJP は carboncredits.jp から WordPress REST API でヘッドライン を収集する
 func collectHeadlinesCarbonCreditsJP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://carboncredits.jp", "CarbonCredits.jp", limit, cfg)
 }
 
-// collectHeadlinesCarbonHerald collects headlines from carbonherald.com using WordPress REST API
+// collectHeadlinesCarbonHerald は carbonherald.com から WordPress REST API でヘッドラインを収集する
 func collectHeadlinesCarbonHerald(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://carbonherald.com", "Carbon Herald", limit, cfg)
 }
 
-// collectHeadlinesClimateHomeNews collects headlines from climatechangenews.com using WordPress REST API
+// collectHeadlinesClimateHomeNews は climatechangenews.com から WordPress REST API でヘッドラインを収集する
 func collectHeadlinesClimateHomeNews(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://www.climatechangenews.com", "Climate Home News", limit, cfg)
 }
 
-// collectHeadlinesCarbonCreditscom collects headlines from carboncredits.com using WordPress REST API
+// collectHeadlinesCarbonCreditscom は carboncredits.com から WordPress REST API でヘッドラインを収集する
 func collectHeadlinesCarbonCreditscom(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://carboncredits.com", "CarbonCredits.com", limit, cfg)
 }
 
-// collectHeadlinesSandbag fetches articles from Sandbag using WordPress REST API
+// collectHeadlinesSandbag は Sandbag から WordPress REST API で記事を取得する
 func collectHeadlinesSandbag(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	return collectWordPressHeadlines("https://sandbag.be", "Sandbag", limit, cfg)
 }
 
-// collectHeadlinesEcosystemMarketplace fetches articles from Ecosystem Marketplace using WordPress REST API
+// collectHeadlinesEcosystemMarketplace は Ecosystem Marketplace から WordPress REST API で記事を取得する
 //
 // 注意: Ecosystem Marketplaceは記事をカスタム投稿タイプ「featured-articles」に保存している。
 // 標準の「posts」エンドポイントには2011-2017年の古いアーカイブしかないため、
@@ -64,9 +64,9 @@ func collectHeadlinesEcosystemMarketplace(limit int, cfg headlineSourceConfig) (
 	)
 }
 
-// NOTE: collectHeadlinesCarbonBrief はRSS方式に移行 → sources_rss.go を参照
+// 注意: collectHeadlinesCarbonBrief はRSS方式に移行 → sources_rss.go を参照
 
-// collectHeadlinesRMI fetches articles from RMI (Rocky Mountain Institute)
+// collectHeadlinesRMI は RMI (Rocky Mountain Institute) から記事を取得する
 //
 // RMIはGutenbergブロック（Datawrapperチャート等）を多用しており、
 // WordPress REST APIのcontent.renderedでは記事本文が途中で切れる。
@@ -124,7 +124,7 @@ func collectHeadlinesRMI(limit int, cfg headlineSourceConfig) ([]Headline, error
 			URL:         p.Link,
 			PublishedAt: publishedAt,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 

@@ -38,7 +38,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
+// collectHeadlinesICAP は ICAP（Drupalサイト）からHTMLスクレイピングで記事を取得する
 func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://icapcarbonaction.com/en/news"
 
@@ -72,14 +72,14 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			return
 		}
 
-		// Extract title
+		// タイトルを抽出
 		titleElem := article.Find("h3.content-title a.link-title span")
 		title := strings.TrimSpace(titleElem.Text())
 		if title == "" {
 			return
 		}
 
-		// Extract URL
+		// URLを抽出
 		linkElem := article.Find("a.link-title")
 		href, exists := linkElem.Attr("href")
 		if !exists || href == "" {
@@ -91,11 +91,11 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Extract date
+		// 日付を抽出
 		timeElem := article.Find("time")
 		datetime, _ := timeElem.Attr("datetime")
 
-		// Fetch full article content
+		// 記事ページから全文を取得
 		content := ""
 		if articleURL != "" {
 			articleReq, err := http.NewRequest("GET", articleURL, nil)
@@ -116,7 +116,7 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 							content = strings.Join(parts, "\n\n")
 						}
 					}
-					articleResp.Body.Close() // Always close body when err == nil
+					articleResp.Body.Close() // err == nilの場合は必ずBodyをClose
 				}
 			}
 		}
@@ -127,7 +127,7 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: datetime,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -138,7 +138,7 @@ func collectHeadlinesICAP(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesIETA fetches articles from IETA using HTML scraping
+// collectHeadlinesIETA は IETAからHTMLスクレイピングで記事を取得する
 func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	homeURL := "https://www.ieta.org/"
 
@@ -167,24 +167,24 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Find news items - look for card-body containers
+	// ニュース項目を検索 - card-bodyコンテナを探す
 	doc.Find("div.card-body").Each(func(_ int, cardBody *goquery.Selection) {
 		if limit > 0 && len(out) >= limit {
 			return
 		}
 
-		// Extract title
+		// タイトルを抽出
 		titleElem := cardBody.Find("h3.news-title")
 		title := strings.TrimSpace(titleElem.Text())
 		if title == "" {
 			return
 		}
 
-		// Extract date (within the same card-body)
+		// 日付を抽出（同じcard-body内）
 		dateElem := cardBody.Find("div.resource-date")
 		dateStr := strings.TrimSpace(dateElem.Text())
 
-		// Extract URL (sibling a.link-cover - need to go up to parent container)
+		// URLを抽出（兄弟要素のa.link-cover - 親コンテナまで遡る必要あり）
 		parent := cardBody.Parent()
 		linkElem := parent.Find("a.link-cover")
 		href, exists := linkElem.Attr("href")
@@ -198,17 +198,17 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Parse date to RFC3339 format
+		// 日付をRFC3339形式にパース
 		publishedAt := ""
 		if dateStr != "" {
-			// Try to parse "Dec 18, 2025" format
+			// "Dec 18, 2025"形式をパース
 			t, err := time.Parse("Jan 2, 2006", dateStr)
 			if err == nil {
 				publishedAt = t.Format(time.RFC3339)
 			}
 		}
 
-		// Fetch full article content
+		// 記事ページから全文を取得
 		content := ""
 		if articleURL != "" {
 			articleReq, err := http.NewRequest("GET", articleURL, nil)
@@ -219,7 +219,7 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 					if articleResp.StatusCode == http.StatusOK {
 						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 						if err == nil {
-							// Extract intro + body text from news detail sections
+							// ニュース詳細セクションからイントロ+本文テキストを抽出
 							var parts []string
 							articleDoc.Find(".section-news-detail .intro, .section-news-detail section.bg-white").Each(func(_ int, s *goquery.Selection) {
 								t := strings.TrimSpace(s.Text())
@@ -230,7 +230,7 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 							content = strings.Join(parts, "\n\n")
 						}
 					}
-					articleResp.Body.Close() // Always close body when err == nil
+					articleResp.Body.Close() // err == nilの場合は必ずBodyをClose
 				}
 			}
 		}
@@ -241,7 +241,7 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: publishedAt,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -252,7 +252,7 @@ func collectHeadlinesIETA(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesEnergyMonitor fetches articles from Energy Monitor using HTML scraping
+// collectHeadlinesEnergyMonitor は Energy MonitorからHTMLスクレイピングで記事を取得する
 func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.energymonitor.ai/news/"
 
@@ -281,13 +281,13 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Find article items
+	// 記事要素を検索
 	doc.Find("article").Each(func(_ int, article *goquery.Selection) {
 		if limit > 0 && len(out) >= limit {
 			return
 		}
 
-		// Extract title and URL from h3 > a
+		// h3 > a からタイトルとURLを抽出
 		linkElem := article.Find("h3 a")
 		title := strings.TrimSpace(linkElem.Text())
 		if title == "" {
@@ -305,7 +305,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 		}
 		seen[articleURL] = true
 
-		// Fetch full article content
+		// 記事ページから全文を取得
 		content := ""
 		publishedAt := ""
 		if articleURL != "" {
@@ -317,23 +317,23 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 					if articleResp.StatusCode == http.StatusOK {
 						articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 						if err == nil {
-							// Try to find content
+							// コンテンツを検索
 							bodyElem := articleDoc.Find("article .entry-content, article .article-content, .post-content, .content").First()
 							content = strings.TrimSpace(bodyElem.Text())
 
-							// Try to find published date from JSON-LD structured data
+							// JSON-LD構造化データから公開日を検索
 							articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 								if publishedAt != "" {
 									return
 								}
 								jsonText := script.Text()
-								// Extract datePublished from JSON-LD
+								// JSON-LDからdatePublishedを抽出
 								if matches := reDatePublishedJSON.FindStringSubmatch(jsonText); len(matches) > 1 {
 									publishedAt = matches[1]
 								}
 							})
 
-							// Fallback: try time element
+							// フォールバック: time要素を試行
 							if publishedAt == "" {
 								timeElem := articleDoc.Find("time")
 								datetime, exists := timeElem.Attr("datetime")
@@ -343,7 +343,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 							}
 						}
 					}
-					articleResp.Body.Close() // Always close body when err == nil
+					articleResp.Body.Close() // err == nilの場合は必ずBodyをClose
 				}
 			}
 		}
@@ -354,7 +354,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 			URL:         articleURL,
 			PublishedAt: publishedAt,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -365,7 +365,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg headlineSourceConfig) ([]Headl
 	return out, nil
 }
 
-// collectHeadlinesWorldBank collects headlines from World Bank Climate Change publications
+// collectHeadlinesWorldBank は 世界銀行の気候変動関連出版物からヘッドラインを収集する
 func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	// World Bank News Search APIでcarbon関連記事のURL・日付を取得し、
 	// 各ページをスクレイピングしてタイトル・本文を取得する
@@ -442,14 +442,14 @@ func collectHeadlinesWorldBank(limit int, cfg headlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// collectHeadlinesNewClimate collects headlines from NewClimate Institute
+// collectHeadlinesNewClimate は NewClimate Instituteからヘッドラインを収集する
 func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://newclimate.org/news"
 
@@ -477,7 +477,7 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 
 	out := make([]Headline, 0, limit)
 
-	// Parse news items
+	// ニュース項目をパース
 	doc.Find("a[href^='/news/'], a[href^='/resources/publications/']").Each(func(i int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -488,16 +488,16 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 			return
 		}
 
-		// Get title - may be in the link text or in a child element
+		// タイトルを取得 - リンクテキストまたは子要素内にある場合がある
 		title := strings.TrimSpace(link.Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Build absolute URL
+		// 絶対URLを構築
 		articleURL := "https://newclimate.org" + href
 
-		// Try to extract date from parent or sibling elements (empty string if not found)
+		// 親要素または兄弟要素から日付を抽出（見つからない場合は空文字列）
 		dateStr := ""
 		parent := link.Parent().Parent()
 		dateElem := parent.Find("time, .date, span[class*='date']")
@@ -514,11 +514,11 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 			}
 		}
 
-		// Fetch date and content from article page
+		// 記事ページから日付とコンテンツを取得
 		excerpt := ""
 		articleDoc, err := fetchDoc(articleURL, cfg)
 		if err == nil {
-			// Extract date from event-details calendar
+			// event-detailsカレンダーから日付を抽出
 			if dateStr == "" {
 				articleDoc.Find(".event-details__name--calendar").Each(func(_ int, s *goquery.Selection) {
 					if dateStr != "" {
@@ -531,7 +531,7 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 					}
 				})
 			}
-			// Extract content from node__content
+			// node__contentからコンテンツを抽出
 			nodeContent := articleDoc.Find(".node__content")
 			if nodeContent.Length() > 0 {
 				excerpt = strings.TrimSpace(nodeContent.Text())
@@ -544,15 +544,15 @@ func collectHeadlinesNewClimate(limit int, cfg headlineSourceConfig) ([]Headline
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// collectHeadlinesCarbonKnowledgeHub collects headlines from Carbon Knowledge Hub
+// collectHeadlinesCarbonKnowledgeHub は Carbon Knowledge Hubからヘッドラインを収集する
 func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.carbonknowledgehub.com"
 
@@ -579,9 +579,9 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 	}
 
 	out := make([]Headline, 0, limit)
-	seen := make(map[string]bool) // Track seen URLs to avoid duplicates
+	seen := make(map[string]bool) // 重複回避のためURLを追跡
 
-	// Primary selector: links with css-oxwq25 class (main article links)
+	// メインセレクタ: css-oxwq25クラスのリンク（メイン記事リンク）
 	doc.Find("a.css-oxwq25, a[class*='css-']").Each(func(i int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -592,22 +592,22 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 			return
 		}
 
-		// Filter for content URLs
-		// The site uses both singular and plural forms
-		// We need actual article URLs, not category pages, so check for more than one slash
+		// コンテンツURLでフィルタリング
+		// サイトは単数形・複数形の両方を使用
+		// カテゴリページではなく実際の記事URLが必要なので、スラッシュが複数あることを確認
 		isContentURL := (strings.Contains(href, "/factsheet") ||
 			strings.Contains(href, "/story") ||
 			strings.Contains(href, "/stories") ||
 			strings.Contains(href, "/audio") ||
 			strings.Contains(href, "/media") ||
 			strings.Contains(href, "/news")) &&
-			strings.Count(href, "/") > 1 // Ensure it's not just the category page
+			strings.Count(href, "/") > 1 // カテゴリページだけでないことを確認
 
 		if !isContentURL {
 			return
 		}
 
-		// Build absolute URL
+		// 絶対URLを構築
 		articleURL := href
 		if !strings.HasPrefix(href, "http") {
 			if strings.HasPrefix(href, "/") {
@@ -617,18 +617,18 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 			}
 		}
 
-		// Skip if already seen
+		// 既に処理済みならスキップ
 		if seen[articleURL] {
 			return
 		}
 
-		// Get title
+		// タイトルを取得
 		title := strings.TrimSpace(link.Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Skip common navigation text
+		// 一般的なナビゲーションテキストをスキップ
 		titleLower := strings.ToLower(title)
 		if strings.Contains(titleLower, "read more") ||
 			strings.Contains(titleLower, "learn more") ||
@@ -700,22 +700,22 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg headlineSourceConfig) ([]
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
 // =============================================================================
-// VCM Certification Bodies
+// VCM認証機関
 // =============================================================================
 
-// collectHeadlinesVerra fetches news from Verra (VCS standard operator)
+// collectHeadlinesVerra は Verra（VCS規格運営団体）からニュースを取得する
 //
-// Verra manages the Verified Carbon Standard (VCS), the world's most widely
-// used voluntary GHG program.
+// Verraは世界で最も広く利用されている自主的GHGプログラムである
+// Verified Carbon Standard (VCS) を管理している。
 func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://verra.org/news/feed/"
 
@@ -743,16 +743,16 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 
 		articleURL := item.Link
 
-		// Parse date (empty string if not available)
+		// 日付をパース（取得できない場合は空文字列）
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Get content from RSS
+		// RSSからコンテンツを取得
 		excerpt := extractRSSExcerpt(item)
 
-		// If RSS content is short, fetch full article
+		// RSSコンテンツが短い場合は記事全文を取得
 		if len(excerpt) < 200 {
 			articleReq, err := http.NewRequest("GET", articleURL, nil)
 			if err == nil {
@@ -762,7 +762,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 					articleResp.Body.Close()
 					if err == nil {
-						// Try multiple content selectors
+						// 複数のコンテンツセレクタを試行
 						selectors := []string{".entry-content", "article", ".post-content", "main"}
 						for _, sel := range selectors {
 							bodyElem := articleDoc.Find(sel)
@@ -786,7 +786,7 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -797,10 +797,10 @@ func collectHeadlinesVerra(limit int, cfg headlineSourceConfig) ([]Headline, err
 	return out, nil
 }
 
-// collectHeadlinesGoldStandard fetches news from Gold Standard
+// collectHeadlinesGoldStandard は Gold Standardからニュースを取得する
 //
-// Gold Standard is a certification standard for carbon offset projects
-// focusing on sustainable development.
+// Gold Standardは持続可能な開発に重点を置いた
+// カーボンオフセットプロジェクトの認証規格である。
 func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.goldstandard.org/newsroom"
 
@@ -829,7 +829,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Gold Standard uses h4.title for article titles and time element for dates
+	// Gold Standardはh4.titleで記事タイトル、time要素で日付を使用
 	doc.Find("a[href*='/news/'], a[href*='/events/'], a[href*='/consultations/'], a[href*='/publications/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -840,7 +840,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 			return
 		}
 
-		// Skip non-article links
+		// 記事以外のリンクをスキップ
 		if href == "/news/" || href == "/events/" || href == "/consultations/" || href == "/publications/" || href == "/newsroom" {
 			return
 		}
@@ -850,11 +850,11 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 			return
 		}
 
-		// Find title in h4.title within or near the link
+		// リンク内またはその近くのh4.titleからタイトルを検索
 		titleElem := link.Find("h4.title")
 		title := strings.TrimSpace(titleElem.Text())
 		if title == "" {
-			// Try getting title from link text
+			// リンクテキストからタイトルを取得
 			title = strings.TrimSpace(link.Text())
 		}
 		if title == "" || len(title) < 10 {
@@ -863,13 +863,13 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 
 		seen[articleURL] = true
 
-		// Find date from time element in the parent article
+		// 親article要素内のtime要素から日付を検索
 		dateStr := ""
 		article := link.Closest("article")
 		if article.Length() > 0 {
 			timeElem := article.Find("time")
 			if timeElem.Length() > 0 {
-				// Prefer datetime attribute (ISO format)
+				// datetime属性を優先（ISO形式）
 				if dt, exists := timeElem.Attr("datetime"); exists && dt != "" {
 					if t, err := time.Parse("2006-01-02T15:04:05-0700", dt); err == nil {
 						dateStr = t.UTC().Format(time.RFC3339)
@@ -877,7 +877,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 						dateStr = t.Format(time.RFC3339)
 					}
 				}
-				// Fallback to text content
+				// フォールバック: テキストコンテンツ
 				if dateStr == "" {
 					rawDate := strings.TrimSpace(timeElem.Text())
 					if idx := strings.Index(rawDate, " | "); idx > 0 {
@@ -893,7 +893,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文を取得
 		content := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -903,11 +903,11 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Gold Standard uses <main> for article body
+					// Gold Standardは記事本文に<main>を使用
 					bodyElem := articleDoc.Find("main")
 					content = strings.TrimSpace(bodyElem.Text())
 
-					// Fallback: get date from article page if not found in listing
+					// フォールバック: 一覧ページで日付が見つからない場合、記事ページから取得
 					if dateStr == "" {
 						if pgTime := articleDoc.Find("time[datetime]"); pgTime.Length() > 0 {
 							if dt, exists := pgTime.Attr("datetime"); exists && dt != "" {
@@ -929,7 +929,7 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -940,10 +940,10 @@ func collectHeadlinesGoldStandard(limit int, cfg headlineSourceConfig) ([]Headli
 	return out, nil
 }
 
-// collectHeadlinesACR fetches news from American Carbon Registry
+// collectHeadlinesACR は American Carbon Registryからニュースを取得する
 //
-// ACR is a nonprofit enterprise of Winrock International that operates
-// a voluntary carbon offset program.
+// ACRはWinrock Internationalの非営利事業体で、
+// 自主的カーボンオフセットプログラムを運営している。
 func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://acrcarbon.org/news/"
 
@@ -986,15 +986,15 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
-		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
+		// タイトルの整形: 空白を正規化（改行・複数スペースを除去）
 		title = reWhitespace.ReplaceAllString(title, " ")
 		title = strings.TrimSpace(title)
 
-		// ACR-specific: Remove "PUBLISHED ..." suffix from titles
+		// ACR固有: タイトルから"PUBLISHED ..."サフィックスを除去
 		if idx := strings.Index(title, " PUBLISHED"); idx > 0 {
 			title = strings.TrimSpace(title[:idx])
 		}
-		// Remove category prefixes from titles
+		// タイトルからカテゴリプレフィックスを除去
 		acrPrefixes := []string{
 			"Program Announcements ",
 			"General ",
@@ -1043,7 +1043,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文を取得
 		content := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -1053,21 +1053,21 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// ACR uses WordPress block editor - remove unwanted sections first
+					// ACRはWordPressブロックエディタを使用 - 不要なセクションを先に除去
 					articleDoc.Find("header, footer, nav, .site-header, .site-footer, script, style, noscript").Remove()
 
-					// Collect all paragraphs from the page and filter for article content
+					// ページ内の全段落を収集し、記事コンテンツをフィルタリング
 					var paragraphs []string
 					articleDoc.Find("p").Each(func(_ int, p *goquery.Selection) {
 						text := strings.TrimSpace(p.Text())
 						textLower := strings.ToLower(text)
 
-						// Skip short paragraphs
+						// 短い段落をスキップ
 						if len(text) < 40 {
 							return
 						}
 
-						// Skip known non-article content patterns
+						// 既知の非記事コンテンツパターンをスキップ
 						skipPatterns := []string{
 							"cookie", "gdpr", "privacy", "accept", "reject",
 							"related news", "published", "home", "news",
@@ -1080,7 +1080,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 							}
 						}
 
-						// Skip if it looks like navigation/breadcrumb
+						// ナビゲーション/パンくずリストに見える場合はスキップ
 						if strings.HasPrefix(text, "Home") || strings.HasPrefix(text, "News") {
 							return
 						}
@@ -1092,7 +1092,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						content = strings.Join(paragraphs, "\n\n")
 					}
 
-					// Fallback: try full text from main content area
+					// フォールバック: メインコンテンツエリアの全テキストを試行
 					if content == "" {
 						mainElem := articleDoc.Find("main, article, .content, body")
 						if mainElem.Length() > 0 {
@@ -1101,9 +1101,9 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						}
 					}
 
-					// Try to extract date from article page if not found
+					// 日付が見つからない場合は記事ページから抽出を試行
 					if !foundDate {
-						// Try JSON-LD schema first
+						// まずJSON-LDスキーマを試行
 						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 							if foundDate {
 								return
@@ -1116,10 +1116,10 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						})
 					}
 
-					// ACR-specific: Try "PUBLISHED [date]" pattern from article text
+					// ACR固有: 記事テキストから"PUBLISHED [date]"パターンを試行
 					if !foundDate {
 						articleText := articleDoc.Text()
-						// Match "PUBLISHED January 5, 2026" or "PUBLISHED November 25, 2025"
+						// "PUBLISHED January 5, 2026"や"PUBLISHED November 25, 2025"にマッチ
 						publishedRe := regexp.MustCompile(`PUBLISHED\s+((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})`)
 						if match := publishedRe.FindStringSubmatch(articleText); len(match) > 1 {
 							dateText := strings.ReplaceAll(match[1], ",", "")
@@ -1133,7 +1133,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻にフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -1144,7 +1144,7 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1155,10 +1155,10 @@ func collectHeadlinesACR(limit int, cfg headlineSourceConfig) ([]Headline, error
 	return out, nil
 }
 
-// collectHeadlinesCAR fetches news from Climate Action Reserve
+// collectHeadlinesCAR は Climate Action Reserveからニュースを取得する
 //
-// Climate Action Reserve is a carbon offset registry for the North American
-// carbon market.
+// Climate Action Reserveは北米カーボン市場向けの
+// カーボンオフセットレジストリである。
 func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://climateactionreserve.org/updates/"
 
@@ -1201,7 +1201,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
-		// Clean up title: normalize whitespace (remove newlines, multiple spaces)
+		// タイトルの整形: 空白を正規化（改行・複数スペースを除去）
 		title = reWhitespace.ReplaceAllString(title, " ")
 		title = strings.TrimSpace(title)
 
@@ -1215,12 +1215,12 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			return
 		}
 
-		// CAR-specific: Only allow internal blog posts
-		// Skip external links and non-blog pages (program pages, etc.)
+		// CAR固有: 内部ブログ記事のみ許可
+		// 外部リンクや非ブログページ（プログラムページ等）をスキップ
 		if !strings.Contains(articleURL, "climateactionreserve.org") {
 			return
 		}
-		// Only allow blog posts (URLs like /blog/YYYY/MM/DD/...)
+		// ブログ記事のみ許可（/blog/YYYY/MM/DD/...形式のURL）
 		if !strings.Contains(articleURL, "/blog/") {
 			return
 		}
@@ -1250,7 +1250,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文を取得
 		content := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -1260,14 +1260,14 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// CAR uses WordPress/Elementor with various content selectors
-					// Try multiple selectors in order of preference
+					// CARはWordPress/Elementorで様々なコンテンツセレクタを使用
+					// 優先順位の順に複数のセレクタを試行
 					selectors := []string{".entry-content", ".elementor-widget-theme-post-content", "article", ".post-content", "main"}
 					for _, sel := range selectors {
 						bodyElem := articleDoc.Find(sel)
 						if bodyElem.Length() > 0 {
 							content = strings.TrimSpace(bodyElem.Text())
-							// Clean up content: normalize whitespace
+							// コンテンツの整形: 空白を正規化
 							content = reWhitespace.ReplaceAllString(content, " ")
 							if len(content) > 50 {
 								break
@@ -1275,9 +1275,9 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 						}
 					}
 
-					// Try to extract date from article page if not found
+					// 日付が見つからない場合は記事ページから抽出を試行
 					if !foundDate {
-						// Try JSON-LD schema
+						// JSON-LDスキーマを試行
 						articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 							if foundDate {
 								return
@@ -1293,7 +1293,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻にフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -1304,7 +1304,7 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1316,13 +1316,13 @@ func collectHeadlinesCAR(limit int, cfg headlineSourceConfig) ([]Headline, error
 }
 
 // =============================================================================
-// International Organizations
+// 国際機関
 // =============================================================================
 
-// collectHeadlinesUNFCCC fetches news from United Nations Framework Convention on Climate Change
+// collectHeadlinesUNFCCC は 国連気候変動枠組条約（UNFCCC）からニュースを取得する
 //
-// UNFCCC is the international treaty on climate change that serves as the foundation
-// for global climate negotiations.
+// UNFCCCは気候変動に関する国際条約であり、
+// 世界的な気候交渉の基盤となっている。
 func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://unfccc.int/news"
 
@@ -1376,7 +1376,7 @@ func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, er
 		}
 		seen[articleURL] = true
 
-		// Extract date (empty string if not found)
+		// 日付を抽出（見つからない場合は空文字列）
 		dateStr := ""
 		dateElem := article.Find("time, .date, .field--name-created, span[class*='date']")
 		if dateElem.Length() > 0 {
@@ -1410,7 +1410,7 @@ func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, er
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1421,16 +1421,16 @@ func collectHeadlinesUNFCCC(limit int, cfg headlineSourceConfig) ([]Headline, er
 	return out, nil
 }
 
-// collectHeadlinesIISD fetches news from IISD Earth Negotiations Bulletin
+// collectHeadlinesIISD は IISD Earth Negotiations Bulletinからニュースを取得する
 //
-// IISD ENB provides reporting on international environmental negotiations,
-// including climate change conferences and carbon market discussions.
-// Note: IISD requires cookie-based session to access individual article pages.
+// IISD ENBは気候変動会議やカーボン市場の議論を含む
+// 国際環境交渉に関するレポートを提供している。
+// 注意: IISDは個別記事ページへのアクセスにCookieベースのセッションが必要。
 func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://enb.iisd.org/"
 
-	// Create a client with cookie jar to maintain session
-	// IISD blocks requests without proper session cookies
+	// セッション維持のためCookie jar付きクライアントを作成
+	// IISDは適切なセッションCookieなしのリクエストをブロックする
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie jar: %w", err)
@@ -1440,8 +1440,8 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		Jar:     jar,
 	}
 
-	// First, visit the homepage to get session cookies
-	// Retry up to 3 times with exponential backoff (AWS IPs often get 403)
+	// まずホームページにアクセスしてセッションCookieを取得
+	// 指数バックオフで最大3回リトライ（AWS IPは403を受けやすい）
 	var resp *http.Response
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
@@ -1485,7 +1485,7 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Helper function to extract date from text
+	// テキストから日付を抽出するヘルパー関数
 	extractDate := func(text string) string {
 		datePatterns := []struct {
 			regex  string
@@ -1506,13 +1506,13 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		return ""
 	}
 
-	// Helper function to fetch article page and extract full content
-	// Returns: About (og:description) + full body content
+	// 記事ページを取得して全文を抽出するヘルパー関数
+	// 戻り値: About (og:description) + 本文全文
 	fetchArticleContent := func(articleURL string) string {
-		time.Sleep(500 * time.Millisecond) // Delay between requests to avoid rate limiting
+		time.Sleep(500 * time.Millisecond) // レート制限回避のためリクエスト間に遅延
 
 		var resp *http.Response
-		// Retry up to 3 times on 403 (bot protection / rate limiting)
+		// 403時に最大3回リトライ（bot保護/レート制限）
 		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
 				time.Sleep(time.Duration(attempt) * 2 * time.Second)
@@ -1562,21 +1562,21 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 
 		var parts []string
 
-		// 1. Get About section from og:description
+		// 1. og:descriptionからAboutセクションを取得
 		if about := articleDoc.Find("meta[property='og:description']").AttrOr("content", ""); about != "" {
 			parts = append(parts, "【About】\n"+strings.TrimSpace(about))
 		}
 
-		// 2. Get full body content from ALL .c-wysiwyg__content sections
-		// Articles may have multiple sections separated by images
+		// 2. 全ての.c-wysiwyg__contentセクションから本文を取得
+		// 記事は画像で区切られた複数セクションを持つ場合がある
 		var bodyParts []string
-		seen := make(map[string]bool) // Avoid duplicates
+		seen := make(map[string]bool) // 重複を回避
 
 		articleDoc.Find(".c-wysiwyg__content").Each(func(_ int, section *goquery.Selection) {
-			// Get paragraphs from this section
+			// このセクションから段落を取得
 			section.Find("p").Each(func(_ int, p *goquery.Selection) {
 				text := strings.TrimSpace(p.Text())
-				// Skip short texts, metadata, and newsletter subscription text
+				// 短いテキスト、メタデータ、ニュースレター購読テキストをスキップ
 				if len(text) > 50 && !strings.Contains(text, "subscribe to the ENB") &&
 					!strings.Contains(text, "Earth Negotiations Bulletin writers") &&
 					!seen[text] {
@@ -1585,7 +1585,7 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 				}
 			})
 
-			// Also get list items (highlights, agenda items, etc.)
+			// リスト項目も取得（ハイライト、議題等）
 			section.Find("li").Each(func(_ int, li *goquery.Selection) {
 				text := strings.TrimSpace(li.Text())
 				if len(text) > 20 && !seen[text] {
@@ -1600,7 +1600,7 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 
 		if len(parts) == 0 {
-			// Fallback to meta description if nothing found
+			// 何も見つからない場合はmeta descriptionにフォールバック
 			if desc := articleDoc.Find("meta[name='description']").AttrOr("content", ""); desc != "" {
 				return strings.TrimSpace(desc)
 			}
@@ -1610,13 +1610,13 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		return strings.Join(parts, "\n")
 	}
 
-	// First, collect from featured boxes (these have summaries on list page)
+	// まずfeatured boxから収集（一覧ページにサマリーあり）
 	doc.Find("a.c-featured-box, .c-featured-box").Each(func(_ int, box *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Get link - either from the element itself or from child
+		// リンクを取得 - 要素自体または子要素から
 		var href string
 		if h, exists := box.Attr("href"); exists {
 			href = h
@@ -1633,16 +1633,16 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Get title
+		// タイトルを取得
 		title := strings.TrimSpace(box.Find(".c-featured-box__title, h3, h4").First().Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Always fetch full content from article page (About + Content)
+		// 常に記事ページから全文を取得（About + Content）
 		excerpt := fetchArticleContent(articleURL)
 
-		// Extract date from box text
+		// boxテキストから日付を抽出
 		boxText := box.Text()
 		dateStr := extractDate(boxText)
 		if dateStr == "" {
@@ -1655,11 +1655,11 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
-	// If we haven't reached limit, also collect from hero items (current events)
+	// 上限に達していない場合、hero items（現在のイベント）からも収集
 	if len(out) < limit {
 		doc.Find(".c-hero-item").Each(func(_ int, hero *goquery.Selection) {
 			if len(out) >= limit {
@@ -1683,8 +1683,8 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 				return
 			}
 
-			// Hero items don't have descriptions on list page
-			// Fetch content from individual article page using session cookies
+			// hero itemsには一覧ページに説明がない
+			// セッションCookieを使用して個別記事ページからコンテンツを取得
 			excerpt := fetchArticleContent(articleURL)
 
 			dateStr := extractDate(hero.Text())
@@ -1698,7 +1698,7 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 				URL:         articleURL,
 				PublishedAt: dateStr,
 				Excerpt:     excerpt,
-				IsHeadline:  true,
+	
 			})
 		})
 	}
@@ -1710,10 +1710,10 @@ func collectHeadlinesIISD(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesClimateFocus fetches publications from Climate Focus
+// collectHeadlinesClimateFocus は Climate Focusから出版物を取得する
 //
-// Climate Focus is a climate policy advisory firm that publishes research
-// on carbon markets and climate finance.
+// Climate Focusはカーボン市場や気候ファイナンスに関する
+// 調査を発行する気候政策アドバイザリー企業である。
 func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	publicationsURL := "https://climatefocus.com/publications/"
 
@@ -1742,7 +1742,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Climate Focus - find links to publications directly
+	// Climate Focus - 出版物へのリンクを直接検索
 	doc.Find("a[href*='/publications/']").Each(func(_ int, link *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -1753,7 +1753,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			return
 		}
 
-		// Skip if this is just the main publications page, pagination, or staging URL
+		// メイン出版物ページ、ページネーション、またはステージングURLの場合はスキップ
 		if href == publicationsURL || href == "https://climatefocus.com/publications/" {
 			return
 		}
@@ -1767,7 +1767,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 		}
 		seen[articleURL] = true
 
-		// Get title from link text or from image alt
+		// リンクテキストまたは画像altからタイトルを取得
 		title := strings.TrimSpace(link.Text())
 		if title == "" {
 			imgElem := link.Find("img")
@@ -1777,9 +1777,9 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			}
 		}
 
-		// If still no title, extract from URL
+		// まだタイトルがない場合、URLから抽出
 		if title == "" || len(title) < 10 {
-			// Extract title from URL path
+			// URLパスからタイトルを抽出
 			parts := strings.Split(href, "/")
 			for i := len(parts) - 1; i >= 0; i-- {
 				if parts[i] != "" {
@@ -1794,7 +1794,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			return
 		}
 
-		// Get category from sibling/parent elements
+		// 兄弟/親要素からカテゴリを取得
 		excerpt := ""
 		parent := link.Parent()
 		categoryElem := parent.Find(".category")
@@ -1802,7 +1802,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			excerpt = "Category: " + strings.TrimSpace(categoryElem.Text())
 		}
 
-		// Fetch individual article page for date and content
+		// 個別記事ページから日付とコンテンツを取得
 		dateStr := ""
 		foundDate := false
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
@@ -1813,14 +1813,14 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Look for date in various locations
-					// 1. Try JSON-LD schema (datePublished)
+					// 様々な場所から日付を検索
+					// 1. JSON-LDスキーマ（datePublished）を試行
 					articleDoc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 						if foundDate {
 							return
 						}
 						text := script.Text()
-						// Look for datePublished pattern
+						// datePublishedパターンを検索
 						if strings.Contains(text, "datePublished") {
 							if match := reDatePublishedJSON.FindStringSubmatch(text); len(match) > 1 {
 								dateStr = match[1]
@@ -1829,17 +1829,17 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 						}
 					})
 
-					// 2. Try visible date text "Jan 2026" format
+					// 2. 表示されている日付テキスト "Jan 2026" 形式を試行
 					if !foundDate {
 						articleDoc.Find(".date, time, span[class*='date']").Each(func(_ int, elem *goquery.Selection) {
 							if foundDate {
 								return
 							}
 							text := strings.TrimSpace(elem.Text())
-							// Try "Jan 2026" format (short month + year)
+							// "Jan 2026" 形式を試行（短縮月名 + 年）
 							re := regexp.MustCompile(`(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})`)
 							if match := re.FindStringSubmatch(text); len(match) > 2 {
-								// Parse as first day of month
+								// 月の1日としてパース
 								dateText := match[1] + " 1, " + match[2]
 								if t, err := time.Parse("Jan 2, 2006", dateText); err == nil {
 									dateStr = t.Format(time.RFC3339)
@@ -1849,11 +1849,11 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 						})
 					}
 
-					// 3. Extract full article content from the page
-					// Remove unwanted elements first
+					// 3. ページから記事全文を抽出
+					// まず不要な要素を除去
 					articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar, .related-posts").Remove()
 
-					// Try to find article content
+					// 記事コンテンツを検索
 					contentSelectors := []string{
 						".entry-content",
 						".article-content",
@@ -1866,7 +1866,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 					for _, sel := range contentSelectors {
 						contentElem := articleDoc.Find(sel)
 						if contentElem.Length() > 0 {
-							// Get text from paragraphs
+							// 段落からテキストを取得
 							var paragraphs []string
 							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
 								text := strings.TrimSpace(p.Text())
@@ -1881,7 +1881,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 						}
 					}
 
-					// Fallback to meta description if no content found
+					// コンテンツが見つからない場合はmeta descriptionにフォールバック
 					if excerpt == "" {
 						excerptElem := articleDoc.Find("meta[name='description'], meta[property='og:description']")
 						if excerptElem.Length() > 0 {
@@ -1893,7 +1893,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻にフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -1904,7 +1904,7 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1916,16 +1916,16 @@ func collectHeadlinesClimateFocus(limit int, cfg headlineSourceConfig) ([]Headli
 }
 
 // =============================================================================
-// Additional Sources (Phase 5)
+// 追加ソース（フェーズ5）
 // =============================================================================
 
-// collectHeadlinesPuroEarth fetches blog articles from Puro.earth
+// collectHeadlinesPuroEarth は Puro.earthからブログ記事を取得する
 //
-// Puro.earth is a carbon removal marketplace that provides certification
-// for carbon removal projects and credits. Their blog contains news,
-// methodology updates, and industry insights.
+// Puro.earthは炭素除去プロジェクトとクレジットの認証を提供する
+// 炭素除去マーケットプレイスである。ブログにはニュース、
+// 方法論の更新、業界のインサイトが掲載されている。
 //
-// 手法: Atom Feed (gofeed) + HTML scraping for full content
+// 手法: Atom Feed (gofeed) + 全文取得用HTMLスクレイピング
 // URL: https://puro.earth/blog/our-blogs-1/feed
 func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://puro.earth/blog/our-blogs-1/feed"
@@ -1953,7 +1953,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			continue
 		}
 
-		// Parse date (empty string if not available)
+		// 日付をパース（取得できない場合は空文字列）
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -1961,7 +1961,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			dateStr = item.UpdatedParsed.Format(time.RFC3339)
 		}
 
-		// Fetch article page to get full content
+		// 記事ページから全文を取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -1971,8 +1971,8 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Puro.earth uses Odoo CMS with specific class names
-					// Content may be in <p> tags or as direct text nodes between <br> tags
+					// Puro.earthは特定のクラス名を持つOdoo CMSを使用
+					// コンテンツは<p>タグまたは<br>タグ間の直接テキストノードにある場合がある
 					contentSelectors := []string{
 						".o_wblog_post_content_field",
 						".o_wblog_read_text",
@@ -1981,7 +1981,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 					for _, sel := range contentSelectors {
 						contentElem := articleDoc.Find(sel)
 						if contentElem.Length() > 0 {
-							// First try to get content from <p> tags
+							// まず<p>タグからコンテンツを取得
 							var contentParts []string
 							contentElem.Find("p").Each(func(_ int, p *goquery.Selection) {
 								text := strings.TrimSpace(p.Text())
@@ -1990,13 +1990,13 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 								}
 							})
 
-							// If <p> tags don't have enough content, get full text
-							// (Puro.earth sometimes uses direct text with <br> separators)
+							// <p>タグに十分なコンテンツがない場合、全テキストを取得
+							// （Puro.earthは<br>区切りの直接テキストを使うことがある）
 							if len(strings.Join(contentParts, "")) < 200 {
 								fullText := strings.TrimSpace(contentElem.Text())
-								// Normalize whitespace (multiple spaces/newlines to single newline)
+								// 空白を正規化（複数スペース/改行を単一改行に）
 								fullText = reWhitespace.ReplaceAllString(fullText, " ")
-								// Split into paragraphs at logical breaks (sentences ending with period followed by capital)
+								// 論理的な区切り（ピリオド+大文字の文頭）で段落に分割
 								fullText = regexp.MustCompile(`\. ([A-Z])`).ReplaceAllString(fullText, ".\n\n$1")
 								if len(fullText) > 100 {
 									excerpt = fullText
@@ -2012,14 +2012,14 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Fallback to feed description if article fetch failed
+		// 記事取得に失敗した場合はフィードのdescriptionにフォールバック
 		if excerpt == "" {
 			if item.Description != "" {
 				excerpt = item.Description
 			} else if item.Content != "" {
 				excerpt = item.Content
 			}
-			// Clean up HTML tags
+			// HTMLタグを除去
 			excerpt = reHTMLTags.ReplaceAllString(excerpt, "")
 			excerpt = reWhitespace.ReplaceAllString(excerpt, " ")
 			excerpt = strings.TrimSpace(excerpt)
@@ -2031,7 +2031,7 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -2042,15 +2042,15 @@ func collectHeadlinesPuroEarth(limit int, cfg headlineSourceConfig) ([]Headline,
 	return out, nil
 }
 
-// collectHeadlinesIsometric fetches resources from Isometric
+// collectHeadlinesIsometric は Isometricからリソースを取得する
 //
-// Isometric is a science-based carbon removal verification company
-// that publishes research and resources on carbon removal.
+// Isometricは炭素除去に関する調査・リソースを発行する
+// 科学ベースの炭素除去検証企業である。
 //
-// HTML structure:
-// - Title: p.writing-card-title
-// - Date: div.label-small.cc-date (format: "Oct 20, 2025")
-// - Subtitle: div.u-text-grey80.u-hide
+// HTML構造:
+// - タイトル: p.writing-card-title
+// - 日付: div.label-small.cc-date（形式: "Oct 20, 2025"）
+// - サブタイトル: div.u-text-grey80.u-hide
 func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	resourcesURL := "https://isometric.com/writing"
 
@@ -2095,19 +2095,19 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 		}
 		seen[articleURL] = true
 
-		// Find title from p.writing-card-title
+		// p.writing-card-titleからタイトルを検索
 		title := strings.TrimSpace(link.Find("p.writing-card-title").Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Find date from div.cc-date (empty string if not found)
+		// div.cc-dateから日付を検索（見つからない場合は空文字列）
 		dateStr := ""
 		foundDate := false
 		dateElem := link.Find("div.cc-date, .label-small.cc-date")
 		if dateElem.Length() > 0 {
 			dateText := strings.TrimSpace(dateElem.First().Text())
-			// Format: "Oct 20, 2025" or "Jan 21, 2026"
+			// 形式: "Oct 20, 2025" または "Jan 21, 2026"
 			for _, format := range []string{
 				"Jan 2, 2006",
 				"Jan 02, 2006",
@@ -2121,10 +2121,10 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Get subtitle from listing page as initial excerpt
+		// 一覧ページからサブタイトルを初期excerptとして取得
 		subtitle := strings.TrimSpace(link.Find("div.u-text-grey80").Text())
 
-		// Fetch article page to get full content
+		// 記事ページから全文を取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -2134,7 +2134,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Try to get date from article page if not found on listing
+					// 一覧ページで日付が見つからない場合、記事ページから取得を試行
 					if !foundDate {
 						articleDoc.Find("div.cc-date, .label-small.cc-date, time").Each(func(_ int, dateEl *goquery.Selection) {
 							if foundDate {
@@ -2155,7 +2155,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 						})
 					}
 
-					// Extract content from article body
+					// 記事本文からコンテンツを抽出
 					contentSelectors := []string{
 						".rich-text",
 						".w-richtext",
@@ -2184,7 +2184,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Fallback to subtitle if article fetch failed
+		// 記事取得に失敗した場合はサブタイトルにフォールバック
 		if excerpt == "" && subtitle != "" {
 			excerpt = subtitle
 		} else if excerpt == "" {
@@ -2197,7 +2197,7 @@ func collectHeadlinesIsometric(limit int, cfg headlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 

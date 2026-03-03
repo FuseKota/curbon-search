@@ -1,17 +1,16 @@
-// =============================================================================
-// sources_academic.go - Academic/Research Sources
+// sources_academic.go - 学術・研究ソース
 // =============================================================================
 //
-// This file defines academic and research publication sources for carbon-related
-// content using XML APIs and RSS feeds.
+// カーボン関連コンテンツの学術・研究出版ソースを定義する。
+// XML APIおよびRSSフィードを使用。
 //
-// Sources:
-//   1. arXiv                      - Pre-print repository (XML API)
-//   2. Nature Communications      - Scientific journal (RSS + keyword filter)
+// ソース一覧:
+//   1. arXiv                      - プレプリントリポジトリ (XML API)
+//   2. Nature Communications      - 科学ジャーナル (RSS + キーワードフィルタ)
 //   3. OIES                       - Oxford Institute for Energy Studies (HTML)
-//   4. IOP Science (ERL)          - Environmental Research Letters (RSS + keyword filter)
-//   5. Nature Ecology & Evolution - Scientific journal (RSS + keyword filter)
-//   6. ScienceDirect              - Elsevier journal (RSS + keyword filter)
+//   4. IOP Science (ERL)          - Environmental Research Letters (RSS + キーワードフィルタ)
+//   5. Nature Ecology & Evolution - 科学ジャーナル (RSS + キーワードフィルタ)
+//   6. ScienceDirect              - Elsevierジャーナル (RSS + キーワードフィルタ)
 //
 // =============================================================================
 package main
@@ -30,20 +29,20 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
-// reScienceDirectDate extracts "Publication date: Month Year" from ScienceDirect description HTML
+// reScienceDirectDate はScienceDirectのdescription HTMLから "Publication date: Month Year" を抽出する正規表現
 var reScienceDirectDate = regexp.MustCompile(`Publication date:\s*(\w+ \d{4})`)
 
 // =============================================================================
-// arXiv Source
+// arXiv ソース
 // =============================================================================
 
-// arXivFeed represents the Atom feed structure from arXiv API
+// arXivFeed はarXiv APIのAtomフィード構造を表す
 type arXivFeed struct {
 	XMLName xml.Name     `xml:"feed"`
 	Entries []arXivEntry `xml:"entry"`
 }
 
-// arXivEntry represents a single paper entry from arXiv
+// arXivEntry はarXivの単一論文エントリを表す
 type arXivEntry struct {
 	Title     string       `xml:"title"`
 	ID        string       `xml:"id"`
@@ -54,23 +53,23 @@ type arXivEntry struct {
 	Links     []arXivLink  `xml:"link"`
 }
 
-// arXivAuthor represents an author in arXiv entry
+// arXivAuthor はarXivエントリの著者を表す
 type arXivAuthor struct {
 	Name string `xml:"name"`
 }
 
-// arXivLink represents a link in arXiv entry
+// arXivLink はarXivエントリのリンクを表す
 type arXivLink struct {
 	Href string `xml:"href,attr"`
 	Rel  string `xml:"rel,attr"`
 	Type string `xml:"type,attr"`
 }
 
-// carbonKeywordsArXiv contains keywords for filtering arXiv papers to ensure relevance
-// Using compound phrases to avoid false positives from physics papers
-// (e.g., "emission" alone matches "positron emission", "light emission", etc.)
+// carbonKeywordsArXiv はarXiv論文の関連性フィルタリング用キーワードリスト
+// 物理学論文の誤検出を防ぐため複合フレーズを使用
+// （例: "emission"単体では"positron emission"や"light emission"等にマッチしてしまう）
 var carbonKeywordsArXiv = []string{
-	// Climate-specific compound terms
+	// 気候関連の複合用語
 	"carbon emission", "carbon dioxide", "co2 emission", "greenhouse gas",
 	"carbon pricing", "carbon tax", "carbon market", "carbon credit",
 	"emissions trading", "cap and trade", "carbon trading",
@@ -79,41 +78,41 @@ var carbonKeywordsArXiv = []string{
 	"renewable energy", "clean energy", "energy transition",
 	"carbon capture", "carbon storage", "carbon sequestration",
 	"carbon footprint", "carbon intensity",
-	// International agreements
+	// 国際協定
 	"paris agreement", "kyoto protocol",
 }
 
-// collectHeadlinesArXiv fetches carbon-related papers from arXiv using their API
+// collectHeadlinesArXiv はarXiv APIを使用してカーボン関連論文を取得する
 //
-// API Documentation: https://info.arxiv.org/help/api/index.html
-// Rate limit: 3 seconds between requests (enforced)
+// APIドキュメント: https://info.arxiv.org/help/api/index.html
+// レート制限: リクエスト間3秒（強制）
 //
-// Search query targets papers in q-fin (Quantitative Finance), econ (Economics),
-// and physics (specifically environmental economics topics)
+// 検索クエリはq-fin（計量ファイナンス）、econ（経済学）、
+// およびphysics（特に環境経済学トピック）の論文を対象とする
 func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// Search specifically for climate/carbon economics papers
-	// Using category restrictions to avoid physics papers
-	// Categories:
-	//   econ.GN - Economics (General Economics)
-	//   q-fin.* - Quantitative Finance
-	//   physics.soc-ph - Physics and Society (includes some climate policy papers)
-	//   physics.ao-ph - Atmospheric and Oceanic Physics
-	//   stat.AP - Statistics Applications
+	// 気候/カーボン経済学論文を特定して検索
+	// 物理学論文を除外するためカテゴリ制限を使用
+	// カテゴリ:
+	//   econ.GN - Economics（一般経済学）
+	//   q-fin.* - Quantitative Finance（計量ファイナンス）
+	//   physics.soc-ph - Physics and Society（気候政策論文を含む）
+	//   physics.ao-ph - Atmospheric and Oceanic Physics（大気海洋物理学）
+	//   stat.AP - Statistics Applications（統計応用）
 
-	// Build search query with category filter AND keyword filter
-	// Format: (cat:econ.* OR cat:q-fin.*) AND (keyword1 OR keyword2)
+	// カテゴリフィルタとキーワードフィルタを組み合わせた検索クエリを構築
+	// 形式: (cat:econ.* OR cat:q-fin.*) AND (keyword1 OR keyword2)
 	categories := "cat:econ.GN+OR+cat:q-fin.GN+OR+cat:q-fin.PM+OR+cat:stat.AP"
 	keywords := "carbon+OR+climate+OR+emission+OR+environmental+policy"
 
-	// Combined query: papers in relevant categories that mention carbon/climate terms
+	// 結合クエリ: 関連カテゴリ内でカーボン/気候用語に言及する論文
 	searchQuery := fmt.Sprintf("(%s)+AND+(%s)", categories, keywords)
 
-	// arXiv API URL with search parameters
-	// max_results limits results, sortBy=submittedDate gets newest first
+	// arXiv API URLと検索パラメータ
+	// max_resultsで結果数を制限、sortBy=submittedDateで新しい順に取得
 	apiURL := fmt.Sprintf(
 		"http://export.arxiv.org/api/query?search_query=%s&start=0&max_results=%d&sortBy=submittedDate&sortOrder=descending",
 		searchQuery,
-		limit*10, // Request more to account for keyword filtering
+		limit*10, // キーワードフィルタリングを考慮して多めにリクエスト
 	)
 
 	client := cfg.Client
@@ -133,7 +132,7 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Parse XML response
+	// XMLレスポンスをパース
 	var feed arXivFeed
 	decoder := xml.NewDecoder(resp.Body)
 	if err := decoder.Decode(&feed); err != nil {
@@ -147,7 +146,7 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 			break
 		}
 
-		// Clean title (remove newlines that arXiv adds)
+		// タイトルをクリーンアップ（arXivが付加する改行を除去）
 		title := strings.TrimSpace(entry.Title)
 		title = strings.ReplaceAll(title, "\n", " ")
 		title = strings.Join(strings.Fields(title), " ")
@@ -155,37 +154,37 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 			continue
 		}
 
-		// Clean summary for keyword check
+		// キーワードチェック用にサマリーをクリーンアップ
 		summaryClean := strings.TrimSpace(entry.Summary)
 		summaryClean = strings.ReplaceAll(summaryClean, "\n", " ")
 		summaryClean = strings.Join(strings.Fields(summaryClean), " ")
 
-		// Apply keyword filter to ensure paper is actually about carbon/climate
+		// 論文が実際にカーボン/気候に関するものか確認するキーワードフィルタを適用
 		if !matchesKeywords(title, summaryClean, carbonKeywordsArXiv) {
 			continue
 		}
 
-		// Get the abstract page URL (the ID is the URL)
+		// アブストラクトページのURLを取得（IDがそのままURLになる）
 		articleURL := entry.ID
 
-		// Find PDF link if available
+		// PDFリンクがあれば取得
 		for _, link := range entry.Links {
 			if link.Type == "application/pdf" {
-				// We prefer the abstract page, but PDF is available
+				// アブストラクトページを優先するが、PDFも利用可能
 				break
 			}
 		}
 
-		// Parse date (arXiv uses RFC3339)
+		// 日付をパース（arXivはRFC3339形式）
 		dateStr := entry.Published
 		if dateStr == "" {
 			dateStr = entry.Updated
 		}
 
-		// Use already cleaned summary
+		// クリーンアップ済みのサマリーを使用
 		summary := summaryClean
 
-		// Build author string
+		// 著者文字列を構築
 		var authors []string
 		for _, author := range entry.Authors {
 			authors = append(authors, author.Name)
@@ -206,7 +205,7 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -214,17 +213,17 @@ func collectHeadlinesArXiv(limit int, cfg headlineSourceConfig) ([]Headline, err
 		fmt.Fprintf(os.Stderr, "[DEBUG] arXiv: collected %d headlines\n", len(out))
 	}
 
-	// Respect rate limit - sleep 3 seconds after request
+	// レート制限を遵守 - リクエスト後3秒スリープ
 	time.Sleep(3 * time.Second)
 
 	return out, nil
 }
 
 // =============================================================================
-// Nature Communications Source
+// Nature Communications ソース
 // =============================================================================
 
-// carbonKeywordsNature contains keywords for filtering Nature Communications articles
+// carbonKeywordsNature はNature Communications記事のフィルタリング用キーワードリスト
 var carbonKeywordsNature = []string{
 	"carbon", "emission", "greenhouse", "climate change", "net zero",
 	"decarbonization", "decarbonisation", "carbon dioxide", "CO2",
@@ -233,25 +232,25 @@ var carbonKeywordsNature = []string{
 	"carbon capture", "CCS", "CCUS", "negative emissions",
 }
 
-// collectHeadlinesNatureComms fetches climate-related articles from Nature Communications RSS
+// collectHeadlinesNatureComms はNature Communications RSSから気候関連記事を取得する
 //
-// Nature Communications is a peer-reviewed open-access journal covering all areas
-// of natural sciences. We use the climate-change subject feed which is pre-filtered
-// by Nature's subject taxonomy, so no additional keyword filtering is needed.
+// Nature Communicationsは自然科学全般をカバーする査読付きオープンアクセスジャーナル。
+// Natureのサブジェクト分類で事前フィルタ済みのclimate-changeフィードを使用するため、
+// 追加のキーワードフィルタリングは不要。
 //
-// The subject feed provides titles, URLs, and dates but no descriptions.
-// Abstracts are fetched from each article page (id="Abs1" section).
+// サブジェクトフィードはタイトル・URL・日付を提供するがdescriptionはなし。
+// アブストラクトは各記事ページ（id="Abs1"セクション）から取得する。
 //
-// Note: nature.com uses Fastly bot protection that detects Go's TLS fingerprint
-// and returns a JavaScript challenge page. We use curl as a workaround since
-// curl's TLS fingerprint is accepted by the server.
+// 注意: nature.comはFastlyのbot保護でGoのTLSフィンガープリントを検出し、
+// JavaScriptチャレンジページを返す。curlのTLSフィンガープリントは
+// サーバーに受け入れられるため、回避策としてcurlを使用する。
 //
 // URL: https://www.nature.com/subjects/climate-change/ncomms.rss
 func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.nature.com/subjects/climate-change/ncomms.rss"
 
-	// Nature.com blocks Go's TLS fingerprint with a JS challenge page.
-	// Use curl to fetch the RSS feed instead.
+	// Nature.comはGoのTLSフィンガープリントをJSチャレンジページでブロックする。
+	// 代わりにcurlでRSSフィードを取得する。
 	body, err := fetchViaCurl(feedURL, cfg.UserAgent)
 	if err != nil {
 		return nil, fmt.Errorf("curl fetch failed: %w", err)
@@ -281,13 +280,13 @@ func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headlin
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付をパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Fetch abstract from article page via curl
+		// curlで記事ページからアブストラクトを取得
 		excerpt := fetchNatureAbstract(articleURL, cfg.UserAgent)
 
 		out = append(out, Headline{
@@ -296,15 +295,15 @@ func collectHeadlinesNatureComms(limit int, cfg headlineSourceConfig) ([]Headlin
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// fetchNatureAbstract fetches the abstract from a Nature article page.
-// Uses curl to bypass TLS fingerprint detection.
+// fetchNatureAbstract はNature記事ページからアブストラクトを取得する。
+// TLSフィンガープリント検出を回避するためcurlを使用。
 func fetchNatureAbstract(articleURL string, userAgent string) string {
 	body, err := fetchViaCurl(articleURL, userAgent)
 	if err != nil {
@@ -316,27 +315,27 @@ func fetchNatureAbstract(articleURL string, userAgent string) string {
 		return ""
 	}
 
-	// Extract abstract from Abs1 section
+	// Abs1セクションからアブストラクトを抽出
 	abstract := doc.Find("#Abs1-content p, #Abs1 p").First().Text()
 	return strings.TrimSpace(abstract)
 }
 
 // =============================================================================
-// OIES (Oxford Institute for Energy Studies) Source
+// OIES (Oxford Institute for Energy Studies) ソース
 // =============================================================================
 
-// collectHeadlinesOIES fetches publications from Oxford Institute for Energy Studies
+// collectHeadlinesOIES はOxford Institute for Energy Studiesの出版物を取得する
 //
-// OIES publishes research papers on energy and environmental economics,
-// including carbon markets and climate policy.
+// OIESはエネルギー・環境経済学に関する研究論文を出版しており、
+// カーボンマーケットや気候政策も含む。
 //
-// Strategy: The main /publications/ page uses JavaScript rendering, so we fetch
-// publications from multiple programme pages that render content server-side:
-//   - Carbon Management Programme (primary - carbon/climate focused)
+// 戦略: メインの/publications/ページはJavaScriptレンダリングを使用するため、
+// サーバーサイドでコンテンツをレンダリングする複数のプログラムページから取得する:
+//   - Carbon Management Programme（主要 - カーボン/気候関連）
 //   - Energy Transition Research Initiative
-//   - Gas, Electricity, and other programmes
+//   - Gas、Electricity、その他のプログラム
 func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// Programme pages that render publications in HTML (not JavaScript)
+	// HTMLでレンダリングされるプログラムページ（JavaScriptではない）
 	programmeURLs := []string{
 		"https://www.oxfordenergy.org/carbon-management-programme/",
 		"https://www.oxfordenergy.org/energy-transition-research-initiative/",
@@ -370,7 +369,7 @@ func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, erro
 			}
 			seen[h.URL] = true
 
-			// Fetch article page to get excerpt/content
+			// 記事ページからExcerpt/コンテンツを取得
 			excerpt, date := fetchOIESArticleContent(client, h.URL, cfg.UserAgent)
 			if excerpt != "" {
 				h.Excerpt = excerpt
@@ -390,7 +389,7 @@ func collectHeadlinesOIES(limit int, cfg headlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// fetchOIESArticleContent fetches the excerpt and date from an individual article page
+// fetchOIESArticleContent は個別の記事ページからExcerptと日付を取得する
 func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) (excerpt, date string) {
 	req, err := http.NewRequest("GET", articleURL, nil)
 	if err != nil {
@@ -413,30 +412,30 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 		return "", ""
 	}
 
-	// Remove noise elements before extracting content
+	// コンテンツ抽出前にノイズ要素を除去
 	doc.Find("nav, header, footer, aside, .sidebar, script, style, .menu, .navigation, form, .related, .related-products, .upsells, section.products").Remove()
 
-	// Collect substantial paragraphs from the page
+	// ページから実質的な段落を収集
 	var paragraphs []string
 	doc.Find("p").Each(func(_ int, p *goquery.Selection) {
 		text := strings.TrimSpace(p.Text())
 
-		// Skip short paragraphs
+		// 短い段落をスキップ
 		if len(text) < 50 {
 			return
 		}
 
-		// Skip paragraphs with noise patterns
+		// ノイズパターンを含む段落をスキップ
 		if strings.Count(text, "\t") > 2 || strings.Count(text, "\n") > 3 {
 			return
 		}
 
-		// Skip truncated previews from related articles (end with […] or ...)
+		// 関連記事の切り詰めプレビューをスキップ（[…]や...で終わるもの）
 		if strings.HasSuffix(text, "[…]") || strings.HasSuffix(text, "…]") {
 			return
 		}
 
-		// Skip navigation/boilerplate text
+		// ナビゲーション/定型テキストをスキップ
 		lowerText := strings.ToLower(text)
 		if strings.Contains(lowerText, "cookie") ||
 			strings.Contains(lowerText, "privacy policy") ||
@@ -451,11 +450,11 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 		paragraphs = append(paragraphs, text)
 	})
 
-	// Use paragraphs if found, otherwise fall back to meta description
+	// 段落が見つかればそれを使用、なければmeta descriptionにフォールバック
 	if len(paragraphs) > 0 {
 		excerpt = strings.Join(paragraphs, "\n\n")
 	} else {
-		// Fallback to meta description
+		// meta descriptionにフォールバック
 		if metaDesc, exists := doc.Find("meta[name='description']").Attr("content"); exists && metaDesc != "" {
 			excerpt = strings.TrimSpace(metaDesc)
 		}
@@ -466,18 +465,18 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 		}
 	}
 
-	// Clean up truncation markers
+	// 切り詰めマーカーを除去
 	excerpt = strings.TrimSuffix(excerpt, "[…]")
 	excerpt = strings.TrimSuffix(excerpt, "…")
 	excerpt = strings.TrimSuffix(excerpt, " [")
 	excerpt = strings.TrimSpace(excerpt)
 
-	// Truncate very long excerpts (2000 chars max)
+	// 非常に長いExcerptを切り詰め（最大2000文字）
 	if len(excerpt) > 2000 {
 		excerpt = excerpt[:1997] + "..."
 	}
 
-	// Try to get date from JSON-LD
+	// JSON-LDから日付の取得を試みる
 	doc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 		text := script.Text()
 		if dateMatch := reDatePublishedJSON.FindStringSubmatch(text); len(dateMatch) > 1 {
@@ -492,7 +491,7 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 	return excerpt, date
 }
 
-// fetchOIESProgrammePage extracts publications from a single OIES programme page
+// fetchOIESProgrammePage は単一のOIESプログラムページから出版物を抽出する
 func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string) ([]Headline, error) {
 	req, err := http.NewRequest("GET", programmeURL, nil)
 	if err != nil {
@@ -517,15 +516,15 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 
 	var headlines []Headline
 
-	// OIES programme pages list publications as links with dates
-	// Look for links to /publications/ and /research/ URLs
+	// OIESプログラムページは出版物をリンクと日付のリストで表示
+	// /publications/ と /research/ URLへのリンクを探す
 	doc.Find("a[href*='/publications/'], a[href*='/research/']").Each(func(_ int, link *goquery.Selection) {
 		href, exists := link.Attr("href")
 		if !exists || href == "" {
 			return
 		}
 
-		// Skip navigation and category links
+		// ナビゲーションおよびカテゴリリンクをスキップ
 		if strings.Contains(href, "/publication-topic/") ||
 			strings.Contains(href, "/publication-category/") ||
 			strings.HasSuffix(href, "/publications/") ||
@@ -538,22 +537,22 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 			return
 		}
 
-		// Get title from link text
+		// リンクテキストからタイトルを取得
 		title := strings.TrimSpace(link.Text())
 		if title == "" || len(title) < 10 {
 			return
 		}
 
-		// Skip PDF download links (we want the article page)
+		// PDFダウンロードリンクをスキップ（記事ページが必要）
 		if strings.HasSuffix(strings.ToLower(href), ".pdf") {
 			return
 		}
 
-		// Look for date near the link
-		// OIES uses format like "22.01.26" (DD.MM.YY)
+		// リンク近辺の日付を探す
+		// OIESは "22.01.26" (DD.MM.YY) 形式を使用
 		dateStr := ""
 
-		// Check parent elements for date
+		// 親要素から日付を探す
 		parent := link.Parent()
 		for i := 0; i < 3 && parent.Length() > 0; i++ {
 			parentText := parent.Text()
@@ -564,7 +563,7 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 			parent = parent.Parent()
 		}
 
-		// Filter out entries older than 2 years (only if date was found)
+		// 2年以上前のエントリを除外（日付が見つかった場合のみ）
 		if dateStr != "" {
 			if t, err := time.Parse(time.RFC3339, dateStr); err == nil {
 				if time.Since(t) > 2*365*24*time.Hour {
@@ -578,17 +577,17 @@ func fetchOIESProgrammePage(client *http.Client, programmeURL, userAgent string)
 			Title:       title,
 			URL:         articleURL,
 			PublishedAt: dateStr,
-			IsHeadline:  true,
+
 		})
 	})
 
 	return headlines, nil
 }
 
-// parseOIESDate extracts date from text containing OIES date format (DD.MM.YY)
+// parseOIESDate はOIES日付形式 (DD.MM.YY) を含むテキストから日付を抽出する
 func parseOIESDate(text string) string {
-	// OIES uses format like "22.01.26" for 22 January 2026
-	// Look for pattern DD.MM.YY
+	// OIESは "22.01.26" のような形式を使用（2026年1月22日）
+	// DD.MM.YY パターンを探す
 	for i := 0; i < len(text)-7; i++ {
 		if text[i] >= '0' && text[i] <= '9' &&
 			text[i+1] >= '0' && text[i+1] <= '9' &&
@@ -600,7 +599,7 @@ func parseOIESDate(text string) string {
 			text[i+7] >= '0' && text[i+7] <= '9' {
 
 			dateCandidate := text[i : i+8]
-			// Parse as DD.MM.YY
+			// DD.MM.YY としてパース
 			t, err := time.Parse("02.01.06", dateCandidate)
 			if err == nil {
 				return t.Format(time.RFC3339)
@@ -614,9 +613,8 @@ func parseOIESDate(text string) string {
 // 学術ジャーナル共通キーワードリスト
 // =============================================================================
 
-// carbonKeywordsAcademic contains keywords for filtering academic journal articles
-// to ensure relevance to carbon/climate topics. Shared by IOP Science (ERL),
-// Nature Ecology & Evolution, and ScienceDirect sources.
+// carbonKeywordsAcademic は学術ジャーナル記事のカーボン/気候関連フィルタリング用キーワードリスト。
+// IOP Science (ERL)、Nature Ecology & Evolution、ScienceDirectソースで共有。
 var carbonKeywordsAcademic = []string{
 	"carbon", "emission", "greenhouse", "climate change", "net zero",
 	"decarbonization", "decarbonisation", "carbon dioxide", "CO2",
@@ -628,16 +626,16 @@ var carbonKeywordsAcademic = []string{
 }
 
 // =============================================================================
-// IOP Science (Environmental Research Letters) Source
+// IOP Science (Environmental Research Letters) ソース
 // =============================================================================
 
-// collectHeadlinesIOPScience fetches articles from IOP Science Environmental Research Letters RSS
+// collectHeadlinesIOPScience はIOP Science Environmental Research Letters RSSから記事を取得する
 //
-// Environmental Research Letters (ERL) is an open-access journal covering
-// environmental science. We use the journal's RSS feed with keyword filtering
-// to extract carbon/climate-related articles.
+// Environmental Research Letters (ERL) は環境科学をカバーするオープンアクセスジャーナル。
+// ジャーナルのRSSフィードとキーワードフィルタリングを使用して
+// カーボン/気候関連記事を抽出する。
 //
-// Feed format: RDF/RSS 1.0 (gofeed handles automatically)
+// フィード形式: RDF/RSS 1.0（gofeedが自動処理）
 // URL: https://iopscience.iop.org/journal/rss/1748-9326
 func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://iopscience.iop.org/journal/rss/1748-9326"
@@ -659,17 +657,17 @@ func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline
 			continue
 		}
 
-		// Get content for keyword filtering
+		// キーワードフィルタリング用のコンテンツを取得
 		excerpt := extractRSSExcerpt(item)
 
-		// Keyword filter - ERL covers broad environmental science
+		// キーワードフィルタ - ERLは幅広い環境科学をカバー
 		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付をパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -683,7 +681,7 @@ func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -695,23 +693,23 @@ func collectHeadlinesIOPScience(limit int, cfg headlineSourceConfig) ([]Headline
 }
 
 // =============================================================================
-// Nature Ecology & Evolution Source
+// Nature Ecology & Evolution ソース
 // =============================================================================
 
-// collectHeadlinesNatureEcoEvo fetches articles from Nature Ecology & Evolution RSS
+// collectHeadlinesNatureEcoEvo はNature Ecology & Evolution RSSから記事を取得する
 //
-// Nature Ecology & Evolution covers ecology and evolutionary biology.
-// We use keyword filtering to extract carbon/climate-related articles.
+// Nature Ecology & Evolutionは生態学と進化生物学をカバーする。
+// キーワードフィルタリングでカーボン/気候関連記事を抽出する。
 //
-// NOTE: Nature.com has bot protection that may block RSS requests (see Nature Comms).
-// If blocked, this will return an empty slice gracefully.
+// 注意: Nature.comにはRSSリクエストをブロックするbot保護がある（Nature Comms参照）。
+// ブロックされた場合は空スライスを正常に返す。
 //
 // URL: https://www.nature.com/natecolevol.rss
 func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://www.nature.com/natecolevol.rss"
 
-	// Nature.com uses a cookie-based auth redirect (303 → idp.nature.com → back).
-	// We need a client with a cookie jar to persist cookies across redirects.
+	// Nature.comはcookieベースの認証リダイレクトを使用（303 → idp.nature.com → 戻り）。
+	// リダイレクト間でcookieを保持するためcookie jar付きクライアントが必要。
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Timeout: cfg.Client.Timeout,
@@ -726,7 +724,7 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 
 	resp, err := client.Do(req)
 	if err != nil {
-		// Nature.com may block with bot protection - return empty gracefully
+		// Nature.comのbot保護でブロックされる可能性あり - 空を正常に返す
 		if os.Getenv("DEBUG_SCRAPING") != "" {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Nature Eco&Evo: request failed (possible bot protection): %v\n", err)
 		}
@@ -762,17 +760,17 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 			continue
 		}
 
-		// Get content for keyword filtering
+		// キーワードフィルタリング用のコンテンツを取得
 		excerpt := extractRSSExcerpt(item)
 
-		// Keyword filter
+		// キーワードフィルタ
 		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付をパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -786,7 +784,7 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -798,14 +796,14 @@ func collectHeadlinesNatureEcoEvo(limit int, cfg headlineSourceConfig) ([]Headli
 }
 
 // =============================================================================
-// ScienceDirect Source
+// ScienceDirect ソース
 // =============================================================================
 
-// collectHeadlinesScienceDirect fetches articles from ScienceDirect RSS feed
+// collectHeadlinesScienceDirect はScienceDirect RSSフィードから記事を取得する
 //
-// ScienceDirect (Elsevier) hosts academic journals. We target the journal
-// "Resources, Conservation & Recycling Advances" (ISSN 2950-631X) which covers
-// sustainability and resource management topics.
+// ScienceDirect（Elsevier）は学術ジャーナルをホストする。対象ジャーナルは
+// "Resources, Conservation & Recycling Advances"（ISSN 2950-631X）で、
+// サステナビリティと資源管理トピックをカバーする。
 //
 // URL: https://rss.sciencedirect.com/publication/science/2950631X
 func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headline, error) {
@@ -829,18 +827,18 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 			continue
 		}
 
-		// Get content for keyword filtering
+		// キーワードフィルタリング用のコンテンツを取得
 		excerpt := extractRSSExcerpt(item)
 
-		// Keyword filter
+		// キーワードフィルタ
 		if !matchesKeywords(title, excerpt, carbonKeywordsAcademic) {
 			continue
 		}
 
 		articleURL := item.Link
 
-		// Parse date - ScienceDirect RSS has no standard date fields,
-		// but description contains "Publication date: Month Year"
+		// 日付をパース - ScienceDirect RSSには標準の日付フィールドがないが、
+		// descriptionに "Publication date: Month Year" が含まれる
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -850,7 +848,7 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 			dateStr = parseScienceDirectDate(item.Description)
 		}
 
-		// Fetch abstract from article page (RSS only has metadata)
+		// 記事ページからアブストラクトを取得（RSSにはメタデータのみ）
 		if articleURL != "" {
 			if abs := fetchScienceDirectAbstract(articleURL, client, cfg.UserAgent); abs != "" {
 				excerpt = abs
@@ -863,7 +861,7 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -874,7 +872,7 @@ func collectHeadlinesScienceDirect(limit int, cfg headlineSourceConfig) ([]Headl
 	return out, nil
 }
 
-// fetchScienceDirectAbstract fetches the article page and extracts the abstract text.
+// fetchScienceDirectAbstract は記事ページを取得しアブストラクトテキストを抽出する。
 func fetchScienceDirectAbstract(articleURL string, client *http.Client, userAgent string) string {
 	req, err := http.NewRequest("GET", articleURL, nil)
 	if err != nil {
@@ -897,19 +895,19 @@ func fetchScienceDirectAbstract(articleURL string, client *http.Client, userAgen
 		return ""
 	}
 
-	// Abstract is inside <div class="abstract author">
-	// (not "abstract author-highlights" or "abstract graphical")
+	// アブストラクトは <div class="abstract author"> 内にある
+	// （"abstract author-highlights" や "abstract graphical" ではない）
 	abs := doc.Find("div.abstract.author").Not(".author-highlights").First().Text()
 	abs = strings.TrimSpace(abs)
-	// Remove leading "Abstract" label
+	// 先頭の "Abstract" ラベルを除去
 	abs = strings.TrimPrefix(abs, "Abstract")
 	abs = strings.TrimSpace(abs)
 
 	return abs
 }
 
-// parseScienceDirectDate extracts date from ScienceDirect description HTML.
-// Input like: "<p>Publication date: March 2026</p>..." → "2026-03-01T00:00:00Z"
+// parseScienceDirectDate はScienceDirectのdescription HTMLから日付を抽出する。
+// 入力例: "<p>Publication date: March 2026</p>..." → "2026-03-01T00:00:00Z"
 func parseScienceDirectDate(desc string) string {
 	m := reScienceDirectDate.FindStringSubmatch(desc)
 	if m == nil {

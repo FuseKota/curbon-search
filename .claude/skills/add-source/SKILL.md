@@ -70,7 +70,7 @@ func collectHeadlinesSourceName(maxArticles int) ([]Article, error) {
 ## Step 4: Test
 
 ```bash
-./pipeline -sources=sourcename -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_new.json
+./pipeline -sources=sourcename -perSource=5 -out=/tmp/test_new.json
 cat /tmp/test_new.json | jq '.'
 ```
 

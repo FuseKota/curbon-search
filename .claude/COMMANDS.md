@@ -13,7 +13,7 @@ go build -o pipeline ./cmd/pipeline
 
 ### 基本的な収集
 ```bash
-# 全無料ソースから10記事ずつ収集（36ソース）
+# 全ソースから10記事ずつ収集（39ソース）
 ./pipeline -sources=all-free -perSource=10 -out=free_articles.json
 
 # デフォルト（-sourcesを省略すると全ソース）
@@ -22,8 +22,8 @@ go build -o pipeline ./cmd/pipeline
 
 ### メール配信
 ```bash
-# 無料記事を収集してメール送信
-./pipeline -sources=all-free -perSource=15 -sendEmail
+# 無料記事のダイジェストメール送信
+./pipeline -sendShortEmail
 ```
 
 ### Notion挿入
@@ -37,7 +37,7 @@ go build -o pipeline ./cmd/pipeline
 
 ### 日本市場のみ
 ```bash
-./pipeline -sources=carboncredits.jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan -perSource=10
+./pipeline -sources=carboncredits.jp,jri,jpx,mizuho-rt,pwc-japan -perSource=10
 ```
 
 ### 時間フィルタ
@@ -64,7 +64,7 @@ go build -o pipeline ./cmd/pipeline
 
 ### 全ソーステスト
 ```bash
-# 全36ソースを一度にテスト
+# 全39ソースを一度にテスト
 ./pipeline -sources=all-free -perSource=2 -out=/tmp/all_sources_test.json
 
 # ソース別件数を確認
@@ -198,10 +198,7 @@ time ./pipeline -sources=all-free -perSource=10 -out=/tmp/timing_test.json
 ```bash
 #!/bin/bash
 # daily_free_review.sh
-./pipeline \
-  -sources=all-free \
-  -perSource=15 \
-  -sendEmail
+./pipeline -sendShortEmail
 ```
 
 ### 毎日のNotion保存
@@ -219,7 +216,7 @@ time ./pipeline -sources=all-free -perSource=10 -out=/tmp/timing_test.json
 #!/bin/bash
 # japan_deep_dive.sh
 ./pipeline \
-  -sources=carboncredits.jp,jri,env-ministry,jpx,meti,mizuho-rt,pwc-japan \
+  -sources=carboncredits.jp,jri,jpx,mizuho-rt,pwc-japan \
   -perSource=20 \
   -out=japan_articles_$(date +%Y%m%d).json
 ```
@@ -254,13 +251,13 @@ time ./pipeline -sources=climatehomenews -perSource=1
 
 ---
 
-## 📋 利用可能なソース一覧（36ソース）
+## 📋 利用可能なソース一覧（39アクティブソース）
 
-### 日本市場（7）
-`carboncredits.jp`, `jri`, `env-ministry`, `meti`, `pwc-japan`, `mizuho-rt`, `jpx`
+### 日本市場（5）
+`carboncredits.jp`, `jri`, `pwc-japan`, `mizuho-rt`, `jpx`
 
-### WordPress API（6）
-`carbonherald`, `climatehomenews`, `carboncredits.com`, `sandbag`, `ecosystem-marketplace`, `carbon-brief`
+### WordPress REST API（8）
+`carboncredits.jp`, `carbonherald`, `climatehomenews`, `carboncredits.com`, `sandbag`, `ecosystem-marketplace`, `carbon-brief`, `rmi`
 
 ### HTMLスクレイピング（6）
 `icap`, `ieta`, `energy-monitor`, `world-bank`, `newclimate`, `carbon-knowledge-hub`
@@ -274,11 +271,11 @@ time ./pipeline -sources=climatehomenews -perSource=1
 ### 地域ETS（5）
 `eu-ets`, `uk-ets`, `carb`, `rggi`, `australia-cer`
 
-### RSSフィード（2）
-`politico-eu`, `euractiv`
+### RSSフィード（3）
+`politico-eu`, `euractiv`, `carbon-market-watch`
 
-### 学術・研究（2）
-`arxiv`, `oies`
+### 学術・研究（6）
+`arxiv`, `nature-comms`, `oies`, `iopscience`, `sciencedirect`
 
 ### CDR関連（2）
 `puro-earth`, `isometric`

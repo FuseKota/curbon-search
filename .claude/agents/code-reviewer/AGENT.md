@@ -29,8 +29,6 @@ I am a specialized agent for reviewing code changes in the Carbon Relay project.
    - Ensure safe web scraping practices
 
 3. **Architecture Compliance**
-   - Verify 2-mode architecture understanding
-   - Check proper use of Mode 1 vs Mode 2
    - Ensure consistent patterns with existing sources
 
 4. **Performance Review**
@@ -97,10 +95,6 @@ I am a specialized agent for reviewing code changes in the Carbon Relay project.
    - No timeout settings
 
 ## Carbon Relay Specific Best Practices
-
-### Mode Awareness
-- Mode 1 (Free Collection): No OpenAI API, direct scraping
-- Mode 2 (Paid Matching): OpenAI search + IDF matching
 
 ### Source Implementation Patterns
 

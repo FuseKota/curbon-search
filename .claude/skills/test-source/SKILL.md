@@ -17,7 +17,7 @@ Test the carbon news source: **{{ARGUMENTS}}**
 
 1. **Run basic test** (3 articles, no search):
    ```bash
-   ./pipeline -sources={{ARGUMENTS}} -perSource=3 -queriesPerHeadline=0 -out=/tmp/test_{{ARGUMENTS}}.json
+   ./pipeline -sources={{ARGUMENTS}} -perSource=3 -out=/tmp/test_{{ARGUMENTS}}.json
    ```
 
 2. **Check for errors**:
@@ -25,7 +25,7 @@ Test the carbon news source: **{{ARGUMENTS}}**
 
 3. **Debug mode** (if needed):
    ```bash
-   DEBUG_SCRAPING=1 ./pipeline -sources={{ARGUMENTS}} -perSource=1 -queriesPerHeadline=0
+   DEBUG_SCRAPING=1 ./pipeline -sources={{ARGUMENTS}} -perSource=1
    ```
 
 4. **Verify output**:

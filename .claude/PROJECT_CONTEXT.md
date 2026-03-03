@@ -10,9 +10,9 @@
 
 ## 🔑 運用モード
 
-### 🟢 無料記事収集モード
+### 無料記事収集モード
 - **目的**: Carbon関連の無料記事を幅広く収集してメール配信/Notion統合
-- **コマンド**: `./pipeline -sources=all-free -perSource=10 -sendEmail`
+- **コマンド**: `./pipeline -sources=all-free -perSource=10`
 - **特徴**: 高速実行（5-15秒）、コスト効率が高い
 - **用途**: 日次のカーボンニュースレビュー
 
@@ -33,68 +33,39 @@ internal/pipeline/
 └── utils.go             - ユーティリティ
 ```
 
-## 🗂️ データソース（36ソース）
+## 🗂️ データソース（39アクティブソース）
 
-### 無料ソース
+### アクティブソース
 
-**日本市場（7ソース）**:
-1. CarbonCredits.jp
-2. JRI (日本総研)
-3. Environment Ministry (環境省)
-4. JPX (日本取引所グループ)
-5. METI (経済産業省)
-6. Mizuho R&T (みずほリサーチ＆テクノロジーズ)
-7. PwC Japan
+**WordPress REST API（8ソース）**:
+CarbonCredits.jp, Carbon Herald, Climate Home News, CarbonCredits.com, Sandbag, Ecosystem Marketplace, Carbon Brief, RMI
 
-**WordPress API（6ソース）**:
-8. Carbon Herald
-9. Climate Home News
-10. CarbonCredits.com
-11. Sandbag
-12. Ecosystem Marketplace
-13. Carbon Brief
+**日本市場（5ソース）**:
+JRI, PwC Japan, Mizuho R&T, JPX, CarbonCredits.jp（WP API兼用）
 
 **HTMLスクレイピング（6ソース）**:
-14. ICAP
-15. IETA
-16. Energy Monitor
-17. World Bank
-18. NewClimate Institute
-19. Carbon Knowledge Hub
+ICAP, IETA, Energy Monitor, World Bank, NewClimate, Carbon Knowledge Hub
 
 **VCM認証団体（4ソース）**:
-20. Verra
-21. Gold Standard
-22. ACR
-23. CAR
+Verra, Gold Standard, ACR, CAR
 
 **国際機関（2ソース）**:
-24. IISD ENB
-25. Climate Focus
+IISD ENB, Climate Focus
 
 **地域ETS（5ソース）**:
-26. EU ETS
-27. UK ETS
-28. CARB
-29. RGGI
-30. Australia CER
+EU ETS, UK ETS, CARB, RGGI, Australia CER
 
 **RSSフィード（3ソース）**:
-31. Politico EU
-32. Euractiv（RSS + 記事ページスクレイピングで全文取得）
-33. Carbon Market Watch
+Politico EU, Euractiv, Carbon Market Watch
 
 **学術・研究（6ソース）**:
-34. arXiv
-35. Nature Communications（curl方式でTLSフィンガープリント回避）
-36. OIES
-37. IOP Science (ERL)
-38. Nature Eco&Evo
-39. ScienceDirect
+arXiv, Nature Communications, OIES, IOP Science (ERL), ScienceDirect
 
 **CDR関連（2ソース）**:
-40. Puro.earth
-41. Isometric
+Puro.earth, Isometric
+
+### 停止中ソース（5）
+env-ministry, meti, nature-ecoevo, unfccc, un-news
 
 ## 🛠️ よく使うコマンド
 
@@ -106,11 +77,11 @@ go build -o pipeline ./cmd/pipeline
 
 ### 無料記事収集
 ```bash
-# 全無料ソースから収集（all-freeで36ソース全て指定）
+# 全ソースから収集（all-freeで全39ソース指定）
 ./pipeline -sources=all-free -perSource=10 -out=free_articles.json
 
-# メール送信付き
-./pipeline -sources=all-free -perSource=10 -sendEmail
+# ダイジェストメール送信
+./pipeline -sendShortEmail
 
 # Notion挿入付き
 ./pipeline -sources=all-free -perSource=10 -notionClip
@@ -119,7 +90,7 @@ go build -o pipeline ./cmd/pipeline
 ### 特定ソースのテスト
 ```bash
 # 日本市場のみ
-./pipeline -sources=jri,env-ministry,jpx,pwc-japan -perSource=5
+./pipeline -sources=jri,jpx,pwc-japan,mizuho-rt -perSource=5
 
 # PwC Japanのテスト（複雑なJSON解析）
 ./pipeline -sources=pwc-japan -perSource=5 -out=/tmp/pwc_test.json
@@ -152,13 +123,13 @@ EMAIL_TO=recipient@example.com
 ## 📊 主要なフラグ
 
 ```bash
--sources              # ソース指定（CSV形式、"all-free"で全36ソース）
+-sources              # ソース指定（CSV形式、"all-free"で全39ソース）
 -perSource            # ソースあたりの記事数（デフォルト: 30）
 -hoursBack            # 指定時間以内の記事のみ（デフォルト: 0、日付なし記事は保持）
 -out                  # 出力ファイル（省略時はstdout）
 -notionClip           # Notionにクリップ
 -notionPageID         # Notion親ページID（初回のみ）
--sendEmail            # メール送信
+-sendShortEmail       # 50文字ダイジェストメール送信
 ```
 
 ## 🐛 トラブルシューティング
@@ -212,7 +183,7 @@ EMAIL_TO=recipient@example.com
 6. **正規表現最適化**: パッケージレベルで事前コンパイル
 
 ### CLI改善
-7. **`all-free`サポート**: `-sources=all-free`で全36ソース指定可能
+7. **`all-free`サポート**: `-sources=all-free`で全39ソース指定可能
 
 ## 💡 開発のヒント
 

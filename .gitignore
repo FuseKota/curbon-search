@@ -56,3 +56,7 @@ vendor/
 .env
 .env.local
 test-notion.sh
+
+# Sensitive docs
+docs/引き継ぎ依頼.md
+docs/引き継ぎ書.md

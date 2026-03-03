@@ -60,8 +60,8 @@
    - 変更時は必ず動作確認
 
 4. **日本語ソースのキーワードフィルタリング**
-   - JRI、環境省、METI、Mizuho R&Tはキーワードフィルタあり
-   - `carbonKeywords`配列を参照
+   - JRI、Mizuho R&Tはキーワードフィルタあり
+   - 各ソース関数内のキーワード配列を参照
 
 ### Notion統合（notion.go）を変更する場合
 
@@ -219,7 +219,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 📊 プロジェクト統計
 
-- **実装ソース数**: 40（無料ソースのみ）
+- **実装ソース数**: 39（アクティブ）、5停止中
 - **HTTPタイムアウト**: 30秒（共有クライアント）
 - **ステータス**: 本番環境対応済み ✅
 
@@ -238,7 +238,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **FilterHeadlinesByHours**: 日付なし記事を保持（time.Now()フォールバック廃止）
 
 ### CLI
-- **all-free**: `-sources=all-free`で全40ソース指定可能
+- **all-free**: `-sources=all-free`で全39アクティブソース指定可能
 
 ### 新規ソース追加（2026年2月6日）
 - **RMI**: WordPress REST API（エネルギー転換シンクタンク）
@@ -291,9 +291,13 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 #### コンテンツ抽出改善
 - **Carbon Brief**: Excerpt切り詰めを1,000文字→3,000文字に拡大
 
+### ソース復旧（2026年3月1日）
+
+- **Nature Communications**: `nature-comms`としてアクティブソースに復帰（curl + 主題別RSSフィード）
+
 ---
 
-**最終更新**: 2026年2月28日
+**最終更新**: 2026年3月3日
 **プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

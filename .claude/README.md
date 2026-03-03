@@ -114,7 +114,7 @@
 ```bash
 # 1. COMMANDS.mdの「デバッグコマンド」セクションを参照
 # 2. 該当ソースを単独でテスト
-DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 
 # 3. PROJECT_CONTEXT.mdの「トラブルシューティング」を確認
 ```

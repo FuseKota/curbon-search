@@ -15,30 +15,30 @@
 
 **使用例**:
 ```bash
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail
+./pipeline -sources=all-free -perSource=10 -sendShortEmail
 ```
 
 **特徴**:
-- 40の無料ソースから直接記事を収集
+- 39のアクティブソースから直接記事を収集
 - 高速実行（5-15秒程度）
 - 日次レビューに最適
 - Notion統合・メール配信に対応
 
 ---
 
-## 現在の実装状態（2026-02-04）
+## 現在の実装状態（2026-03-03）
 
 ### ✅ 実装済み機能
 
 #### 1. ヘッドライン収集 (`cmd/pipeline/headlines.go`)
 
-**無料ソース（全文取得）：** **40サイト実装完了**
+**無料ソース（全文取得）：** **39アクティブソース**
 
-**日本市場（7ソース）：**
-- CarbonCredits.jp、JRI、環境省、METI、PwC Japan、Mizuho R&T、JPX
+**日本市場（5ソース）：**
+- CarbonCredits.jp、JRI、PwC Japan、Mizuho R&T、JPX
 
-**WordPress REST API（7ソース）：**
-- Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
+**WordPress REST API（8ソース）：**
+- CarbonCredits.jp、Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
 
 **HTMLスクレイピング（6ソース）：**
 - ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
@@ -52,11 +52,11 @@
 **地域ETS（5ソース）：**
 - EU ETS、UK ETS、CARB、RGGI、Australia CER
 
-**RSSフィード（2ソース）：**
-- Politico EU、Euractiv
+**RSSフィード（3ソース）：**
+- Politico EU、Euractiv、Carbon Market Watch
 
-**学術・研究（5ソース）：**
-- arXiv、OIES、IOP Science (ERL)、Nature Eco&Evo、ScienceDirect
+**学術・研究（6ソース）：**
+- arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
 
 **CDR関連（2ソース）：**
 - Puro.earth、Isometric
@@ -86,21 +86,17 @@ go build -o pipeline ./cmd/pipeline
 
 ### ヘッドライン＋記事要約の収集
 ```bash
-# 全無料ソースからヘッドラインと記事を収集
+# 全ソースからヘッドラインと記事を収集
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=headlines.json
-
-# または専用スクリプトを使用
-./scripts/collect_headlines_only.sh
 ```
 
 ### デバッグモード
 ```bash
 # スクレイピングのデバッグ
-DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2
 ```
 
 ---
@@ -110,13 +106,12 @@ DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2 -queriesPerHeadli
 | オプション | デフォルト | 説明 |
 |----------|----------|------|
 | `-headlines` | - | 既存のheadlines.jsonを読み込む（指定しない場合はスクレイピング） |
-| `-sources` | `all-free` | スクレイピング対象（カンマ区切り）<br>carboncredits.jp, carbonherald, climatehomenews, carboncredits.com, sandbag, ecosystem-marketplace, carbon-brief, icap, ieta, energy-monitor, world-bank, newclimate, carbon-knowledge-hub, jri, env-ministry, meti, pwc-japan, mizuho-rt, jpx, politico-eu |
+| `-sources` | `all-free` | スクレイピング対象（カンマ区切り、39アクティブソース） |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
-| `-queriesPerHeadline` | `0` | 検索クエリ数（現在は0のみ使用） |
 | `-hoursBack` | `0` | 指定時間以内に公開された記事のみ収集（0で無効） |
 | `-out` | - | 出力先（指定しない場合はstdout） |
 | `-notionClip` | `false` | Notionにクリップ |
-| `-sendEmail` | `false` | メール送信 |
+| `-sendShortEmail` | `false` | 50文字ヘッドラインダイジェスト送信 |
 
 ---
 
@@ -153,7 +148,6 @@ DEBUG_SCRAPING=1                  # スクレイピング詳細表示
     "url": "https://carbonherald.com/new-carbon-capture-project/",
     "excerpt": "A new carbon capture and storage project has been announced...",
     "publishedAt": "2026-02-04T10:00:00Z",
-    "isHeadline": true
   }
 ]
 ```
@@ -176,17 +170,11 @@ DEBUG_SCRAPING=1                  # スクレイピング詳細表示
 便利なスクリプトは [scripts/](./scripts/) ディレクトリにあります：
 
 ```bash
-# ヘッドライン収集
-./scripts/collect_headlines_only.sh
-
-# Notionクリッピング
-./scripts/clip_to_notion.sh
-
 # Lambda用ビルド
 ./scripts/build_lambda.sh
 
-# フルパイプライン実行
-./scripts/full_pipeline.sh
+# ヘッドライン表示
+./scripts/view_headlines.sh
 ```
 
 詳細は [scripts/README.md](./scripts/README.md) を参照してください。
@@ -212,9 +200,8 @@ carbon-relay/
 │   ├── reports/             # テストレポート・ステータス
 │   └── architecture/        # アーキテクチャドキュメント
 ├── scripts/                 # スクリプト
-│   ├── collect_headlines_only.sh
-│   ├── clip_to_notion.sh
-│   └── build_lambda.sh
+│   ├── build_lambda.sh
+│   └── view_headlines.sh
 ├── .env                     # 環境変数
 ├── go.mod
 ├── go.sum
@@ -240,7 +227,7 @@ NOTION_PAGE_ID=xxx...
 EOF
 
 # 無料ソースから記事を収集してNotionにクリッピング
-./pipeline -sources=all-free -perSource=5 -queriesPerHeadline=0 -notionClip
+./pipeline -sources=all-free -perSource=5 -notionClip
 ```
 
 #### 2回目以降（既存データベースに追加）
@@ -249,7 +236,7 @@ EOF
 
 ```bash
 # 同じコマンドを実行するだけ
-./scripts/clip_all_sources.sh
+./pipeline -sources=all-free -perSource=10 -notionClip
 # → 既存データベースに自動追加
 ```
 
@@ -263,18 +250,17 @@ EOF
 **記事クリッピング：**
 - ✅ **全文保存** - Notionページ本文に段落ブロックとして保存
 - ✅ **Excerptフィールド** - 全文の最初2000文字（プロパティ制限）
-- ✅ **AI Summaryフィールド** - 全文の最初2000文字（後から手動要約可能）
-- ✅ **メタデータ** - Title, URL, Source, Type, Score
+- ✅ **メタデータ** - Title, URL, Source, Type, Published Date
 
-**対応ソース（40ソース）：**
-- **日本（7）**: CarbonCredits.jp、JRI、環境省、METI、PwC Japan、Mizuho R&T、JPX
-- **WordPress API（7）**: Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
+**対応ソース（39アクティブソース）：**
+- **日本（5）**: CarbonCredits.jp、JRI、PwC Japan、Mizuho R&T、JPX
+- **WordPress API（8）**: CarbonCredits.jp、Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
 - **HTML（6）**: ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
 - **VCM認証（4）**: Verra、Gold Standard、ACR、CAR
 - **国際機関（2）**: IISD ENB、Climate Focus
 - **地域ETS（5）**: EU ETS、UK ETS、CARB、RGGI、Australia CER
-- **RSS（2）**: Politico EU、Euractiv
-- **学術（5）**: arXiv、OIES、IOP Science (ERL)、Nature Eco&Evo、ScienceDirect
+- **RSS（3）**: Politico EU、Euractiv、Carbon Market Watch
+- **学術（6）**: arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
 - **CDR（2）**: Puro.earth、Isometric
 
 ### 🗂️ Notionデータベーススキーマ
@@ -284,8 +270,9 @@ EOF
 | Title | Title | 記事タイトル |
 | URL | URL | 記事URL |
 | Source | Select | ソース名（カラー分け） |
-| Excerpt | Rich Text | 全文の最初2000文字 |
-| AI Summary | Rich Text | 要約用フィールド（初期値はExcerptと同じ） |
+| Type | Select | News / Academic |
+| Article Summary 300 | Rich Text | 記事要約（Notion AI生成） |
+| Published Date | Date | 公開日 |
 | ページ本文 | Blocks | 記事全文（段落ブロック） |
 
 ### 📚 詳細ドキュメント
@@ -315,7 +302,7 @@ Notion統合の詳しい使い方は **[docs/guides/NOTION_INTEGRATION.md](docs/
 サイトのレイアウト変更が原因の可能性があります。
 ```bash
 # デバッグモードで詳細を確認
-DEBUG_SCRAPING=1 ./pipeline -sources=問題のソース -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=問題のソース -perSource=1
 ```
 
 ### Notionクリップでエラー

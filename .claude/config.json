@@ -19,11 +19,6 @@
   },
   "environment": {
     "required": {
-      "OPENAI_API_KEY": {
-        "description": "OpenAI API key for Mode 2 (paid article matching)",
-        "required_for": "Mode 2 operations with -queriesPerHeadline > 0",
-        "setup_guide": "https://platform.openai.com/api-keys"
-      },
       "NOTION_API_KEY": {
         "description": "Notion integration API key",
         "required_for": "Notion clipping feature",
@@ -59,51 +54,64 @@
   "operationalModes": {
     "mode1": {
       "name": "Free Article Collection",
-      "description": "Collect articles from 16 free sources directly",
-      "command_pattern": "./pipeline -sources=all-free -perSource=5 -queriesPerHeadline=0",
+      "description": "Collect articles from 39 free sources directly",
+      "command_pattern": "./pipeline -sources=all-free -perSource=5",
       "requires": [],
       "output": "Email distribution, JSON export",
       "cost": "Free (no API calls)",
       "use_case": "Daily free article review"
-    },
-    "mode2": {
-      "name": "Paid Article Matching",
-      "description": "Find free articles related to paid headlines",
-      "command_pattern": "./pipeline -sources=carbonpulse,qci -perSource=5 -queriesPerHeadline=3",
-      "requires": ["OPENAI_API_KEY"],
-      "output": "Notion integration, JSON export",
-      "cost": "OpenAI API usage (~$0.01-0.05 per run)",
-      "use_case": "Weekly paid article deep dive"
     }
   },
   "sources": {
-    "paid": ["carbonpulse", "qci"],
     "free": [
-      "climatepolicyinitiative",
-      "climatecouncil",
-      "cdp",
-      "wri",
-      "globalccsinstitute",
-      "worldbank",
-      "cleanenergyregulator",
+      "carboncredits.jp",
+      "carbonherald",
+      "climatehomenews",
+      "carboncredits.com",
+      "sandbag",
+      "ecosystem-marketplace",
+      "carbon-brief",
+      "rmi",
+      "icap",
+      "ieta",
+      "energy-monitor",
+      "world-bank",
+      "newclimate",
+      "carbon-knowledge-hub",
+      "carbon-market-watch",
       "jri",
-      "kankyosho",
-      "meti",
-      "pwcjapan",
-      "mizuhort",
-      "carboncredits",
-      "carboncreditscom",
-      "tnfd",
-      "iso"
+      "pwc-japan",
+      "mizuho-rt",
+      "jpx",
+      "politico-eu",
+      "euractiv",
+      "arxiv",
+      "nature-comms",
+      "oies",
+      "iopscience",
+      "sciencedirect",
+      "verra",
+      "gold-standard",
+      "acr",
+      "car",
+      "iisd",
+      "climate-focus",
+      "eu-ets",
+      "uk-ets",
+      "carb",
+      "rggi",
+      "australia-cer",
+      "puro-earth",
+      "isometric"
     ],
-    "total": 18,
-    "japanese": ["jri", "kankyosho", "meti", "pwcjapan", "mizuhort"]
+    "total": 39,
+    "japanese": ["carboncredits.jp", "jri", "pwc-japan", "mizuho-rt", "jpx"]
   },
   "testing": {
-    "quick_test": "./pipeline -sources={source} -perSource=1 -queriesPerHeadline=0",
-    "debug_test": "DEBUG_SCRAPING=1 ./pipeline -sources={source} -perSource=1 -queriesPerHeadline=0",
-    "full_test": "./pipeline -sources={source} -perSource=5 -queriesPerHeadline=0 -out=/tmp/test_{source}.json",
-    "all_sources": "./pipeline -sources=all -perSource=1 -queriesPerHeadline=0 -out=/tmp/test_all.json"
+    "quick_test": "./pipeline -sources={source} -perSource=1",
+    "debug_test": "DEBUG_SCRAPING=1 ./pipeline -sources={source} -perSource=1",
+    "full_test": "./pipeline -sources={source} -perSource=5 -out=/tmp/test_{source}.json",
+    "all_sources": "./pipeline -sources=all-free -perSource=1 -out=/tmp/test_all.json"
   },
   "codingStandards": {
     "language": "Go",
@@ -146,17 +154,15 @@
       "6. Commit with proper message"
     ],
     "adjustScoring": [
-      "1. Read current scoring logic in matcher.go",
-      "2. Run baseline test and record scores",
-      "3. Make adjustments",
-      "4. Compare before/after results",
-      "5. Document reasoning in commit message"
+      "1. Run baseline test and record results",
+      "2. Make adjustments",
+      "3. Compare before/after results",
+      "4. Document reasoning in commit message"
     ]
   },
   "bestPractices": {
     "beforeEditing": [
       "Always read files before editing",
-      "Understand the 2-mode architecture",
       "Check existing patterns for similar implementations"
     ],
     "testing": [
@@ -179,10 +185,8 @@
     ]
   },
   "prohibitedActions": [
-    "Never fetch full text from paid sources (headlines only)",
     "Never commit API keys or passwords",
     "Never skip testing before committing source changes",
-    "Never mix Mode 1 and Mode 2 concepts",
     "Never use git --force on main/master branch"
   ],
   "automation": {

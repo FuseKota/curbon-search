@@ -246,8 +246,6 @@ func httpGetWithConfig(url string, cfg HeadlineSourceConfig) (*http.Response, er
 // httpGetJSON はHTTP GETリクエストを実行し、JSONレスポンスをデコードする
 //
 // レスポンスボディを自動的にクローズし、指定した型にJSONをデコードする。
-// HeadlineSourceConfigにClientが設定されている場合はそれを使用し、
-// なければTimeoutから新しいクライアントを作成する。
 //
 // 引数:
 //
@@ -260,17 +258,7 @@ func httpGetWithConfig(url string, cfg HeadlineSourceConfig) (*http.Response, er
 //	var posts []WPPost
 //	err := httpGetJSON("https://example.com/wp-json/wp/v2/posts", cfg, &posts)
 func httpGetJSON(url string, cfg HeadlineSourceConfig, v interface{}) error {
-	client := cfg.Client
-	if client == nil {
-		client = &http.Client{Timeout: cfg.Timeout}
-	}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", cfg.UserAgent)
-
-	resp, err := client.Do(req)
+	resp, err := httpGetWithConfig(url, cfg)
 	if err != nil {
 		return err
 	}

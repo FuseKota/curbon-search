@@ -6,7 +6,7 @@
 
 **Carbon Relay**は、カーボン関連ニュースの収集・分析・配信を自動化するGo製システムです。
 
-**プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
+**プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 
 ## 🔑 運用モード
 
@@ -58,7 +58,7 @@ EU ETS, UK ETS, CARB, RGGI, Australia CER
 **RSSフィード（3ソース）**:
 Politico EU, Euractiv, Carbon Market Watch
 
-**学術・研究（6ソース）**:
+**学術・研究（5ソース）**:
 arXiv, Nature Communications, OIES, IOP Science (ERL), ScienceDirect
 
 **CDR関連（2ソース）**:
@@ -71,7 +71,7 @@ env-ministry, meti, nature-ecoevo, unfccc, un-news
 
 ### ビルド
 ```bash
-cd /Users/kotafuse/Yasui/Prog/Test/carbon-relay
+cd /Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay
 go build -o pipeline ./cmd/pipeline
 ```
 

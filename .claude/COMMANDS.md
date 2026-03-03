@@ -274,7 +274,7 @@ time ./pipeline -sources=climatehomenews -perSource=1
 ### RSSフィード（3）
 `politico-eu`, `euractiv`, `carbon-market-watch`
 
-### 学術・研究（6）
+### 学術・研究（5）
 `arxiv`, `nature-comms`, `oies`, `iopscience`, `sciencedirect`
 
 ### CDR関連（2）

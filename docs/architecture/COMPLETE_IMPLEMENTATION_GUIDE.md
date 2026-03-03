@@ -92,7 +92,7 @@ Carbon関連の無料記事を幅広く確認
 ### 2.1 ディレクトリ構造
 
 ```
-/Users/kotafuse/Yasui/Prog/Test/carbon-relay/
+/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/
 ├── cmd/
 │   └── pipeline/
 │       ├── main.go              - パイプライン制御とCLI
@@ -131,7 +131,7 @@ Carbon関連の無料記事を幅広く確認
 **責務**:
 - 39ニュースソースの実装
 - 複数のスクレイピングパターン:
-  - WordPress REST API（7ソース）
+  - WordPress REST API（8ソース）
   - HTML Scraping with goquery（8ソース）
   - RSS Feed with gofeed（3ソース）
 - キーワードフィルタリング（日本語ソース）
@@ -176,7 +176,7 @@ Carbon関連の無料記事を幅広く確認
 │    - データベース作成/再利用                                   │
 │    - 見出し + 関連記事をクリップ                               │
 │    - フルコンテンツをブロックに保存                             │
-│    - AI Summaryフィールド保存                                 │
+│    - Article Summary 300フィールド保存                                 │
 │    ↓                                                        │
 │  メール送信（-sendShortEmail指定時）                                │
 │    - Notionから取得                                          │
@@ -189,7 +189,7 @@ Carbon関連の無料記事を幅広く確認
 
 ## 3. 全ソースの実装詳細
 
-### 3.1 無料ソース - 日本市場（7ソース）
+### 3.1 無料ソース - 日本市場（7ソース、うち2つ停止中）
 
 #### ソース1: CarbonCredits.jp
 **実装**: `collectHeadlinesCarbonCreditsJP()`
@@ -273,7 +273,7 @@ carbonKeywords := []string{
 }
 ```
 
-**ステータス**: ✅ 完全動作
+**ステータス**: ⛔ 停止中（2026-02-18）
 
 **日付解析例**:
 ```go
@@ -306,7 +306,7 @@ currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 - 包括的キーワードリスト（20+用語）
 - テスト用にすべての記事を収集（キーワードフィルタ無効）
 
-**ステータス**: ✅ 完全動作（マッチなしの場合空を返す）
+**ステータス**: ⛔ 停止中（2026-02-18）
 
 #### ソース6: Mizuho Research & Technologies（みずほリサーチ＆テクノロジーズ）
 **実装**: `collectHeadlinesMizuhoRT()`
@@ -633,15 +633,15 @@ type Headline struct {
         * Title
         * URL
         * Source（色分けSelectオプション）
-        * Type: "Headline"
+        * Type: "News"
         * Published Date
-        * AI Summary（後でAIサマリー用の最初の2000文字）
+        * Article Summary 300（記事要約、最初の2000文字）
       - 完全コンテンツをブロックに追加（2000文字/ブロック）
 
    c) 各RelatedFreeをクリップ
       - ページ作成
       - プロパティ設定（+ Score）
-      - Type: "Related Free"
+      - Type: "Academic"
       - 完全コンテンツをブロックに追加
 
    d) Database IDの永続化
@@ -720,43 +720,44 @@ stopwords := map[string]bool{
 |------------|-------|------|------|
 | Title | Title | 記事見出し | 必須、ページタイトル |
 | URL | URL | 記事リンク | クリック可能リンク |
-| Source | Select | ソース名 | 22の色分けオプション |
-| Type | Select | 記事タイプ | "Headline" または "Related Free" |
+| Source | Select | ソース名 | 21の色分けオプション |
+| Type | Select | 記事タイプ | "News" または "Academic" |
 | Score | Number | マッチングスコア | Related Freeのみ、0-1の範囲 |
 | Published Date | Date | 公開日 | RFC3339からパース |
-| AI Summary | Rich Text | AIサマリー用 | 最初の2000文字を保存 |
+| Article Summary 300 | Rich Text | 記事要約 | 最初の2000文字を保存 |
 
 **Sourceオプション（色分け）**:
 ```go
 sourceOptions := []notionapi.Option{
-    {Name: "CarbonCredits.jp", Color: notionapi.ColorYellow},
-    {Name: "Carbon Herald", Color: notionapi.ColorGreen},
-    {Name: "Climate Home News", Color: notionapi.ColorBlue},
-    {Name: "CarbonCredits.com", Color: notionapi.ColorPurple},
-    {Name: "Sandbag", Color: notionapi.ColorPink},
-    {Name: "Ecosystem Marketplace", Color: notionapi.ColorBrown},
-    {Name: "Carbon Brief", Color: notionapi.ColorGray},
-    {Name: "ICAP", Color: notionapi.ColorDefault},
-    {Name: "IETA", Color: notionapi.ColorRed},
-    {Name: "Energy Monitor", Color: notionapi.ColorOrange},
-    {Name: "JRI", Color: notionapi.ColorYellow},
-    {Name: "Environment Ministry", Color: notionapi.ColorGreen},
-    {Name: "JPX", Color: notionapi.ColorBlue},
-    {Name: "METI", Color: notionapi.ColorPurple},
-    {Name: "World Bank", Color: notionapi.ColorPink},
-    {Name: "Carbon Market Watch", Color: notionapi.ColorBrown},
-    {Name: "NewClimate", Color: notionapi.ColorGray},
-    {Name: "Carbon Knowledge Hub", Color: notionapi.ColorDefault},
-    {Name: "PwC Japan", Color: notionapi.ColorRed},
-    {Name: "Mizuho R&T", Color: notionapi.ColorOrange},
+    {Name: "CarbonCredits.jp", Color: notionapi.ColorOrange},
+    {Name: "Carbon Herald", Color: notionapi.ColorPink},
+    {Name: "Climate Home News", Color: notionapi.ColorPurple},
+    {Name: "CarbonCredits.com", Color: notionapi.ColorYellow},
+    {Name: "Sandbag", Color: notionapi.ColorBlue},
+    {Name: "Ecosystem Marketplace", Color: notionapi.ColorGreen},
+    {Name: "Carbon Brief", Color: notionapi.ColorPurple},
+    {Name: "ICAP", Color: notionapi.ColorRed},
+    {Name: "IETA", Color: notionapi.ColorBrown},
+    {Name: "Energy Monitor", Color: notionapi.ColorPink},
+    {Name: "Japan Research Institute", Color: notionapi.ColorGreen},
+    {Name: "Japan Environment Ministry", Color: notionapi.ColorBlue},
+    {Name: "Japan Exchange Group (JPX)", Color: notionapi.ColorRed},
+    {Name: "Japan Ministry of Economy (METI)", Color: notionapi.ColorRed},
+    {Name: "World Bank", Color: notionapi.ColorBrown},
+    {Name: "Carbon Market Watch", Color: notionapi.ColorPurple},
+    {Name: "NewClimate Institute", Color: notionapi.ColorGreen},
+    {Name: "Carbon Knowledge Hub", Color: notionapi.ColorOrange},
+    {Name: "PwC Japan", Color: notionapi.ColorPink},
+    {Name: "Mizuho Research & Technologies", Color: notionapi.ColorBlue},
+    {Name: "Free Article", Color: notionapi.ColorDefault},
 }
 ```
 
 **Typeオプション**:
 ```go
 typeOptions := []notionapi.Option{
-    {Name: "Headline", Color: notionapi.ColorBlue},
-    {Name: "Related Free", Color: notionapi.ColorGreen},
+    {Name: "News", Color: notionapi.ColorBlue},
+    {Name: "Academic", Color: notionapi.ColorGreen},
 }
 ```
 
@@ -849,9 +850,9 @@ func appendToEnvFile(path, key, value string) error {
       - Title: headline.Title
       - URL: headline.URL
       - Source: headline.Source (Select)
-      - Type: "Headline" (Select)
+      - Type: "News" (Select)
       - Published Date: parseDate(headline.PublishedAt)
-      - AI Summary: excerpt[:2000] (Rich Text)
+      - Article Summary 300: excerpt[:2000] (Rich Text)
 
    b) ページコンテンツ作成
       - Excerpt/Full Contentを段落ブロックに分割
@@ -869,10 +870,10 @@ func appendToEnvFile(path, key, value string) error {
       - Title: related.Title
       - URL: related.URL
       - Source: related.Source (Select)
-      - Type: "Related Free" (Select)
+      - Type: "Academic" (Select)
       - Score: related.Score (Number)
       - Published Date: parseDate(related.PublishedAt)
-      - AI Summary: excerpt[:2000]
+      - Article Summary 300: excerpt[:2000]
 
    b) ページコンテンツ作成（同上）
 
@@ -1010,7 +1011,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 ### 7.1 環境変数（.env）
 
-**ファイルパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/.env`
+**ファイルパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/.env`
 
 **必須変数**:
 ```bash
@@ -1261,7 +1262,7 @@ DEBUG_SCRAPING=1 ./pipeline \
 #!/bin/bash
 set -e
 
-cd /Users/kotafuse/Yasui/Prog/Test/carbon-relay
+cd /Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay
 
 # 環境変数読み込み
 source .env
@@ -1291,7 +1292,7 @@ echo "Daily clip completed: ${TIMESTAMP}"
 **crontab設定例**:
 ```cron
 # 毎日朝9時に実行
-0 9 * * * /Users/kotafuse/Yasui/Prog/Test/carbon-relay/daily_clip.sh
+0 9 * * * /Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/daily_clip.sh
 ```
 
 ---
@@ -1767,7 +1768,7 @@ time ./pipeline -sources=all-free -perSource=10
 
 ### プロジェクト情報
 
-**プロジェクトパス**: `/Users/kotafuse/Yasui/Prog/Test/carbon-relay/`
+**プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 
 **主要ファイル**:
 - `cmd/pipeline/main.go` - エントリーポイント

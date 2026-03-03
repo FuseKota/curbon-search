@@ -55,7 +55,7 @@
 **RSSフィード（3ソース）：**
 - Politico EU、Euractiv、Carbon Market Watch
 
-**学術・研究（6ソース）：**
+**学術・研究（5ソース）：**
 - arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
 
 **CDR関連（2ソース）：**
@@ -260,7 +260,7 @@ EOF
 - **国際機関（2）**: IISD ENB、Climate Focus
 - **地域ETS（5）**: EU ETS、UK ETS、CARB、RGGI、Australia CER
 - **RSS（3）**: Politico EU、Euractiv、Carbon Market Watch
-- **学術（6）**: arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
+- **学術（5）**: arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
 - **CDR（2）**: Puro.earth、Isometric
 
 ### 🗂️ Notionデータベーススキーマ

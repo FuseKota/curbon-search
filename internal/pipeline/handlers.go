@@ -5,9 +5,10 @@
 // このファイルはCLIコマンドの各ハンドラ関数を提供します。
 //
 // 【このファイルで提供する機能】
-//   - handleEmailSend:          フルメールサマリー送信
 //   - handleShortEmailSend:     50文字ヘッドラインダイジェスト送信
 //   - handleListShortHeadlines: Article Summary 300診断表示
+//   - handleNotionClip:         Notionに記事を保存
+//   - handleJSONOutput:         JSON出力
 //
 // 【共通ヘルパー関数】
 //   - validateNotionEnv:    Notion環境変数の検証
@@ -23,6 +24,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // =============================================================================
@@ -126,37 +129,6 @@ func createEmailSender() (*EmailSender, string, string) {
 // メールハンドラ
 // =============================================================================
 
-// handleEmailSend はフルメールサマリーを送信する
-//
-// 【処理の流れ】
-//  1. 環境変数をチェック（Notion + Email）
-//  2. NotionDBから記事を取得
-//  3. AI要約付きのフルメールを送信
-func handleEmailSend(emailDaysBack int) {
-	fmt.Fprintln(os.Stderr, "\n========================================")
-	fmt.Fprintln(os.Stderr, "📧 Sending Email Summary")
-	fmt.Fprintln(os.Stderr, "========================================")
-
-	// Create Notion clipper and fetch headlines
-	clipper := createNotionClipper()
-	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
-	if headlines == nil {
-		return
-	}
-
-	// Create email sender and send
-	sender, from, to := createEmailSender()
-	ctx := context.Background()
-	if err := sender.SendHeadlinesSummary(ctx, headlines); err != nil {
-		fatalf("ERROR sending email: %v", err)
-	}
-
-	fmt.Fprintln(os.Stderr, "✅ Email sent successfully")
-	fmt.Fprintf(os.Stderr, "   From: %s\n", from)
-	fmt.Fprintf(os.Stderr, "   To: %s\n", to)
-	fmt.Fprintln(os.Stderr, "========================================")
-}
-
 // handleShortEmailSend は50文字ヘッドラインダイジェストメールを送信する
 //
 // 【処理の流れ】
@@ -169,14 +141,14 @@ func handleShortEmailSend(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "📧 Sending Short Headlines Digest")
 	fmt.Fprintln(os.Stderr, "========================================")
 
-	// Create Notion clipper and fetch headlines
+	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
 	if headlines == nil {
 		return
 	}
 
-	// Create email sender and send
+	// メール送信者を作成して送信
 	sender, from, to := createEmailSender()
 	ctx := context.Background()
 	if err := sender.SendShortHeadlinesDigest(ctx, headlines); err != nil {
@@ -202,7 +174,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "📋 Listing Article Summary 300 Values from NotionDB")
 	fmt.Fprintln(os.Stderr, "========================================")
 
-	// Create Notion clipper and fetch headlines
+	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
 	if headlines == nil {
@@ -211,7 +183,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 
 	fmt.Fprintf(os.Stderr, "Found %d headlines (last %d days)\n\n", len(headlines), emailDaysBack)
 
-	// Group by Article Summary 300 status
+	// Article Summary 300のステータスでグループ化
 	var withSummary, withDash, empty []NotionHeadline
 	for _, h := range headlines {
 		switch {
@@ -224,14 +196,14 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display statistics
+	// 統計情報を表示
 	fmt.Fprintf(os.Stderr, "📊 Statistics:\n")
 	fmt.Fprintf(os.Stderr, "   ✅ With Summary: %d\n", len(withSummary))
 	fmt.Fprintf(os.Stderr, "   ❌ Filtered (-): %d\n", len(withDash))
 	fmt.Fprintf(os.Stderr, "   ⏳ Empty:        %d\n", len(empty))
 	fmt.Fprintln(os.Stderr, "")
 
-	// Display headlines with summary
+	// 要約ありのヘッドラインを表示
 	if len(withSummary) > 0 {
 		fmt.Fprintln(os.Stderr, "✅ Headlines with Summary:")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
@@ -243,7 +215,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display filtered headlines
+	// フィルタ済みヘッドラインを表示
 	if len(withDash) > 0 {
 		fmt.Fprintln(os.Stderr, "❌ Filtered Headlines (-):")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
@@ -254,7 +226,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display empty headlines
+	// 空のヘッドラインを表示
 	if len(empty) > 0 {
 		fmt.Fprintln(os.Stderr, "⏳ Headlines without Article Summary 300 (need Notion AI processing):")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
@@ -272,13 +244,20 @@ func handleListShortHeadlines(emailDaysBack int) {
 // Notionハンドラ
 // =============================================================================
 
-// handleNotionClip は見出しと関連記事をNotionデータベースに保存する
+// NotionClipResult はNotion保存の結果を表す
+type NotionClipResult struct {
+	Clipped int
+	Failed  int
+	Errors  []string // "[Notion] 'タイトル': エラー内容" 形式
+}
+
+// handleNotionClip は見出しをNotionデータベースに保存する
 //
 // 【処理の流れ】
 //  1. Notion環境変数を確認
 //  2. 必要に応じて新規データベースを作成
-//  3. 各見出しと関連記事をクリップ
-func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
+//  3. 各見出しをクリップ
+func handleNotionClip(headlines []Headline, cfg *OutputConfig) *NotionClipResult {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
 	fmt.Fprintln(os.Stderr, "========================================")
@@ -319,19 +298,26 @@ func handleNotionClip(headlines []Headline, cfg *OutputConfig) {
 
 	// 各見出しをクリップ
 	fmt.Fprintln(os.Stderr, "\nClipping articles...")
-	clippedCount := 0
+	notionResult := &NotionClipResult{}
 	for _, h := range headlines {
-		if err := clipper.ClipHeadlineWithRelated(ctx, h); err != nil {
+		if err := clipper.ClipHeadline(ctx, h); err != nil {
 			warnf("failed to clip headline '%s': %v", h.Title, err)
+			notionResult.Failed++
+			notionResult.Errors = append(notionResult.Errors,
+				fmt.Sprintf("[Notion] '%s': %v", truncateString(h.Title, 50), err))
 			continue
 		}
-		clippedCount++
-		fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s (%d related articles)\n", h.Title, len(h.RelatedFree))
+		notionResult.Clipped++
+		fmt.Fprintf(os.Stderr, "  ✅ Clipped: %s\n", truncateString(h.Title, 50))
 	}
 
 	fmt.Fprintln(os.Stderr, "========================================")
-	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", clippedCount)
+	fmt.Fprintf(os.Stderr, "✅ Clipped %d headlines to Notion\n", notionResult.Clipped)
+	if notionResult.Failed > 0 {
+		fmt.Fprintf(os.Stderr, "⚠️  Failed %d headlines\n", notionResult.Failed)
+	}
 	fmt.Fprintln(os.Stderr, "========================================")
+	return notionResult
 }
 
 // =============================================================================
@@ -354,11 +340,112 @@ func handleJSONOutput(headlines []Headline, cfg *OutputConfig) {
 	}
 }
 
-// handleSaveFreePool は候補プールをファイルに保存する
-func handleSaveFreePool(globalPool []FreeArticle, cfg *OutputConfig) {
-	if cfg.SaveFree != "" {
-		if err := writeJSONFile(cfg.SaveFree, globalPool); err != nil {
-			fatalf("writing free pool: %v", err)
+// =============================================================================
+// エラー通知ハンドラ
+// =============================================================================
+
+// SendErrorNotification は収集・Notion保存の問題をメールで通知する
+//
+// collectResultとnotionResultの両方を確認し、問題がなければメール送信しない。
+// EMAIL_FROM, EMAIL_PASSWORD, EMAIL_TO が設定されている場合のみ送信する。
+func SendErrorNotification(collectResult *CollectResult, notionResult *NotionClipResult) {
+	// 問題があるかチェック
+	hasCollectIssues := collectResult != nil && len(collectResult.Errors) > 0
+	hasNotionIssues := notionResult != nil && notionResult.Failed > 0
+	if !hasCollectIssues && !hasNotionIssues {
+		return
+	}
+
+	from := os.Getenv("EMAIL_FROM")
+	password := os.Getenv("EMAIL_PASSWORD")
+	to := os.Getenv("EMAIL_TO")
+
+	if from == "" || password == "" || to == "" {
+		fmt.Fprintln(os.Stderr, "[WARN] Email env vars not set, skipping error notification email")
+		return
+	}
+
+	sender, err := NewEmailSender(from, password, to)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to create email sender: %v\n", err)
+		return
+	}
+
+	// issue数をカウント
+	issueCount := 0
+	if hasCollectIssues {
+		issueCount += len(collectResult.Errors)
+	}
+	if hasNotionIssues {
+		issueCount += notionResult.Failed
+	}
+
+	subject := fmt.Sprintf("[Carbon Relay] %d issue(s) - %s",
+		issueCount, time.Now().Format("2006-01-02 15:04"))
+
+	var body strings.Builder
+
+	// === 収集結果 ===
+	if collectResult != nil {
+		body.WriteString("=== 収集結果 ===\n")
+
+		successCount := 0
+		successArticles := 0
+		emptyCount := 0
+		errorCount := 0
+		for _, sr := range collectResult.SourceResults {
+			switch sr.Status {
+			case "success":
+				successCount++
+				successArticles += sr.Count
+			case "empty":
+				emptyCount++
+			case "error":
+				errorCount++
+			}
+		}
+
+		body.WriteString(fmt.Sprintf("総ソース数: %d\n", len(collectResult.SourceResults)))
+		body.WriteString(fmt.Sprintf("成功: %d (計 %d 記事) / 0件: %d / エラー: %d\n",
+			successCount, successArticles, emptyCount, errorCount))
+
+		// 問題のあったソースを表示
+		var problemSources []string
+		for _, sr := range collectResult.SourceResults {
+			switch sr.Status {
+			case "error":
+				problemSources = append(problemSources,
+					fmt.Sprintf("  [ERROR] %s: %s", sr.Name, sr.ErrorMsg))
+			case "empty":
+				problemSources = append(problemSources,
+					fmt.Sprintf("  [WARN]  %s: 0 headlines", sr.Name))
+			}
+		}
+		if len(problemSources) > 0 {
+			body.WriteString("\n--- 問題のあったソース ---\n")
+			for _, ps := range problemSources {
+				body.WriteString(ps + "\n")
+			}
 		}
 	}
+
+	// === Notion保存結果 ===
+	if hasNotionIssues {
+		body.WriteString("\n=== Notion保存結果 ===\n")
+		body.WriteString(fmt.Sprintf("成功: %d / 失敗: %d\n",
+			notionResult.Clipped, notionResult.Failed))
+		for _, e := range notionResult.Errors {
+			body.WriteString("  " + e + "\n")
+		}
+	}
+
+	body.WriteString(fmt.Sprintf("\nTimestamp: %s\n", time.Now().Format(time.RFC3339)))
+
+	msg := sender.BuildEmailMessage(subject, body.String())
+	if err := sender.SendWithRetry(msg); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Failed to send error notification email: %v\n", err)
+	} else {
+		fmt.Fprintln(os.Stderr, "[INFO] Error notification email sent")
+	}
 }
+

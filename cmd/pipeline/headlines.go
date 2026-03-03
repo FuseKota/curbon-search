@@ -15,7 +15,7 @@
 //   - sources_regional_ets.go     - 地域ETSソース
 //
 // =============================================================================
-// 【実装ソース一覧】（全38ソース、有効35ソース）
+// 【実装ソース一覧】（全39アクティブソース）
 // =============================================================================
 //
 // ▼ 無料ソース - WordPress REST API（8ソース）- sources_wordpress.go
@@ -107,7 +107,7 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
-// Package-level compiled regex for performance (avoid recompiling on every call)
+// パッケージレベルでコンパイル済みの正規表現（呼び出しごとの再コンパイルを回避）
 var reScriptTags = regexp.MustCompile(`(?s)<script[^>]*>.*?</script>`)
 var reHTMLTags = regexp.MustCompile(`<[^>]*>`)
 var reShortcodes = regexp.MustCompile(`\[/?[a-z_]+[^\]]*\]`)
@@ -425,11 +425,11 @@ func FilterHeadlinesByHours(headlines []Headline, hours int) []Headline {
 //	    cfg,
 //	)
 func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// WordPress REST API endpoint - get full content for free articles
-	// Use date_gmt for consistent UTC timestamps across all WordPress sources
+	// WordPress REST APIエンドポイント - 無料記事の全文を取得
+	// 全WordPressソースで一貫したUTCタイムスタンプを得るためdate_gmtを使用
 	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/posts?per_page=%d&_fields=title,link,date_gmt,content", baseURL, limit)
 
-	// httpGetJSON is defined in utils.go
+	// httpGetJSON は utils.go で定義
 	var posts []WPPost
 	if err := httpGetJSON(apiURL, cfg, &posts); err != nil {
 		return nil, fmt.Errorf("failed to fetch %s API: %w", sourceName, err)
@@ -437,22 +437,22 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 
 	out := make([]Headline, 0, len(posts))
 	for _, p := range posts {
-		// Clean up HTML entities from title
+		// タイトルからHTMLエンティティを除去
 		title := cleanHTMLTags(p.Title.Rendered)
 		title = strings.TrimSpace(title)
 		if title == "" {
 			continue
 		}
 
-		// Clean up HTML from full content (free article)
+		// 全文コンテンツからHTMLを除去（無料記事）
 		content := cleanHTMLTags(p.Content.Rendered)
 		content = strings.TrimSpace(content)
 
-		// Convert date_gmt to RFC3339 format with UTC timezone indicator
-		// WordPress date_gmt format: "2026-01-05T14:42:50"
+		// date_gmtをUTCタイムゾーン付きRFC3339形式に変換
+		// WordPress date_gmtの形式: "2026-01-05T14:42:50"
 		publishedAt := ""
 		if p.DateGMT != "" {
-			publishedAt = p.DateGMT + "Z" // Add Z suffix to indicate UTC
+			publishedAt = p.DateGMT + "Z" // UTCを示すZサフィックスを追加
 		}
 
 		out = append(out, Headline{
@@ -460,8 +460,8 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 			Title:       title,
 			URL:         p.Link,
 			PublishedAt: publishedAt,
-			Excerpt:     content, // Store full content in Excerpt field for free articles
-			IsHeadline:  true,
+			Excerpt:     content, // 無料記事の全文をExcerptフィールドに格納
+
 		})
 	}
 
@@ -484,7 +484,7 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg headli
 //   - limit:      取得する記事の最大数
 //   - cfg:        HTTP設定
 func collectWordPressHeadlinesCustomType(baseURL, sourceName, postType string, limit int, cfg headlineSourceConfig) ([]Headline, error) {
-	// WordPress REST API endpoint with custom post type
+	// カスタム投稿タイプ対応のWordPress REST APIエンドポイント
 	apiURL := fmt.Sprintf("%s/wp-json/wp/v2/%s?per_page=%d&_fields=title,link,date_gmt,content", baseURL, postType, limit)
 
 	var posts []WPPost
@@ -514,7 +514,7 @@ func collectWordPressHeadlinesCustomType(baseURL, sourceName, postType string, l
 			URL:         p.Link,
 			PublishedAt: publishedAt,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -619,7 +619,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 	var excerpt strings.Builder
 	maxChars := 500
 
-	// Debug: show link context - check multiple parent levels
+	// デバッグ: リンクのコンテキスト表示 - 複数の親レベルを確認
 	if os.Getenv("DEBUG_HTML") != "" {
 		linkHTML, _ := linkSel.Html()
 		parent1HTML, _ := linkSel.Parent().Html()
@@ -634,7 +634,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 		fmt.Fprintf(os.Stderr, "[DEBUG] =====================================\n\n")
 	}
 
-	// Strategy 1: Check for <p> tags in parent elements
+	// 戦略1: 親要素内の<p>タグをチェック
 	parent := linkSel.Parent()
 	parent.Find("p:not(.metaStuff)").Each(func(i int, s *goquery.Selection) {
 		if excerpt.Len() >= maxChars {
@@ -649,7 +649,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 		}
 	})
 
-	// Strategy 2: Check for <div class="excerpt"> or similar
+	// 戦略2: <div class="excerpt"> 等の要約要素をチェック
 	if excerpt.Len() == 0 {
 		linkSel.Parent().Parent().Find(".excerpt, .summary, .description").Each(func(i int, s *goquery.Selection) {
 			if excerpt.Len() >= maxChars {
@@ -667,7 +667,7 @@ func extractExcerptFromContext(linkSel *goquery.Selection) string {
 
 	result := strings.TrimSpace(excerpt.String())
 
-	// Truncate if too long
+	// 長すぎる場合は切り詰め
 	if len(result) > maxChars {
 		result = result[:maxChars] + "..."
 	}
@@ -742,9 +742,9 @@ func extractRSSExcerpt(item *gofeed.Item) string {
 	return strings.TrimSpace(text)
 }
 
-// fetchViaCurl fetches a URL using curl to bypass TLS fingerprint detection.
-// Some sites (e.g., nature.com with Fastly) block Go's net/http TLS fingerprint
-// but allow curl. This function shells out to curl as a workaround.
+// fetchViaCurl は TLSフィンガープリント検出を回避するためcurlでURLを取得する。
+// 一部のサイト（例: Fastlyベースのnature.com）はGoのnet/httpのTLSフィンガープリントを
+// ブロックするが、curlは許可する。この関数はその回避策としてcurlを呼び出す。
 func fetchViaCurl(targetURL string, userAgent string) (string, error) {
 	cmd := exec.Command("curl", "-sL",
 		"-H", "User-Agent: "+userAgent,
@@ -758,15 +758,15 @@ func fetchViaCurl(targetURL string, userAgent string) (string, error) {
 	return string(output), nil
 }
 
-// cleanHTMLTags removes HTML tags and decodes HTML entities
+// cleanHTMLTags は HTMLタグを除去し、HTMLエンティティをデコードする
 func cleanHTMLTags(htmlStr string) string {
-	// Remove <script>...</script> blocks entirely (content included)
+	// <script>...</script>ブロックを内容ごと完全に除去
 	text := reScriptTags.ReplaceAllString(htmlStr, "")
-	// Remove HTML tags (using pre-compiled regex for performance)
+	// HTMLタグを除去（コンパイル済み正規表現でパフォーマンス向上）
 	text = reHTMLTags.ReplaceAllString(text, "")
-	// Remove WordPress/Divi shortcodes like [et_pb_section ...] [/et_pb_section]
+	// WordPress/Diviのショートコード（[et_pb_section ...] [/et_pb_section] 等）を除去
 	text = reShortcodes.ReplaceAllString(text, "")
-	// Decode HTML entities (including Japanese characters)
+	// HTMLエンティティをデコード（日本語文字を含む）
 	text = html.UnescapeString(text)
 	return text
 }

@@ -72,7 +72,7 @@ type NotionClipper struct {
 	dbID   notionapi.DatabaseID // 操作対象のデータベースID
 }
 
-// NewNotionClipper creates a new Notion clipper
+// NewNotionClipper は新しいNotionClipperを作成する
 func NewNotionClipper(token string, databaseID string) (*NotionClipper, error) {
 	if token == "" {
 		return nil, fmt.Errorf("NOTION_TOKEN is required")
@@ -91,8 +91,8 @@ func NewNotionClipper(token string, databaseID string) (*NotionClipper, error) {
 	return nc, nil
 }
 
-// CreateDatabase creates a new Notion database for article clipping
-// Returns the database ID and error
+// CreateDatabase は記事クリッピング用の新しいNotionデータベースを作成する
+// データベースIDとエラーを返す
 func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (string, error) {
 	if pageID == "" {
 		return "", fmt.Errorf("NOTION_PAGE_ID is required to create a new database")
@@ -175,7 +175,7 @@ func (nc *NotionClipper) CreateDatabase(ctx context.Context, pageID string) (str
 	return string(db.ID), nil
 }
 
-// ClipHeadline clips a headline to Notion
+// ClipHeadline はヘッドラインをNotionにクリッピングする
 func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	if nc.dbID == "" {
 		return fmt.Errorf("database ID not set")
@@ -204,7 +204,7 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		},
 	}
 
-	// Set Type property: Academic for scholarly sources, News for everything else
+	// Typeプロパティを設定: 学術ソースはAcademic、それ以外はNews
 	typeName := "News"
 	if academicSources[h.Source] {
 		typeName = "Academic"
@@ -214,7 +214,7 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		Select: notionapi.Option{Name: typeName},
 	}
 
-	// Add Published Date if available
+	// Published Dateがあれば追加
 	if h.PublishedAt != "" {
 		publishedTime, err := parsePublishedDate(h.PublishedAt)
 		if err == nil {
@@ -227,8 +227,8 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		}
 	}
 
-	// Add full content to Article Summary 300 field
-	// (split into multiple RichText blocks if needed due to 2000 char limit)
+	// Article Summary 300フィールドに全文を追加
+	// （2000文字制限のため必要に応じて複数のRichTextブロックに分割）
 	if h.Excerpt != "" {
 		richTextBlocks := splitIntoRichTextBlocks(h.Excerpt)
 		properties["Article Summary 300"] = notionapi.RichTextProperty{
@@ -251,7 +251,7 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		return fmt.Errorf("failed to clip headline: %w", err)
 	}
 
-	// Add full content as page blocks if available
+	// Excerptがあればページブロックとして全文を追加
 	if h.Excerpt != "" {
 		blocks := createContentBlocks(h.Excerpt)
 		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
@@ -265,8 +265,8 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 	return nil
 }
 
-// splitIntoRichTextBlocks splits long text into multiple RichText blocks
-// Each RichText block in Notion property has a 2000 character limit
+// splitIntoRichTextBlocks は長いテキストを複数のRichTextブロックに分割する
+// Notionプロパティの各RichTextブロックには2000文字の制限がある
 func splitIntoRichTextBlocks(text string) []notionapi.RichText {
 	const maxChars = 2000
 	var richTexts []notionapi.RichText
@@ -290,10 +290,10 @@ func splitIntoRichTextBlocks(text string) []notionapi.RichText {
 	return richTexts
 }
 
-// createContentBlocks splits long text into Notion paragraph blocks
+// createContentBlocks は長いテキストをNotionの段落ブロックに分割する
 func createContentBlocks(content string) notionapi.Blocks {
 	const maxBlockSize  = 2000
-	const maxBlockCount = 100 // Notion API limit
+	const maxBlockCount = 100 // Notion APIの上限
 	blocks := notionapi.Blocks{}
 
 	paragraphs := []string{}
@@ -366,27 +366,27 @@ func createContentBlocks(content string) notionapi.Blocks {
 	return blocks
 }
 
-// parsePublishedDate parses published date from various formats
+// parsePublishedDate は各種フォーマットの公開日をパースする
 func parsePublishedDate(dateStr string) (time.Time, error) {
-	// Try RFC3339 format first
+	// まずRFC3339フォーマットを試す
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err == nil {
 		return t, nil
 	}
 
-	// Try ISO 8601 with timezone offset without colon
+	// コロンなしタイムゾーンオフセット付きISO 8601を試す
 	t, err = time.Parse("2006-01-02T15:04:05-0700", dateStr)
 	if err == nil {
 		return t, nil
 	}
 
-	// Try format without timezone (assume UTC)
+	// タイムゾーンなしフォーマットを試す（UTCとみなす）
 	t, err = time.Parse("2006-01-02T15:04:05", dateStr)
 	if err == nil {
 		return t.UTC(), nil
 	}
 
-	// Try ISO 8601 date-only format
+	// ISO 8601日付のみフォーマットを試す
 	t, err = time.Parse("2006-01-02", dateStr)
 	if err == nil {
 		return t.UTC(), nil
@@ -395,7 +395,7 @@ func parsePublishedDate(dateStr string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
 }
 
-// appendToEnvFile appends or updates a key-value pair in .env file
+// appendToEnvFile は.envファイルにキーと値のペアを追加または更新する
 func appendToEnvFile(filename, key, value string) error {
 	content := ""
 	data, err := os.ReadFile(filename)
@@ -428,17 +428,17 @@ func appendToEnvFile(filename, key, value string) error {
 	return nil
 }
 
-// FetchRecentHeadlines fetches headlines from Notion database
-// Returns headlines created within the last 'daysBack' days
+// FetchRecentHeadlines はNotionデータベースからヘッドラインを取得する
+// 過去daysBack日以内に作成されたヘッドラインを返す
 func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int) ([]NotionHeadline, error) {
 	if nc.dbID == "" {
 		return nil, fmt.Errorf("database ID not set")
 	}
 
-	// Calculate cutoff date
+	// 基準日を算出
 	cutoffDate := time.Now().AddDate(0, 0, -daysBack)
 
-	// Query database with pagination (no filter - will filter in code)
+	// ページネーション付きでデータベースをクエリ（フィルタなし - コード側でフィルタリング）
 	var allHeadlines []NotionHeadline
 	var cursor *notionapi.Cursor
 
@@ -455,38 +455,38 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 			return nil, fmt.Errorf("failed to query database: %w", err)
 		}
 
-		// Process results
+		// 結果を処理
 		for _, page := range resp.Results {
-			// Filter by creation date
+			// 作成日でフィルタリング
 			if !page.CreatedTime.After(cutoffDate) {
 				continue
 			}
 
-			// Extract Title
+			// Titleを抽出
 			title := ""
 			if titleProp, ok := page.Properties["Title"].(*notionapi.TitleProperty); ok && len(titleProp.Title) > 0 {
 				title = titleProp.Title[0].PlainText
 			}
 
-			// Extract URL
+			// URLを抽出
 			url := ""
 			if urlProp, ok := page.Properties["URL"].(*notionapi.URLProperty); ok {
 				url = string(urlProp.URL)
 			}
 
-			// Extract Source
+			// Sourceを抽出
 			source := ""
 			if sourceProp, ok := page.Properties["Source"].(*notionapi.SelectProperty); ok && sourceProp.Select.Name != "" {
 				source = sourceProp.Select.Name
 			}
 
-			// Extract Type (Academic/News)
+			// Type（Academic/News）を抽出
 			articleType := ""
 			if typeProp, ok := page.Properties["Type"].(*notionapi.SelectProperty); ok && typeProp.Select.Name != "" {
 				articleType = typeProp.Select.Name
 			}
 
-			// Extract Article Summary 300 (50文字ヘッドライン)
+			// Article Summary 300を抽出（50文字ヘッドライン）
 			shortHeadline := ""
 			if shortProp, ok := page.Properties["Article Summary 300"].(*notionapi.RichTextProperty); ok && len(shortProp.RichText) > 0 {
 				for _, rt := range shortProp.RichText {
@@ -494,7 +494,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				}
 			}
 
-			// Extract Created time
+			// 作成日時を抽出
 			createdAt := page.CreatedTime.Format(time.RFC3339)
 
 			allHeadlines = append(allHeadlines, NotionHeadline{
@@ -507,7 +507,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 			})
 		}
 
-		// Check if there are more pages
+		// 次のページがあるか確認
 		if !resp.HasMore {
 			break
 		}

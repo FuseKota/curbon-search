@@ -3,7 +3,7 @@
 ## アーキテクチャ概要
 
 ```
-[36の無料ソース]
+[39の無料ソース]
        ↓ スクレイピング（WordPress API / HTML / RSS）
 [Headline Collection]
        ↓
@@ -18,7 +18,7 @@
 
 ### 1. internal/pipeline/headlines.go - ヘッドライン収集
 
-#### ソースコレクター登録（36ソース）
+#### ソースコレクター登録（39ソース）
 ```go
 var sourceCollectors = map[string]HeadlineCollector{
     // WordPress REST APIソース（7ソース）
@@ -112,7 +112,7 @@ for _, item := range feed.Items {
 
 ### 2. キーワードフィルタリング
 
-日本語ソース（JRI、環境省、METI、Mizuho R&T）では、カーボン関連キーワードでフィルタリングを行います。
+日本語ソース（JRI、Mizuho R&T）では、カーボン関連キーワードでフィルタリングを行います。
 
 ```go
 var carbonKeywords = []string{
@@ -179,11 +179,10 @@ func splitRichText(text string, limit int) []notionapi.RichText {
 ```go
 sources        = flag.String("sources", "all-free", "Source names, comma-separated or 'all-free'")
 perSource      = flag.Int("perSource", 30, "Max headlines per source")
-queriesPerHL   = flag.Int("queriesPerHeadline", 0, "Search queries per headline (0 to skip)")
 hoursBack      = flag.Int("hoursBack", 0, "Only include headlines from last N hours (0 = no limit)")
 outFile        = flag.String("out", "", "Output file path")
 notionClip     = flag.Bool("notionClip", false, "Enable Notion clipping")
-sendEmail      = flag.Bool("sendEmail", false, "Send email with results")
+sendShortEmail = flag.Bool("sendShortEmail", false, "Send short headlines digest email")
 ```
 
 ---
@@ -217,13 +216,13 @@ stop = map[string]bool{
 
 ```bash
 # 特定ソースのテスト
-./pipeline -sources=carbonherald -perSource=3 -queriesPerHeadline=0
+./pipeline -sources=carbonherald -perSource=3
 
 # 日本ソースのテスト
-./pipeline -sources=jri,env-ministry -perSource=3 -queriesPerHeadline=0
+./pipeline -sources=jri -perSource=3
 
 # 全ソースのクイックテスト
-./pipeline -sources=all-free -perSource=1 -queriesPerHeadline=0
+./pipeline -sources=all-free -perSource=1
 ```
 
 ### デバッグモード
@@ -389,15 +388,15 @@ sourceOptions := []struct {
 ## ソース一覧
 
 ### 日本ソース
-| ソース | 実装方式 | URL |
-|-------|---------|-----|
-| JRI | HTML | https://www.jri.co.jp/ |
-| 環境省 | HTML | https://www.env.go.jp/ |
-| METI | HTML | https://www.meti.go.jp/ |
-| PwC Japan | JSON | https://www.pwc.com/jp/ |
-| Mizuho R&T | HTML | https://www.mizuho-rt.co.jp/ |
-| JPX | HTML | https://www.jpx.co.jp/ |
-| カーボンクレジット.jp | HTML | https://carboncredits.jp/ |
+| ソース | 実装方式 | URL | 状態 |
+|-------|---------|-----|------|
+| JRI | HTML | https://www.jri.co.jp/ | アクティブ |
+| PwC Japan | JSON | https://www.pwc.com/jp/ | アクティブ |
+| Mizuho R&T | HTML | https://www.mizuho-rt.co.jp/ | アクティブ |
+| JPX | HTML | https://www.jpx.co.jp/ | アクティブ |
+| カーボンクレジット.jp | HTML | https://carboncredits.jp/ | アクティブ |
+| 環境省 | HTML | https://www.env.go.jp/ | 停止中 |
+| METI | HTML | https://www.meti.go.jp/ | 停止中 |
 
 ### 国際ソース
 | ソース | 実装方式 | URL |
@@ -409,5 +408,3 @@ sourceOptions := []struct {
 | IETA | HTML | https://www.ieta.org/ |
 | Politico EU | HTML | https://www.politico.eu/ |
 | IISD | HTML | https://sdg.iisd.org/ |
-| UNFCCC | HTML | https://unfccc.int/ |
-| GEF | HTML | https://www.thegef.org/ |

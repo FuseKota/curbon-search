@@ -13,7 +13,7 @@ go build -o pipeline ./cmd/pipeline
 ./scripts/collect_and_view.sh all-free 10
 
 # 方法2: 個別実行
-./pipeline -sources=all-free -perSource=5 -queriesPerHeadline=0 -out=result.json
+./pipeline -sources=all-free -perSource=5 -out=result.json
 
 # 結果確認
 ./scripts/view_headlines.sh result.json
@@ -21,30 +21,13 @@ go build -o pipeline ./cmd/pipeline
 
 ---
 
-## 📋 サンプル実行スクリプト
-
-すべてのサンプルを一度に実行：
-```bash
-./scripts/run_examples.sh
-```
-
-実行後、`outputs/`ディレクトリに以下のファイルが生成されます：
-- `quick_test.json` - クイックテスト結果
-- `standard_output.json` - 標準実行結果
-- `japan_sources.json` - 日本ソース結果
-- `europe_sources.json` - 欧州ソース結果
-- `debug_output.json` - デバッグ結果
-- `debug.log` - デバッグログ
-
----
-
 ## 🎯 このプロジェクトは何をするのか？
 
-**36の無料ソース**からカーボン関連ニュースのヘッドラインと要約を自動収集します。
+**39の無料ソース**からカーボン関連ニュースのヘッドラインと要約を自動収集します。
 
 ### 入力（コマンド実行）
 ```bash
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0
+./pipeline -sources=all-free -perSource=10
 ```
 
 ### 出力（例）
@@ -60,12 +43,10 @@ go build -o pipeline ./cmd/pipeline
 
 ---
 
-## 📰 利用可能なソース（36ソース）
+## 📰 利用可能なソース（39ソース）
 
-### 日本ソース（7つ）
+### 日本ソース（5つ）
 - `jri` - 日本総研
-- `env-ministry` - 環境省
-- `meti` - 経産省 審議会
 - `pwc-japan` - PwC Japan
 - `mizuho-rt` - みずほリサーチ＆テクノロジーズ
 - `jpx` - 日本取引所グループ
@@ -151,7 +132,7 @@ DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2
 ### ヘッドラインが収集されない
 ```bash
 # デバッグモードで詳細確認
-DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1
 ```
 
 ### ビルドエラー
@@ -164,7 +145,7 @@ go build -o pipeline ./cmd/pipeline
 ### 特定ソースがエラー
 ```bash
 # そのソースのみテスト
-./pipeline -sources=jri -perSource=3 -queriesPerHeadline=0
+./pipeline -sources=jri -perSource=3
 ```
 
 ---
@@ -177,7 +158,7 @@ go build -o pipeline ./cmd/pipeline
 
 2. **メール配信を設定**
    - `.env`にメール設定を追加
-   - `-sendEmail` フラグで収集結果をメール送信
+   - `-sendShortEmail` フラグでダイジェストメール送信
 
 3. **定期実行の設定**
    - cronやAWS Lambdaで定期実行

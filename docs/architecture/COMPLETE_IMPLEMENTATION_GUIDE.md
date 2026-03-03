@@ -1,6 +1,6 @@
 # Carbon Relay - Complete Implementation Guide 2026
 
-**最終更新**: 2026年1月4日
+**最終更新**: 2026年3月3日
 **バージョン**: 1.0
 **ステータス**: Production Ready
 
@@ -44,12 +44,12 @@ Carbon関連の無料記事を幅広く確認
 
 **使用例**:
 ```bash
-# 20の無料ソースから幅広く記事を収集
-./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail
+# 39の無料ソースから幅広く記事を収集
+./pipeline -sources=all-free -perSource=10 -sendShortEmail
 ```
 
 **特徴**:
-- 20の無料ソースから直接記事を収集
+- 39の無料ソースから直接記事を収集
 - 高速実行（5-15秒）
 - メール配信・Notion統合に対応
 
@@ -57,7 +57,7 @@ Carbon関連の無料記事を幅広く確認
 
 ### 1.3 主要機能
 
-- ✅ 20の情報ソースからのニュース自動収集
+- ✅ 39の情報ソースからのニュース自動収集
 - ✅ HTML/RSS/WordPress API によるスクレイピング
 - ✅ メール送信機能（Gmail SMTP）
 - ✅ Notion Databaseへの自動クリッピング
@@ -67,7 +67,7 @@ Carbon関連の無料記事を幅広く確認
 | 項目 | 値 |
 |------|-----|
 | 総コード行数 | 4,751行（Go） |
-| 実装ソース数 | 20（無料ソースのみ） |
+| 実装ソース数 | 39（無料ソースのみ） |
 | テスト成功率 | 100%（15/15テスト合格） |
 | 実装期間 | 2025年12月29日 - 2026年1月4日 |
 | ステータス | 本番環境対応済み |
@@ -82,7 +82,6 @@ Carbon関連の無料記事を幅広く確認
 - `github.com/joho/godotenv v1.5.1` - 環境変数管理
 
 **API統合**:
-- OpenAI Responses API（Web検索）
 - Notion API（データベース統合）
 - Gmail SMTP（メール送信）
 
@@ -96,15 +95,13 @@ Carbon関連の無料記事を幅広く確認
 /Users/kotafuse/Yasui/Prog/Test/carbon-relay/
 ├── cmd/
 │   └── pipeline/
-│       ├── main.go              (515行) - パイプライン制御とCLI
-│       ├── headlines.go         (2,354行) - 18ソース実装
-│       ├── matcher.go           (506行) - IDFスコアリング
-│       ├── search_openai.go     (295行) - OpenAI検索統合
-│       ├── search_queries.go    (232行) - クエリ生成
-│       ├── notion.go            (554行) - Notion統合
-│       ├── email.go             (175行) - メール送信
-│       ├── types.go             (42行) - データ構造
-│       └── utils.go             (78行) - ユーティリティ
+│       ├── main.go              - パイプライン制御とCLI
+│       ├── headlines.go         - ヘッドライン収集共通ロジック
+│       ├── sources_*.go         - 各ソース実装
+│       ├── notion.go            - Notion統合
+│       ├── email.go             - メール送信
+│       ├── types.go             - データ構造
+│       └── config.go            - ソース設定
 ├── .env                         - 環境変数設定
 ├── .env.example                 - 環境変数サンプル
 ├── go.mod                       - Go依存関係
@@ -126,14 +123,13 @@ Carbon関連の無料記事を幅広く確認
 ```go
 -sources           // 収集するソース（CSV形式）
 -perSource         // ソースあたりの最大記事数
--queriesPerHeadline // 記事あたりの検索クエリ数
 -notionClip        // Notionへクリップ
--sendEmail         // メール送信
+-sendShortEmail         // メール送信
 ```
 
 #### headlines.go (ソース実装)
 **責務**:
-- 18ニュースソースの実装
+- 39ニュースソースの実装
 - 複数のスクレイピングパターン:
   - WordPress REST API（7ソース）
   - HTML Scraping with goquery（8ソース）
@@ -143,23 +139,6 @@ Carbon関連の無料記事を幅広く確認
 - Excerpt抽出
 
 **コード比率**: 全体の49.6%
-
-#### matcher.go (スコアリング)
-**責務**:
-- IDF（逆文書頻度）ベーススコアリング
-- シグナル抽出（Markets, Topics, Geos）
-- トークン正規化とストップワード除去
-- 複数の類似度メトリクス計算
-- ソース品質ブースト
-- 新しさスコア計算
-
-#### search_openai.go (Web検索)
-**責務**:
-- OpenAI Responses API統合
-- 3段階フォールバックでURL抽出
-- 擬似タイトル生成
-- 正規表現ベースURL抽出
-- デバッグログサポート
 
 #### notion.go (Notion統合)
 **責務**:
@@ -188,68 +167,7 @@ Carbon関連の無料記事を幅広く確認
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 2: Search (if queriesPerHeadline > 0)                │
-├─────────────────────────────────────────────────────────────┤
-│  各Headlineに対して:                                          │
-│    ↓                                                        │
-│  検索クエリ生成（buildSearchQueries - 7戦略）                 │
-│    ↓                                                        │
-│  OpenAI Web Search（クエリごと）                             │
-│    - HTTP POST to api.openai.com/v1/responses              │
-│    - Model: gpt-4o-mini                                    │
-│    - Tool: web_search                                      │
-│    ↓                                                        │
-│  URL抽出（3段階フォールバック）                                │
-│    - web_search_call.results（理想、通常は空）                │
-│    - action.sources（URLのみ）                               │
-│    - テキスト正規表現抽出（主要手法）                           │
-│    ↓                                                        │
-│  擬似タイトル生成                                              │
-│    ↓                                                        │
-│  URL重複排除（global seen map）                              │
-│    ↓                                                        │
-│  FreeArticle[] candidates（見出しごと）                       │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 3: Matching                                           │
-├─────────────────────────────────────────────────────────────┤
-│  IDFコーパス構築                                               │
-│    - 全見出しタイトル + 全候補タイトル                           │
-│    ↓                                                        │
-│  各Headline-Candidateペアに対して:                            │
-│    ↓                                                        │
-│  トークン化（reTok regex）                                    │
-│    ↓                                                        │
-│  シグナル抽出                                                 │
-│    - Markets: eua, uka, rggi, cca, etc.                    │
-│    - Topics: vcm, cdr, dac, beccs, etc.                    │
-│    - Geos: US, UK, EU, China, Japan, etc.                  │
-│    ↓                                                        │
-│  類似度スコア計算                                              │
-│    - IDF加重リコール類似度（56%）                              │
-│    - IDF加重Jaccard（28%）                                   │
-│    - マーケットマッチ（6%）                                    │
-│    - トピックマッチ（4%）                                      │
-│    - 地理的マッチ（2%）                                        │
-│    - 新しさ（4%）                                            │
-│    - 品質ブースト（最大+0.18）                                │
-│    ↓                                                        │
-│  フィルタリング:                                              │
-│    - 最小スコア（-minScore, default 0.32）                   │
-│    - 厳格マーケットマッチ（見出しにマーケットシグナルがある場合） │
-│    - 特定地域マッチ（見出しに特定地域がある場合）                 │
-│    - 共有トークン >= 2（titleSim >= 0.90でない限り）           │
-│    ↓                                                        │
-│  スコアでソート（降順）                                         │
-│    ↓                                                        │
-│  上位K件取得（-topK, default 3）                              │
-│    ↓                                                        │
-│  RelatedFree[] per headline                                 │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 4: Output                                             │
+│ Phase 2: Output                                             │
 ├─────────────────────────────────────────────────────────────┤
 │  JSON出力                                                    │
 │    - stdout または ファイル（-out flag）                       │
@@ -260,7 +178,7 @@ Carbon関連の無料記事を幅広く確認
 │    - フルコンテンツをブロックに保存                             │
 │    - AI Summaryフィールド保存                                 │
 │    ↓                                                        │
-│  メール送信（-sendEmail指定時）                                │
+│  メール送信（-sendShortEmail指定時）                                │
 │    - Notionから取得                                          │
 │    - プレーンテキストサマリー生成                               │
 │    - Gmail SMTP経由で送信                                    │
@@ -659,7 +577,7 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 1. ユーザー入力（CLI flags）
    ↓
 2. ソース選択（-sources flag）
-   - デフォルト: 全18ソース
+   - デフォルト: 全39ソース
    - カスタム: カンマ区切りリスト
    ↓
 3. ソースごとのスクレイピング
@@ -693,211 +611,7 @@ type Headline struct {
 }
 ```
 
-### 4.2 フェーズ2: 検索（オプション）
-
-**条件**: `-queriesPerHeadline > 0`
-**入力**: `Headline[]`
-**出力**: `FreeArticle[]` candidates per headline
-
-**処理フロー**:
-```
-1. 各Headlineに対して:
-   ↓
-2. 検索クエリ生成（buildSearchQueries）
-   - 7つの戦略を適用:
-     a) 引用符付き完全一致
-     b) excerptの最初の150文字
-     c) 固有名詞抽出（組織、プロジェクト）
-     d) 数値抽出（$50 million、30%、2025）
-     e) 地理的site:演算子（site:go.kr等）
-     f) PDF優先（filetype:pdf）
-     g) 一次情報源優先（site:unfccc.int等）
-   ↓
-3. クエリごとにOpenAI Web Search実行
-   - HTTP POST to api.openai.com/v1/responses
-   - Model: gpt-4o-mini（デフォルト）
-   - Tool: web_search
-   - Max results per query: 10（-resultsPerQuery）
-   ↓
-4. URL抽出（3段階フォールバック）
-   a) web_search_call.results（理想だが通常空）
-      - 構造化データ（title、snippet）
-   b) action.sources（URLのみ）
-      - URLフィールドのみ
-   c) テキスト正規表現抽出（主要手法）
-      - 本文テキストから正規表現でURL抽出
-   ↓
-5. 擬似タイトル生成
-   - URLからドメイン抽出
-   - パス部分をクリーンアップ
-   - 人間可読な形式に変換
-   ↓
-6. グローバルURL重複排除
-   - globalSeenマップでURL追跡
-   - 全見出し間で重複排除
-   ↓
-7. 候補のマージ
-   - 見出しあたり最大N件（-searchPerHeadline, default 25）
-   - URLをキーとしたマップでマージ
-   ↓
-8. FreeArticle[]配列の構築
-   - Source: "OpenAI Search"（または抽出元）
-   - Title: 実際のタイトルまたは擬似タイトル
-   - URL: 記事URL
-   - PublishedAt: 抽出可能な場合
-   - Excerpt: 抽出可能な場合
-```
-
-**データ構造**:
-```go
-type FreeArticle struct {
-    Source      string `json:"source"`
-    Title       string `json:"title"`
-    URL         string `json:"url"`
-    PublishedAt string `json:"publishedAt,omitempty"`
-    Excerpt     string `json:"excerpt,omitempty"`
-}
-```
-
-**検索クエリ生成例**:
-```go
-// 戦略1: 引用符付き完全一致
-query := fmt.Sprintf("\"%s\"", headline.Title)
-
-// 戦略3: 固有名詞抽出
-properNouns := extractProperNouns(headline.Title)
-// 例: "European Commission", "Greenhouse Gas Protocol"
-
-// 戦略4: 数値抽出
-numbers := extractNumbers(headline.Title)
-// 例: "$50 million", "30%", "2025"
-
-// 戦略5: 地理的site:演算子
-if containsGeo(headline.Title, "South Korea") {
-    query += " site:go.kr"
-}
-```
-
-### 4.3 フェーズ3: マッチング
-
-**入力**: `Headline[]` + `FreeArticle[][]` candidates
-**出力**: `RelatedFree[]` per headline
-
-**処理フロー**:
-```
-1. IDFコーパス構築
-   - 全見出しタイトル + 全候補タイトル
-   - N個のドキュメント
-   ↓
-2. IDF計算
-   - 各トークンに対して:
-     IDF(term) = log(1 + N / (1 + df))
-   - df = ドキュメント頻度
-   ↓
-3. 各Headline-Candidateペアに対して:
-   ↓
-4. トークン化
-   - 正規表現: [A-Za-z0-9]+(?:-[A-Za-z0-9]+)*
-   - ハイフン付き単語を保持
-   - 小文字に変換
-   ↓
-5. トークン正規化
-   - normToken マップ適用
-   - 例: "euas" → "eua", "credits" → "credit"
-   ↓
-6. ストップワード除去
-   - 25の一般的英単語
-   - 例: the, a, an, to, of, in, on
-   ↓
-7. シグナル抽出
-   a) Markets:
-      - eua, uka, rggi, cca, accu, nzu, irec, ccer, corsia
-   b) Topics:
-      - vcm, cdr, dac, beccs, biochar, methane, forest
-      - offset, credit, redd, nature-based, carbon removal
-   c) Geos:
-      - US, UK, EU, South Korea, New Zealand, Taiwan
-      - China, Japan, India, Australia, etc.
-   ↓
-8. 類似度スコア計算
-   a) IDF加重リコール類似度（56%重み）
-      overlap = Σ(IDF(t) for t in intersection) / Σ(IDF(t) for t in headline)
-
-   b) IDF加重Jaccard（28%重み）
-      jaccard = Σ(IDF(t) for t in intersection) / Σ(IDF(t) for t in union)
-
-   c) マーケットマッチ（6%重み）
-      marketMatch = |h.Markets ∩ c.Markets| / |h.Markets|
-
-   d) トピックマッチ（4%重み）
-      topicMatch = |h.Topics ∩ c.Topics| / |h.Topics|
-
-   e) 地理的マッチ（2%重み）
-      geoMatch = |h.Geos ∩ c.Geos| / |h.Geos|
-
-   f) 新しさスコア（4%重み）
-      recency = exp(-age_days / 14.0)  // 14日半減期
-
-   g) ソース品質ブースト（加算）
-      - .gov/.gov.uk/.go.jp: +0.18
-      - .pdf files: +0.18
-      - europa.eu: +0.16
-      - IR paths: +0.12
-      - NGOs: +0.12
-      - Press wires: +0.08
-   ↓
-9. 必須フィルタリング
-   a) 見出しにマーケットシグナルがあり、strictMarket=trueの場合:
-      → 候補も同じマーケットを持つ必要がある
-
-   b) 見出しに特定地域がある場合:
-      → 候補も同じ地域を持つ必要がある
-
-   c) 曖昧な地理的マッチの除外:
-      if marketMatch=0 AND topicMatch=0 AND geoMatch>0:
-         → overlap >= 0.50 OR titleSim >= 0.84 が必要
-
-   d) 最小共通単語数:
-      → sharedTokens >= 2（titleSim >= 0.90でない限り）
-   ↓
-10. スコアフィルタ
-    - score >= minScore（デフォルト0.32）
-    ↓
-11. スコアでソート（降順）
-    ↓
-12. 上位K件取得（-topK, default 3）
-    ↓
-13. RelatedFree[]配列の構築
-    - Source、Title、URL、PublishedAt、Excerpt
-    - Score: 計算されたスコア
-    - Reason: スコアの内訳
-```
-
-**最終スコア計算式**:
-```
-score = 0.56 * overlap +
-        0.28 * titleSim +
-        0.06 * marketMatch +
-        0.04 * topicMatch +
-        0.02 * geoMatch +
-        0.04 * recency +
-        qBoost
-```
-
-**データ構造**:
-```go
-type RelatedFree struct {
-    Source      string  `json:"source"`
-    Title       string  `json:"title"`
-    URL         string  `json:"url"`
-    PublishedAt string  `json:"publishedAt,omitempty"`
-    Excerpt     string  `json:"excerpt,omitempty"`
-    Score       float64 `json:"score"`
-    Reason      string  `json:"reason"`
-}
-```
-
-### 4.4 フェーズ4: 出力
+### 4.2 フェーズ2: 出力
 
 **入力**: `Headline[]` with `RelatedFree[]`
 **出力**: JSON、Notion、Email
@@ -934,7 +648,7 @@ type RelatedFree struct {
       - 新規作成時に.envに自動保存
       - appendToEnvFile()関数使用
    ↓
-3. メール送信（-sendEmail指定時）
+3. メール送信（-sendShortEmail指定時）
    a) Notionから最近の見出し取得
       - 過去N日間（-emailDaysBack, default 1）
       - Published Dateでフィルタ
@@ -952,51 +666,7 @@ type RelatedFree struct {
 
 ---
 
-## 5. スコアリング・マッチングアルゴリズム
-
-### 5.1 IDF（逆文書頻度）加重システム
-
-**目的**: 一般的な単語にペナルティを与え、特徴的な用語をブーストする
-
-**IDF計算式**:
-```
-IDF(term) = log(1 + N / (1 + df))
-
-ここで:
-- N = コーパス内の総ドキュメント数
-- df = ドキュメント頻度（termを含むドキュメント数）
-```
-
-**コーパス**: 全見出しタイトル + 全候補タイトル
-
-**実装例**:
-```go
-func buildIDF(docs [][]string) map[string]float64 {
-    N := len(docs)
-    df := make(map[string]int)
-
-    // ドキュメント頻度をカウント
-    for _, doc := range docs {
-        seen := make(map[string]bool)
-        for _, term := range doc {
-            if !seen[term] {
-                df[term]++
-                seen[term] = true
-            }
-        }
-    }
-
-    // IDF計算
-    idf := make(map[string]float64)
-    for term, freq := range df {
-        idf[term] = math.Log(1.0 + float64(N) / (1.0 + float64(freq)))
-    }
-
-    return idf
-}
-```
-
-### 5.2 トークン正規化
+## 5. トークン正規化
 
 **トークン化正規表現**:
 ```go
@@ -1035,267 +705,6 @@ stopwords := map[string]bool{
     "did": true,
 }
 ```
-
-### 5.3 シグナル抽出
-
-#### Markets（市場シグナル）
-```go
-markets := map[string]bool{
-    "eua":        strings.Contains(lower, "eua") || reEUA.MatchString(raw),
-    "uka":        strings.Contains(lower, "uka") || reUKA.MatchString(raw),
-    "rggi":       strings.Contains(lower, "rggi"),
-    "cca":        strings.Contains(lower, "cca") || tokSet["cca"],
-    "accu":       strings.Contains(lower, "accu") || tokSet["accu"],
-    "nzu":        strings.Contains(lower, "nzu") || tokSet["nzu"],
-    "irec":       strings.Contains(lower, "irec") || strings.Contains(lower, "i-rec"),
-    "ccer":       strings.Contains(lower, "ccer") || tokSet["ccer"],
-    "corsia":     strings.Contains(lower, "corsia"),
-    "article 6":  strings.Contains(lower, "article 6"),
-    "jcm":        strings.Contains(lower, "jcm") || strings.Contains(lower, "二国間クレジット"),
-}
-```
-
-#### Topics（トピックシグナル）
-```go
-topics := map[string]bool{
-    "vcm":           strings.Contains(lower, "vcm") || strings.Contains(lower, "voluntary"),
-    "cdr":           strings.Contains(lower, "cdr") || strings.Contains(lower, "carbon removal"),
-    "dac":           strings.Contains(lower, "dac") || strings.Contains(lower, "direct air capture"),
-    "beccs":         strings.Contains(lower, "beccs"),
-    "biochar":       strings.Contains(lower, "biochar"),
-    "methane":       strings.Contains(lower, "methane") || strings.Contains(lower, "ch4"),
-    "forest":        strings.Contains(lower, "forest") || strings.Contains(lower, "deforestation"),
-    "offset":        tokSet["offset"],
-    "credit":        tokSet["credit"],
-    "redd":          strings.Contains(lower, "redd"),
-    "nature-based":  strings.Contains(lower, "nature-based") || strings.Contains(lower, "nbs"),
-}
-```
-
-#### Geos（地理シグナル）
-```go
-geos := map[string]bool{
-    "united_states": reUS.MatchString(raw),
-    "united_kingdom": reUK.MatchString(raw),
-    "eu": reEU.MatchString(raw),
-    "europe": strings.Contains(lower, "europe"),
-    "south_korea": strings.Contains(lower, "south korea"),
-    "new_zealand": strings.Contains(lower, "new zealand"),
-    // ... 更に多数
-}
-```
-
-### 5.4 類似度メトリクス
-
-#### 1. IDF加重リコール類似度（56%重み）
-```go
-func idfWeightedRecallOverlap(htok, ctok []string, idf map[string]float64) (float64, int) {
-    hset := toSet(htok)
-    cset := toSet(ctok)
-
-    intersection := intersect(hset, cset)
-    sharedTokens := len(intersection)
-
-    sumIntersection := 0.0
-    for term := range intersection {
-        sumIntersection += idf[term]
-    }
-
-    sumHeadline := 0.0
-    for term := range hset {
-        sumHeadline += idf[term]
-    }
-
-    if sumHeadline == 0 {
-        return 0, 0
-    }
-
-    return sumIntersection / sumHeadline, sharedTokens
-}
-```
-
-**特徴**:
-- 見出しの重要な単語が候補にどれだけカバーされているか
-- 見出しの語彙を基準にリコールを測定
-
-#### 2. IDF加重Jaccard類似度（28%重み）
-```go
-func idfWeightedJaccard(htok, ctok []string, idf map[string]float64) float64 {
-    hset := toSet(htok)
-    cset := toSet(ctok)
-
-    intersection := intersect(hset, cset)
-    union := union(hset, cset)
-
-    sumIntersection := 0.0
-    for term := range intersection {
-        sumIntersection += idf[term]
-    }
-
-    sumUnion := 0.0
-    for term := range union {
-        sumUnion += idf[term]
-    }
-
-    if sumUnion == 0 {
-        return 0
-    }
-
-    return sumIntersection / sumUnion
-}
-```
-
-**特徴**:
-- 両方のドキュメントの全体的な類似度
-- 対称的な尺度
-
-#### 3. シグナルマッチスコア（Markets 6%、Topics 4%、Geos 2%）
-```go
-func intersectScore(a, b map[string]bool) float64 {
-    if len(a) == 0 {
-        return 0
-    }
-
-    overlap := 0
-    for key := range a {
-        if b[key] {
-            overlap++
-        }
-    }
-
-    return float64(overlap) / float64(len(a))
-}
-```
-
-**特徴**:
-- 見出しのシグナルを基準にリコール測定
-- 候補が見出しのシグナルをどれだけカバーするか
-
-#### 4. 新しさスコア（4%重み）
-```go
-func recencyScoreRFC3339(publishedAt string, now time.Time, daysBack int) float64 {
-    t, err := time.Parse(time.RFC3339, publishedAt)
-    if err != nil {
-        return 0
-    }
-
-    age := now.Sub(t)
-    ageDays := age.Hours() / 24
-
-    // 期間外の記事を除外
-    if daysBack > 0 && ageDays > float64(daysBack) {
-        return 0
-    }
-
-    // 指数減衰（14日半減期）
-    return math.Exp(-ageDays / 14.0)
-}
-```
-
-**特徴**:
-- 14日半減期の指数減衰
-- 期間ウィンドウ外の記事は0スコア
-
-#### 5. ソース品質ブースト（加算）
-```go
-func sourceQualityBoost(url string) float64 {
-    lower := strings.ToLower(url)
-
-    // 政府サイト
-    if strings.Contains(lower, ".gov") ||
-       strings.Contains(lower, ".gov.uk") ||
-       strings.Contains(lower, ".go.jp") {
-        return 0.18
-    }
-
-    // PDFドキュメント
-    if strings.HasSuffix(lower, ".pdf") {
-        return 0.18
-    }
-
-    // EU公式サイト
-    if strings.Contains(lower, "europa.eu") {
-        return 0.16
-    }
-
-    // 投資家向け情報
-    if strings.Contains(lower, "/investor") ||
-       strings.Contains(lower, "/ir/") {
-        return 0.12
-    }
-
-    // NGO
-    if strings.Contains(lower, "carbonmarketwatch.org") ||
-       strings.Contains(lower, "clientearth.org") {
-        return 0.12
-    }
-
-    // プレスリリース配信
-    if strings.Contains(lower, "prnewswire") ||
-       strings.Contains(lower, "businesswire") {
-        return 0.08
-    }
-
-    return 0.0
-}
-```
-
-### 5.5 フィルタリングルール
-
-#### 必須フィルタ
-
-**1. 厳格マーケットマッチ**:
-```go
-if strictMarket && len(hs.Markets) > 0 && marketMatch == 0 {
-    return scored{}, false
-}
-```
-- 見出しにマーケットシグナルがある場合
-- 候補も同じマーケットを持つ必要がある
-
-**2. 特定地域マッチ**:
-```go
-if hasSpecificGeo(hs) && geoMatch == 0 {
-    return scored{}, false
-}
-
-func hasSpecificGeo(s Signals) bool {
-    for geo := range s.Geos {
-        if geo != "united_states" && geo != "united_kingdom" &&
-           geo != "eu" && geo != "europe" {
-            return true
-        }
-    }
-    return false
-}
-```
-- 見出しに特定地域（US/UK/EU以外）がある場合
-- 候補も同じ地域を持つ必要がある
-
-**3. 曖昧な地理的マッチの除外**:
-```go
-if marketMatch == 0 && topicMatch == 0 && geoMatch > 0 &&
-   overlap < 0.50 && titleSim < 0.84 {
-    return scored{}, false
-}
-```
-- 地域だけが一致して内容が異なる記事を除外
-
-**4. 最小共通単語数**:
-```go
-if sharedTokens < 2 && titleSim < 0.90 {
-    return scored{}, false
-}
-```
-- 共通単語が2未満で類似度も低い記事を除外
-
-**5. 最小スコア閾値**:
-```go
-if score < minScore {
-    return scored{}, false
-}
-```
-- デフォルト: 0.32未満の記事を除外
 
 ---
 
@@ -1605,9 +1014,6 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 
 **必須変数**:
 ```bash
-# OpenAI API Key（Web検索に必須）
-OPENAI_API_KEY=sk-your-openai-api-key-here
-
 # Notion統合トークン（Notionクリッピングに必須）
 NOTION_TOKEN=secret_your-notion-integration-token-here
 ```
@@ -1629,12 +1035,6 @@ EMAIL_TO=recipient@example.com
 
 **デバッグフラグ**:
 ```bash
-# OpenAI検索結果サマリーを表示
-DEBUG_OPENAI=1
-
-# OpenAI APIの完全なレスポンスを表示
-DEBUG_OPENAI_FULL=1
-
 # スクレイピング詳細を表示
 DEBUG_SCRAPING=1
 
@@ -1644,85 +1044,27 @@ DEBUG_HTML=1
 
 ### 7.2 コマンドラインフラグ
 
-**全13フラグ**:
-
-#### 入力制御（3フラグ）
+#### 入力制御
 ```bash
--headlines <path>
-  # JSONファイルから見出しを読み込み（スクレイピングをスキップ）
-  # デフォルト: ""（スクレイピングを実行）
-
 -sources <csv>
   # 収集するソースのカンマ区切りリスト
-  # デフォルト: 全18ソース
-  # 例: -sources=carbonpulse,sandbag,carbon-brief
+  # デフォルト: all-free（全39ソース）
+  # 例: -sources=carbonherald,sandbag,carbon-brief
 
 -perSource <int>
   # ソースあたりの最大見出し数
   # デフォルト: 30
+
+-hoursBack <int>
+  # 指定時間以内の記事のみ（0で制限なし）
+  # デフォルト: 0
 ```
 
-#### 検索制御（6フラグ）
-```bash
--queriesPerHeadline <int>
-  # 見出しあたりのクエリ数
-  # デフォルト: 3
-  # 0に設定すると検索を無効化
-
--resultsPerQuery <int>
-  # クエリあたりの結果数
-  # デフォルト: 10
-
--searchPerHeadline <int>
-  # 見出しあたりの最大候補数
-  # デフォルト: 25
-
--searchProvider <string>
-  # 検索プロバイダ
-  # デフォルト: "openai"
-  # 現在openaiのみサポート
-
--openaiModel <string>
-  # OpenAIモデル
-  # デフォルト: "gpt-4o-mini"
-  # 他のオプション: "gpt-4o", "gpt-4-turbo"
-
--openaiTool <string>
-  # ツールタイプ
-  # デフォルト: "web_search"
-  # オプション: "web_search_preview"
-```
-
-#### マッチング制御（4フラグ）
-```bash
--topK <int>
-  # 見出しあたりの最大関連記事数
-  # デフォルト: 3
-
--minScore <float>
-  # 最小スコア閾値
-  # デフォルト: 0.32
-  # 範囲: 0.0 - 1.0
-
--daysBack <int>
-  # 新しさウィンドウ（日数）
-  # デフォルト: 60
-  # 0で無効化
-
--strictMarket <bool>
-  # 見出しにマーケットシグナルがある場合、マーケットマッチを要求
-  # デフォルト: true
-```
-
-#### 出力制御（2フラグ）
+#### 出力制御
 ```bash
 -out <path>
   # 出力JSONをファイルに書き込み
   # デフォルト: ""（stdoutに出力）
-
--saveFree <path>
-  # プールされた無料候補をファイルに保存
-  # デフォルト: ""（保存しない）
 ```
 
 #### Notion統合（3フラグ）
@@ -1743,7 +1085,7 @@ DEBUG_HTML=1
 
 #### メール統合（2フラグ）
 ```bash
--sendEmail <bool>
+-sendShortEmail <bool>
   # メールサマリーを送信
   # デフォルト: false
 
@@ -1754,33 +1096,9 @@ DEBUG_HTML=1
 
 ### 7.3 デフォルトソースリスト
 
-**`-sources`フラグ未指定時の全18ソース**:
-```go
-defaultSources := []string{
-    "carbonpulse",
-    "qci",
-    "carboncredits.jp",
-    "carbonherald",
-    "climatehomenews",
-    "carboncredits.com",
-    "sandbag",
-    "ecosystem-marketplace",
-    "carbon-brief",
-    "icap",
-    "ieta",
-    "energy-monitor",
-    "jri",
-    "env-ministry",
-    "jpx",
-    "meti",
-    "world-bank",
-    "carbon-market-watch",
-    "newclimate",
-    "carbon-knowledge-hub",
-    "pwc-japan",
-    "mizuho-rt",
-}
-```
+**`-sources=all-free`指定時の全39アクティブソース**:
+
+`internal/pipeline/config.go` の `defaultSources` を参照してください。
 
 **ソース名の対応**:
 | CLI名 | 実装関数 | ソース名 |
@@ -1811,9 +1129,8 @@ defaultSources := []string{
 ```bash
 # 無料ソースから記事を収集
 ./pipeline \
-  -sources=sandbag,carbon-brief,climate-home,carbon-herald,carboncredits-com,carbon-knowledge-hub,ecosystem,icap,ieta,energy-monitor,carbon-market-watch,new-climate,carboncredits-jp,jri,env-ministry,jpx \
+  -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=free_articles.json
 ```
 
@@ -1824,12 +1141,11 @@ defaultSources := []string{
 ./pipeline \
   -sources=all-free \
   -perSource=15 \
-  -queriesPerHeadline=0 \
-  -sendEmail
+  -sendShortEmail
 ```
 
 **特徴**:
-- ✅ 20の無料ソースから直接記事を収集
+- ✅ 39の無料ソースから直接記事を収集
 - ✅ 実行速度が速い（5-15秒程度）
 - ✅ メール配信・Notion統合に対応
 
@@ -1850,7 +1166,6 @@ defaultSources := []string{
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=headlines.json
 ```
 
@@ -1872,7 +1187,6 @@ defaultSources := []string{
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -notionClip
 ```
 
@@ -1888,8 +1202,7 @@ defaultSources := []string{
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
-  -sendEmail
+  -sendShortEmail
 ```
 
 **出力**:
@@ -1904,7 +1217,6 @@ defaultSources := []string{
 DEBUG_SCRAPING=1 ./pipeline \
   -sources=carbonherald \
   -perSource=2 \
-  -queriesPerHeadline=0 \
   -out=debug.json
 ```
 
@@ -1916,9 +1228,8 @@ DEBUG_SCRAPING=1 ./pipeline \
 
 ```bash
 ./pipeline \
-  -sources=jri,env-ministry,jpx,meti,pwc-japan,mizuho-rt,carboncredits.jp \
+  -sources=jri,jpx,pwc-japan,mizuho-rt,carboncredits.jp \
   -perSource=20 \
-  -queriesPerHeadline=0 \
   -notionClip
 ```
 
@@ -1928,47 +1239,17 @@ DEBUG_SCRAPING=1 ./pipeline \
 ./pipeline \
   -sources=sandbag,icap,ieta,politico-eu \
   -perSource=15 \
-  -queriesPerHeadline=0 \
   -notionClip
 ```
 
-#### 例3: 高精度マッチング（厳格設定）
+#### 例3: 過去24時間の記事のみ
 
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=10 \
-  -queriesPerHeadline=5 \
-  -resultsPerQuery=15 \
-  -searchPerHeadline=40 \
-  -topK=5 \
-  -minScore=0.40 \
-  -strictMarket=true \
-  -out=high_precision.json
-```
-
-#### 例4: 低精度マッチング（緩い設定）
-
-```bash
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=10 \
-  -queriesPerHeadline=2 \
-  -topK=2 \
-  -minScore=0.25 \
-  -strictMarket=false \
-  -out=high_recall.json
-```
-
-#### 例5: 新しい記事のみ（7日間）
-
-```bash
-./carbon-relay \
-  -sources=carbonpulse,qci \
-  -perSource=20 \
-  -queriesPerHeadline=3 \
-  -daysBack=7 \
-  -notionClip
+./pipeline \
+  -sources=all-free \
+  -perSource=30 \
+  -hoursBack=24 \
+  -out=recent_headlines.json
 ```
 
 ---
@@ -1992,19 +1273,15 @@ mkdir -p logs
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # 見出し収集 + Notionクリップ
-./carbon-relay \
-  -sources=carbonpulse,qci,sandbag,carbon-brief,icap,ieta \
+./pipeline \
+  -sources=all-free \
   -perSource=30 \
-  -queriesPerHeadline=3 \
-  -topK=3 \
-  -minScore=0.32 \
-  -daysBack=60 \
   -notionClip \
   > logs/clip_${TIMESTAMP}.log 2>&1
 
 # メール送信（前日の記事）
-./carbon-relay \
-  -sendEmail \
+./pipeline \
+  -sendShortEmail \
   -emailDaysBack=1 \
   >> logs/email_${TIMESTAMP}.log 2>&1
 
@@ -2208,31 +1485,7 @@ func collectHeadlinesMizuhoRT(limit int, cfg headlineSourceConfig) ([]Headline, 
 
 ### 10.1 よくある問題と解決策
 
-#### 問題1: OpenAI API Key Error
-**エラーメッセージ**:
-```
-ERROR: set OPENAI_API_KEY (OpenAI API key) in your environment
-```
-
-**原因**:
-- `.env`ファイルに`OPENAI_API_KEY`が設定されていない
-- 環境変数が読み込まれていない
-
-**解決策**:
-```bash
-# .envファイルを確認
-cat .env | grep OPENAI_API_KEY
-
-# または環境変数を直接設定
-export OPENAI_API_KEY=sk-your-key-here
-
-# または検索を無効化
-./carbon-relay -queriesPerHeadline=0 ...
-```
-
----
-
-#### 問題2: Notion Token Error
+#### 問題1: Notion Token Error
 **エラーメッセージ**:
 ```
 ERROR: NOTION_TOKEN environment variable is required for Notion integration
@@ -2250,7 +1503,7 @@ ERROR: NOTION_TOKEN environment variable is required for Notion integration
 echo "NOTION_TOKEN=secret_your-token-here" >> .env
 
 # または-notionClipを外す
-./carbon-relay ... # （-notionClipなし）
+./pipeline ... # （-notionClipなし）
 ```
 
 ---
@@ -2268,7 +1521,7 @@ ERROR: -notionPageID is required when creating a new Notion database
 **解決策**:
 ```bash
 # 初回実行時は必ず-notionPageIDを指定
-./carbon-relay \
+./pipeline \
   -notionClip \
   -notionPageID=1234567890abcdef1234567890abcdef \
   ...
@@ -2295,40 +1548,18 @@ ERROR collecting [Source] headlines: no [Source] headlines found
 **解決策**:
 ```bash
 # デバッグモードで実行
-DEBUG_SCRAPING=1 ./carbon-relay -sources=problem-source ...
+DEBUG_SCRAPING=1 ./pipeline -sources=problem-source ...
 
 # キーワードフィルタを確認（該当する場合）
 # headlines.goのキーワードリストをチェック
 
 # 別のソースで試す
-./carbon-relay -sources=carbon-brief ...
+./pipeline -sources=carbon-brief ...
 ```
 
 ---
 
-#### 問題5: OpenAI Search Returns No Results
-**症状**:
-- 検索は実行されるが、候補が0件
-
-**原因**:
-- OpenAI API の`web_search_call.results`が常に空
-- 3段階フォールバックでもURL抽出失敗
-
-**解決策**:
-```bash
-# デバッグモードで確認
-DEBUG_OPENAI_FULL=1 ./carbon-relay -sources=carbonpulse -perSource=1 -queriesPerHeadline=1
-
-# 検索クエリを確認
-# search_queries.goの戦略を調整
-
-# 一時的に検索を無効化
-./carbon-relay -queriesPerHeadline=0 ...
-```
-
----
-
-#### 問題6: Notion Clipping Fails
+#### 問題5: Notion Clipping Fails
 **エラーメッセージ**:
 ```
 WARN: failed to clip headline 'xxx': API error
@@ -2355,7 +1586,7 @@ cat .env | grep NOTION_DATABASE_ID
 
 ---
 
-#### 問題7: Email Sending Fails
+#### 問題6: Email Sending Fails
 **エラーメッセージ**:
 ```
 ERROR sending email: authentication failed
@@ -2384,33 +1615,22 @@ echo "EMAIL_PASSWORD=your-16-char-app-password" >> .env
 
 **ステップ1: 見出し収集のみ**:
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
+./pipeline \
+  -sources=carbonherald \
   -perSource=5 \
-  -queriesPerHeadline=0 \
   -out=test_headlines.json
 ```
 
-**ステップ2: 検索追加**:
+**ステップ2: JSON出力確認**:
 ```bash
-./carbon-relay \
-  -sources=carbonpulse \
-  -perSource=2 \
-  -queriesPerHeadline=1 \
-  -out=test_search.json
+cat test_headlines.json | jq 'length'
 ```
 
-**ステップ3: マッチング確認**:
+**ステップ3: Notionクリップ**:
 ```bash
-cat test_search.json | jq '.[] | select(.relatedFree | length > 0)'
-```
-
-**ステップ4: Notionクリップ**:
-```bash
-./carbon-relay \
-  -sources=carbonpulse \
+./pipeline \
+  -sources=carbonherald \
   -perSource=1 \
-  -queriesPerHeadline=1 \
   -notionClip
 ```
 
@@ -2420,12 +1640,11 @@ cat test_search.json | jq '.[] | select(.relatedFree | length > 0)'
 
 **各ソースを個別にテスト**:
 ```bash
-for source in carbonpulse qci jri pwc-japan carbon-knowledge-hub; do
+for source in carbonherald jri pwc-japan carbon-knowledge-hub; do
   echo "Testing: $source"
-  ./carbon-relay \
+  ./pipeline \
     -sources=$source \
     -perSource=3 \
-    -queriesPerHeadline=0 \
     -out=test_${source}.json 2>&1 | tee test_${source}.log
 done
 ```
@@ -2458,19 +1677,14 @@ cat matched.json | jq '[.[].relatedFree[]?.score] | add / length'
 
 #### テクニック4: ログ分析
 
-**OpenAI検索ログ**:
-```bash
-DEBUG_OPENAI=1 ./carbon-relay ... 2>&1 | grep "OpenAI"
-```
-
 **スクレイピングエラーログ**:
 ```bash
-./carbon-relay ... 2>&1 | grep "ERROR"
+./pipeline ... 2>&1 | grep "ERROR"
 ```
 
 **タイミング分析**:
 ```bash
-time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
+time ./pipeline -sources=all-free -perSource=10
 ```
 
 ---
@@ -2507,22 +1721,18 @@ time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 
 #### 最適化3: バッチサイズ調整
 
-**少数の見出しで高精度**:
+**少数のソースで詳細収集**:
 ```bash
-./carbon-relay \
-  -perSource=5 \
-  -queriesPerHeadline=5 \
-  -resultsPerQuery=15 \
-  -searchPerHeadline=50
+./pipeline \
+  -sources=carbonherald,carbon-brief \
+  -perSource=50
 ```
 
-**多数の見出しで高速**:
+**全ソースで高速**:
 ```bash
-./carbon-relay \
-  -perSource=50 \
-  -queriesPerHeadline=2 \
-  -resultsPerQuery=8 \
-  -searchPerHeadline=20
+./pipeline \
+  -sources=all-free \
+  -perSource=5
 ```
 
 ---
@@ -2531,14 +1741,13 @@ time ./carbon-relay -sources=carbonpulse -perSource=10 -queriesPerHeadline=3
 
 このドキュメントは、Carbon Relayプロジェクトの完全な実装ガイドです。
 
-### 2つの運用モード
+### 無料記事収集モード
 
-本システムは**2つの異なる運用モード**をサポートします：
+本システムは**無料記事収集モード**で運用します：
 
-#### 🟢 無料記事収集モード
 - **用途**: 幅広いCarbon関連無料記事の収集と要約配信
-- **コマンド例**: `./pipeline -sources=all-free -perSource=10 -queriesPerHeadline=0 -sendEmail`
-- **特徴**: コスト効率が高く、高速実行
+- **コマンド例**: `./pipeline -sources=all-free -perSource=10 -sendShortEmail`
+- **特徴**: 39の無料ソースから直接収集、コスト効率が高く、高速実行
 - **詳細**: セクション1.2、セクション8.1
 
 ---

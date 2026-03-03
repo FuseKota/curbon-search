@@ -32,10 +32,9 @@
 
 システムの設計と実装の詳細ドキュメントです。
 
-- **[COMPLETE_IMPLEMENTATION_GUIDE.md](./architecture/COMPLETE_IMPLEMENTATION_GUIDE.md)** - 完全実装ガイド（2,756行）
-  - 全18ソースの実装詳細
-  - スコアリングアルゴリズム解説
-  - 2つの運用モードの詳細説明
+- **[COMPLETE_IMPLEMENTATION_GUIDE.md](./architecture/COMPLETE_IMPLEMENTATION_GUIDE.md)** - 完全実装ガイド
+  - 全39ソースの実装詳細
+  - 無料記事収集モードの詳細説明
 - **[PROJECT_COMPREHENSIVE_REPORT.md](./architecture/PROJECT_COMPREHENSIVE_REPORT.md)** - プロジェクト包括レポート
 - **[SYSTEM_FLOW.md](./architecture/SYSTEM_FLOW.md)** - システムフロー図と説明
 
@@ -91,5 +90,5 @@
 
 ---
 
-**最終更新**: 2026-02-02
+**最終更新**: 2026-03-03
 **ディレクトリ整理**: プロジェクト構造改善の一環として実施

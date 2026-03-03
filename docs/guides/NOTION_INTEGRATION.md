@@ -49,7 +49,6 @@ export NOTION_TOKEN="secret_..."
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=results.json \
   -notionClip \
   -notionPageID="abc123def456..."
@@ -66,7 +65,6 @@ export NOTION_TOKEN="secret_..."
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=results.json \
   -notionClip \
   -notionDatabaseID="xyz789abc123..."
@@ -151,7 +149,6 @@ export NOTION_TOKEN="secret_..."
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=notion_clips.json \
   -notionClip \
   -notionPageID="abc123def456..."
@@ -164,7 +161,6 @@ export NOTION_TOKEN="secret_..."
 ./pipeline \
   -sources=jri,env-ministry,meti \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -notionClip \
   -notionDatabaseID="xyz789abc123..."
 ```
@@ -184,7 +180,7 @@ export NOTION_TOKEN="secret_..."
 
 ```bash
 # 新規DB作成時は親ページIDが必要
-./carbon-relay ... -notionClip -notionPageID="abc123..."
+./pipeline ... -notionClip -notionPageID="abc123..."
 ```
 
 ### エラー: "Could not find database"
@@ -220,7 +216,6 @@ DB_ID="xyz789abc123..."  # 既存のDB ID
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out="$(date +%Y%m%d)_clips.json" \
   -notionClip \
   -notionDatabaseID="$DB_ID"
@@ -233,7 +228,6 @@ DB_ID="xyz789abc123..."  # 既存のDB ID
 ./pipeline \
   -sources=jri,env-ministry,meti,mizuho-rt,jpx,carboncredits.jp \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -notionClip \
   -notionDatabaseID="$DB_ID"
 ```
@@ -245,7 +239,6 @@ DB_ID="xyz789abc123..."  # 既存のDB ID
 ./pipeline \
   -sources=carbonherald,carbon-brief,sandbag,icap,ieta \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -notionClip \
   -notionPageID="abc123..."
 ```

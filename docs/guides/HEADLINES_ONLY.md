@@ -2,7 +2,7 @@
 
 ## 🎯 概要
 
-このモードでは、**36の無料ソース**からカーボン関連ニュースのヘッドラインと記事要約を収集します。
+このモードでは、**39の無料ソース**からカーボン関連ニュースのヘッドラインと記事要約を収集します。
 
 - ✅ OpenAI API不要（OPENAI_API_KEY不要）
 - ✅ 各種スクレイピング方式（WordPress API、HTML、RSSフィード）
@@ -23,21 +23,8 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=headlines.json
 ```
-
-**重要：** `-queriesPerHeadline=0` を指定して検索をスキップします。
-
-### 方法2: 専用スクリプト（推奨）
-
-```bash
-# すべての無料ソースからヘッドライン収集
-./scripts/collect_headlines_only.sh
-```
-
-実行後、`headlines_output/`に以下のファイルが生成されます：
-- `all_headlines.json` - 全ソースのヘッドライン
 
 ---
 
@@ -69,7 +56,6 @@ go build -o pipeline ./cmd/pipeline
 |----------|----------|------|
 | `-sources` | `all-free` | 収集元（カンマ区切りまたはall-free） |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
-| `-queriesPerHeadline` | `0` | **0に設定して検索をスキップ** |
 | `-out` | - | 出力ファイルパス（未指定で標準出力） |
 | `-hoursBack` | `0` | 指定時間以内の記事のみ（0で制限なし） |
 
@@ -82,7 +68,6 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=all-free \
   -perSource=10 \
-  -queriesPerHeadline=0 \
   -out=all_headlines.json
 ```
 
@@ -91,7 +76,6 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=jri,env-ministry,meti,pwc-japan,mizuho-rt,jpx,carboncredits.jp \
   -perSource=20 \
-  -queriesPerHeadline=0 \
   -out=japan_headlines.json
 ```
 
@@ -100,7 +84,6 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=carbonherald,carbon-brief,sandbag,icap,ieta,politico-eu \
   -perSource=20 \
-  -queriesPerHeadline=0 \
   -out=international_headlines.json
 ```
 
@@ -109,7 +92,7 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=carbonherald \
   -perSource=5 \
-  -queriesPerHeadline=0 | jq -r '.[].title'
+  | jq -r '.[].title'
 ```
 
 ### 過去24時間の記事のみ
@@ -117,21 +100,18 @@ go build -o pipeline ./cmd/pipeline
 ./pipeline \
   -sources=all-free \
   -perSource=30 \
-  -queriesPerHeadline=0 \
   -hoursBack=24 \
   -out=recent_headlines.json
 ```
 
 ---
 
-## 📰 利用可能なソース（36ソース）
+## 📰 利用可能なソース（39ソース）
 
-### 日本ソース（7ソース）
+### 日本ソース（5ソース）
 | ソース名 | 説明 |
 |---------|------|
 | `jri` | 日本総研 |
-| `env-ministry` | 環境省 |
-| `meti` | 経産省 審議会 |
 | `pwc-japan` | PwC Japan |
 | `mizuho-rt` | みずほリサーチ＆テクノロジーズ |
 | `jpx` | 日本取引所グループ |
@@ -208,7 +188,7 @@ go build -o pipeline ./cmd/pipeline
    - 過度なアクセスは避けてください
 
 2. **日本語ソースのキーワードフィルタ**
-   - JRI、環境省、METI、Mizuho R&Tはカーボン関連キーワードでフィルタリングされます
+   - JRI、Mizuho R&Tはカーボン関連キーワードでフィルタリングされます
 
 3. **無意味なリンクは自動除外**
    - "Read more", "Click here"等は除外されます
@@ -228,13 +208,13 @@ go build -o pipeline ./cmd/pipeline
 ### ヘッドライン数が少ない
 ```bash
 # perSource を増やす
-./pipeline -sources=all-free -perSource=50 -queriesPerHeadline=0
+./pipeline -sources=all-free -perSource=50
 ```
 
 ### 特定ソースがエラーになる
 ```bash
 # デバッグモードで確認
-DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1 -queriesPerHeadline=0
+DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=1
 ```
 
 ---

@@ -87,19 +87,18 @@ func collectHeadlinesPoliticoEU(limit int, cfg HeadlineSourceConfig) ([]Headline
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからなくても空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// carbonKeywordsEuractiv contains keywords for filtering Euractiv articles
-// to focus on carbon/climate-related content.
-// Categories from RSS items are also checked against these keywords.
-// Note: "ets" is avoided as a standalone keyword because it matches substrings
-// like "Markets", "bets", "Metsola" etc. Use specific forms instead.
+// carbonKeywordsEuractiv は Euractiv 記事をカーボン・気候関連に絞るためのキーワード一覧。
+// RSSアイテムのカテゴリもこのキーワードで照合される。
+// 注意: "ets" は "Markets"、"bets"、"Metsola" 等の部分文字列に一致するため、
+// 単体キーワードとしては使用せず、具体的な形式（"eu ets" 等）を使用する。
 var carbonKeywordsEuractiv = []string{
 	"carbon", "emission", "climate", "co2", "greenhouse",
 	"net zero", "net-zero", "decarbonisation", "decarbonization",
@@ -110,21 +109,21 @@ var carbonKeywordsEuractiv = []string{
 	"eu ets", "ets2", "emissions trading", "uk ets",
 }
 
-// reEuactivSpaces normalizes whitespace in scraped Euractiv article text
+// reEuractiveSpaces は Euractiv 記事テキストの空白を正規化する正規表現
 var reEuractiveSpaces = regexp.MustCompile(`\s+`)
 
-// collectHeadlinesEuractiv fetches articles from Euractiv main RSS feed,
-// filters for carbon/climate-related content using title+description+categories,
-// and scrapes article pages for full-text excerpts.
+// collectHeadlinesEuractiv は Euractiv のメインRSSフィードから記事を取得し、
+// タイトル+説明+カテゴリでカーボン・気候関連コンテンツをフィルタリングし、
+// 記事ページから全文Excerptをスクレイピングする。
 //
-// Euractiv is a European news site focusing on EU policy.
-// Note: Section-specific feeds (like /section/emissions-trading-scheme/feed/)
-// are protected by Cloudflare, so we use the main feed with keyword filtering.
-// Article pages are accessible via Go's http.Client for content extraction.
+// Euractiv はEU政策を専門とする欧州ニュースサイト。
+// 注意: セクション別フィード（/section/emissions-trading-scheme/feed/ 等）は
+// Cloudflareで保護されているため、メインフィード+キーワードフィルタを使用する。
+// 記事ページはGoの http.Client でアクセス可能。
 //
 // URL: https://www.euractiv.com/feed/
 func collectHeadlinesEuractiv(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
-	// Use main feed (section feeds are Cloudflare-protected)
+	// メインフィードを使用（セクション別フィードはCloudflare保護あり）
 	feedURL := "https://www.euractiv.com/feed/"
 
 	feed, err := fetchRSSFeed(feedURL, cfg)
@@ -149,31 +148,31 @@ func collectHeadlinesEuractiv(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			continue
 		}
 
-		// Get RSS description for keyword filtering
+		// キーワードフィルタリング用にRSS descriptionを取得
 		rssExcerpt := extractRSSExcerpt(item)
 
-		// Include categories in keyword matching for better recall
+		// カテゴリもキーワードマッチングに含めて再現率を向上
 		catStr := strings.Join(item.Categories, " ")
 
-		// Filter by keywords using title + description + categories
+		// タイトル+説明+カテゴリでキーワードフィルタリング
 		if !matchesKeywords(title, rssExcerpt+" "+catStr, carbonKeywordsEuractiv) {
 			continue
 		}
 
-		// Remove UTM tracking parameters
+		// UTMトラッキングパラメータを除去
 		articleURL := item.Link
 		if idx := strings.Index(articleURL, "?utm_"); idx > 0 {
 			articleURL = articleURL[:idx]
 		}
 
-		// Scrape article page for full-text excerpt
+		// 記事ページから全文Excerptをスクレイピング
 		excerpt := fetchEuractivArticleExcerpt(client, articleURL, cfg.UserAgent)
 		if excerpt == "" {
-			// Fall back to RSS description if scraping fails
+			// スクレイピング失敗時はRSS descriptionにフォールバック
 			excerpt = rssExcerpt
 		}
 
-		// Parse date
+		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -185,15 +184,15 @@ func collectHeadlinesEuractiv(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// fetchEuractivArticleExcerpt scrapes an Euractiv article page for body text.
-// Returns empty string if the page is paywalled (Euractiv Pro) or inaccessible.
+// fetchEuractivArticleExcerpt は Euractiv 記事ページから本文をスクレイピングする。
+// ペイウォール（Euractiv Pro）またはアクセス不可の場合は空文字列を返す。
 func fetchEuractivArticleExcerpt(client *http.Client, articleURL, userAgent string) string {
 	req, err := http.NewRequest("GET", articleURL, nil)
 	if err != nil {
@@ -216,19 +215,19 @@ func fetchEuractivArticleExcerpt(client *http.Client, articleURL, userAgent stri
 		return ""
 	}
 
-	// Detect paywall (Euractiv Pro articles have Lorem ipsum placeholder)
+	// ペイウォール検出（Euractiv Pro記事はLorem ipsumプレースホルダーを含む）
 	content := doc.Find("div.c-news-detail__content")
 	if content.Length() == 0 {
 		return ""
 	}
 
-	// Remove unwanted elements (ads, scripts, etc.)
+	// 不要な要素を除去（広告、スクリプト等）
 	content.Find("script, style, .ad-container, aside, .c-news-detail__subscribe").Remove()
 
 	text := strings.TrimSpace(content.Text())
 	text = reEuractiveSpaces.ReplaceAllString(text, " ")
 
-	// Check for paywall markers
+	// ペイウォールマーカーの確認
 	if strings.Contains(text, "Lorem ipsum") || strings.Contains(text, "…Subscribe now") {
 		return ""
 	}
@@ -236,10 +235,10 @@ func fetchEuractivArticleExcerpt(client *http.Client, articleURL, userAgent stri
 	return text
 }
 
-// collectHeadlinesUKETS fetches articles from UK Government ETS Atom feed
+// collectHeadlinesUKETS は UK政府のETS Atomフィードから記事を取得する。
 //
-// The UK Emissions Trading Scheme page provides official government updates
-// on the UK ETS policy and implementation.
+// UK Emissions Trading Scheme ページは、UK ETSの政策と実施に関する
+// 政府公式の更新情報を提供する。
 //
 // URL: https://www.gov.uk/government/publications.atom?topics%5B%5D=uk-emissions-trading-scheme
 func collectHeadlinesUKETS(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
@@ -264,7 +263,7 @@ func collectHeadlinesUKETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -272,7 +271,7 @@ func collectHeadlinesUKETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			dateStr = item.UpdatedParsed.Format(time.RFC3339)
 		}
 
-		// Get summary/content
+		// サマリー/コンテンツを取得
 		excerpt := ""
 		if item.Description != "" {
 			excerpt = cleanHTMLTags(item.Description)
@@ -285,18 +284,18 @@ func collectHeadlinesUKETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// collectHeadlinesUNNews fetches articles from UN News Climate Change RSS feed
+// collectHeadlinesUNNews は UN News の気候変動RSSフィードから記事を取得する。
 //
-// UN News is the official news service of the United Nations, covering
-// global climate change news, UNFCCC meetings, and international climate policy.
-// This serves as an alternative to scraping unfccc.int directly.
+// UN News は国際連合の公式ニュースサービスで、世界の気候変動ニュース、
+// UNFCCC会議、国際気候政策をカバーしている。
+// unfccc.int を直接スクレイピングする代替手段として機能する。
 //
 // URL: https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml
 func collectHeadlinesUNNews(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
@@ -325,7 +324,7 @@ func collectHeadlinesUNNews(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
@@ -333,7 +332,7 @@ func collectHeadlinesUNNews(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 			dateStr = item.UpdatedParsed.Format(time.RFC3339)
 		}
 
-		// Get content - UN News usually has good descriptions
+		// コンテンツを取得（UN Newsは良質なdescriptionを提供する）
 		excerpt := extractRSSExcerpt(item)
 
 		out = append(out, Headline{
@@ -342,18 +341,18 @@ func collectHeadlinesUNNews(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// collectHeadlinesCarbonBrief collects headlines from Carbon Brief RSS feed
+// collectHeadlinesCarbonBrief は Carbon Brief のRSSフィードから見出しを収集する。
 //
-// Carbon Brief is a UK-based website covering the latest developments in
-// climate science, climate policy and energy policy. Previously used WordPress
-// REST API, but switched to RSS for content:encoded full article extraction.
+// Carbon Brief は気候科学、気候政策、エネルギー政策の最新動向を扱う
+// 英国拠点のWebサイト。以前はWordPress REST APIを使用していたが、
+// content:encoded による全文取得のためRSSに切り替えた。
 //
 // URL: https://www.carbonbrief.org/feed/
 func collectHeadlinesCarbonBrief(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
@@ -382,15 +381,15 @@ func collectHeadlinesCarbonBrief(limit int, cfg HeadlineSourceConfig) ([]Headlin
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Full article content from content:encoded, fallback to description.
+		// content:encoded から全文取得、なければ description にフォールバック
 		excerpt := extractRSSExcerpt(item)
-		// Truncate to 3000 chars for Notion AI summarization
+		// Notion AI要約用に3000文字で切り詰め
 		excerpt = truncateString(excerpt, 3000)
 
 		out = append(out, Headline{
@@ -399,19 +398,19 @@ func collectHeadlinesCarbonBrief(limit int, cfg HeadlineSourceConfig) ([]Headlin
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// collectHeadlinesCarbonMarketWatch collects headlines from Carbon Market Watch RSS feed
+// collectHeadlinesCarbonMarketWatch は Carbon Market Watch のRSSフィードから見出しを収集する。
 //
-// Carbon Market Watch is a Brussels-based NGO that monitors carbon markets
-// and advocates for fair and effective climate policy. Their website blocks
-// direct HTML scraping (403), but the WordPress RSS feed is accessible.
-// The feed includes full article content via content:encoded.
+// Carbon Market Watch はカーボン市場を監視し、公正で効果的な気候政策を
+// 提唱するブリュッセル拠点のNGO。Webサイトは直接のHTMLスクレイピングを
+// ブロック（403）するが、WordPress RSSフィードはアクセス可能。
+// フィードは content:encoded で全文を含む。
 //
 // URL: https://carbonmarketwatch.org/feed/
 func collectHeadlinesCarbonMarketWatch(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
@@ -440,13 +439,13 @@ func collectHeadlinesCarbonMarketWatch(limit int, cfg HeadlineSourceConfig) ([]H
 
 		articleURL := item.Link
 
-		// Parse date
+		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Full article content from content:encoded, fallback to description
+		// content:encoded から全文取得、なければ description にフォールバック
 		excerpt := extractRSSExcerpt(item)
 
 		out = append(out, Headline{
@@ -455,7 +454,7 @@ func collectHeadlinesCarbonMarketWatch(limit int, cfg HeadlineSourceConfig) ([]H
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 

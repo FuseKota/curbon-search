@@ -38,7 +38,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// collectHeadlinesICAP fetches articles from ICAP (Drupal site) using HTML scraping
+// collectHeadlinesICAP は ICAP（Drupalサイト）からHTMLスクレイピングで記事を取得する
 func collectHeadlinesICAP(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://icapcarbonaction.com/en/news"
 
@@ -72,14 +72,14 @@ func collectHeadlinesICAP(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			return
 		}
 
-		// Extract title
+		// タイトルを抽出
 		titleElem := article.Find("h3.content-title a.link-title span")
 		title := strings.TrimSpace(titleElem.Text())
 		if title == "" {
 			return
 		}
 
-		// Extract URL
+		// URLを抽出
 		linkElem := article.Find("a.link-title")
 		href, exists := linkElem.Attr("href")
 		if !exists || href == "" {
@@ -91,11 +91,11 @@ func collectHeadlinesICAP(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Extract date
+		// 日付を抽出
 		timeElem := article.Find("time")
 		datetime, _ := timeElem.Attr("datetime")
 
-		// Fetch full article content
+		// 記事の全文を取得
 		content := ""
 		if articleURL != "" {
 			articleReq, err := http.NewRequest("GET", articleURL, nil)
@@ -127,7 +127,7 @@ func collectHeadlinesICAP(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: datetime,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -138,7 +138,7 @@ func collectHeadlinesICAP(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesIETA fetches articles from IETA using HTML scraping
+// collectHeadlinesIETA は IETAからHTMLスクレイピングで記事を取得する
 func collectHeadlinesIETA(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	homeURL := "https://www.ieta.org/"
 
@@ -233,7 +233,7 @@ func collectHeadlinesIETA(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: publishedAt,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -244,7 +244,7 @@ func collectHeadlinesIETA(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesEnergyMonitor fetches articles from Energy Monitor using HTML scraping
+// collectHeadlinesEnergyMonitor は Energy MonitorからHTMLスクレイピングで記事を取得する
 func collectHeadlinesEnergyMonitor(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.energymonitor.ai/news/"
 
@@ -339,7 +339,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg HeadlineSourceConfig) ([]Headl
 			URL:         articleURL,
 			PublishedAt: publishedAt,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -350,7 +350,7 @@ func collectHeadlinesEnergyMonitor(limit int, cfg HeadlineSourceConfig) ([]Headl
 	return out, nil
 }
 
-// collectHeadlinesWorldBank collects headlines from World Bank Climate Change publications
+// collectHeadlinesWorldBank は 世界銀行気候変動関連の出版物からヘッドラインを収集する
 func collectHeadlinesWorldBank(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	apiURL := fmt.Sprintf(
 		"https://search.worldbank.org/api/v2/news?format=json&qterm=%%22carbon+pricing%%22+OR+%%22carbon+market%%22+OR+%%22carbon+credit%%22+OR+%%22emissions+trading%%22&rows=%d&os=0&srt=lnchdt&order=desc&fl=url,lnchdt,title,descr&lang_exact=English",
@@ -418,14 +418,14 @@ func collectHeadlinesWorldBank(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
 	return out, nil
 }
 
-// collectHeadlinesNewClimate collects headlines from NewClimate Institute
+// collectHeadlinesNewClimate は NewClimate Instituteからヘッドラインを収集する
 func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://newclimate.org/news"
 
@@ -513,14 +513,14 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
 	return out, nil
 }
 
-// collectHeadlinesCarbonKnowledgeHub collects headlines from Carbon Knowledge Hub
+// collectHeadlinesCarbonKnowledgeHub は Carbon Knowledge Hubからヘッドラインを収集する
 func collectHeadlinesCarbonKnowledgeHub(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.carbonknowledgehub.com"
 
@@ -655,7 +655,7 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg HeadlineSourceConfig) ([]
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -663,10 +663,10 @@ func collectHeadlinesCarbonKnowledgeHub(limit int, cfg HeadlineSourceConfig) ([]
 }
 
 // =============================================================================
-// VCM Certification Bodies
+// VCM認証機関
 // =============================================================================
 
-// collectHeadlinesVerra fetches news from Verra (VCS standard operator)
+// collectHeadlinesVerra は Verra（VCS規格運営団体）からニュースを取得する
 func collectHeadlinesVerra(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://verra.org/news/feed/"
 
@@ -733,7 +733,7 @@ func collectHeadlinesVerra(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -744,7 +744,7 @@ func collectHeadlinesVerra(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 	return out, nil
 }
 
-// collectHeadlinesGoldStandard fetches news from Gold Standard
+// collectHeadlinesGoldStandard は Gold Standardからニュースを取得する
 func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.goldstandard.org/newsroom"
 
@@ -803,13 +803,13 @@ func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headli
 
 		seen[articleURL] = true
 
-		// Find date from time element in the parent article
+		// 親articleのtime要素から日付を取得
 		dateStr := ""
 		article := link.Closest("article")
 		if article.Length() > 0 {
 			timeElem := article.Find("time")
 			if timeElem.Length() > 0 {
-				// Prefer datetime attribute (ISO format)
+				// datetime属性（ISO形式）を優先
 				if dt, exists := timeElem.Attr("datetime"); exists && dt != "" {
 					if t, err := time.Parse("2006-01-02T15:04:05-0700", dt); err == nil {
 						dateStr = t.UTC().Format(time.RFC3339)
@@ -817,7 +817,7 @@ func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headli
 						dateStr = t.Format(time.RFC3339)
 					}
 				}
-				// Fallback to text content
+				// テキストコンテンツにフォールバック
 				if dateStr == "" {
 					rawDate := strings.TrimSpace(timeElem.Text())
 					if idx := strings.Index(rawDate, " | "); idx > 0 {
@@ -845,7 +845,7 @@ func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headli
 					bodyElem := articleDoc.Find("main")
 					content = strings.TrimSpace(bodyElem.Text())
 
-					// Fallback: get date from article page if not found in listing
+					// フォールバック: 一覧ページで日付が見つからない場合、記事ページから取得
 					if dateStr == "" {
 						if pgTime := articleDoc.Find("time[datetime]"); pgTime.Length() > 0 {
 							if dt, exists := pgTime.Attr("datetime"); exists && dt != "" {
@@ -867,7 +867,7 @@ func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -878,7 +878,7 @@ func collectHeadlinesGoldStandard(limit int, cfg HeadlineSourceConfig) ([]Headli
 	return out, nil
 }
 
-// collectHeadlinesACR fetches news from American Carbon Registry
+// collectHeadlinesACR は American Carbon Registryからニュースを取得する
 func collectHeadlinesACR(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://acrcarbon.org/news/"
 
@@ -1060,7 +1060,7 @@ func collectHeadlinesACR(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1071,7 +1071,7 @@ func collectHeadlinesACR(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 	return out, nil
 }
 
-// collectHeadlinesCAR fetches news from Climate Action Reserve
+// collectHeadlinesCAR は Climate Action Reserveからニュースを取得する
 func collectHeadlinesCAR(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://climateactionreserve.org/updates/"
 
@@ -1206,7 +1206,7 @@ func collectHeadlinesCAR(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     content,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1218,10 +1218,10 @@ func collectHeadlinesCAR(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 }
 
 // =============================================================================
-// International Organizations
+// 国際機関
 // =============================================================================
 
-// collectHeadlinesUNFCCC fetches news from UNFCCC
+// collectHeadlinesUNFCCC は UNFCCCからニュースを取得する
 func collectHeadlinesUNFCCC(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://unfccc.int/news"
 
@@ -1308,7 +1308,7 @@ func collectHeadlinesUNFCCC(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1319,7 +1319,7 @@ func collectHeadlinesUNFCCC(limit int, cfg HeadlineSourceConfig) ([]Headline, er
 	return out, nil
 }
 
-// collectHeadlinesIISD fetches news from IISD Earth Negotiations Bulletin
+// collectHeadlinesIISD は IISD Earth Negotiations Bulletinからニュースを取得する
 func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://enb.iisd.org/"
 
@@ -1332,7 +1332,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		Jar:     jar,
 	}
 
-	// Retry up to 3 times with exponential backoff (AWS IPs often get 403)
+	// 最大3回リトライ（指数バックオフ）。AWS IPは403を受けやすい
 	var resp *http.Response
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
@@ -1517,7 +1517,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1557,7 +1557,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 				URL:         articleURL,
 				PublishedAt: dateStr,
 				Excerpt:     excerpt,
-				IsHeadline:  true,
+	
 			})
 		})
 	}
@@ -1569,7 +1569,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	return out, nil
 }
 
-// collectHeadlinesClimateFocus fetches publications from Climate Focus
+// collectHeadlinesClimateFocus は Climate Focusから出版物を取得する
 func collectHeadlinesClimateFocus(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	publicationsURL := "https://climatefocus.com/publications/"
 
@@ -1741,7 +1741,7 @@ func collectHeadlinesClimateFocus(limit int, cfg HeadlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -1753,10 +1753,10 @@ func collectHeadlinesClimateFocus(limit int, cfg HeadlineSourceConfig) ([]Headli
 }
 
 // =============================================================================
-// Additional Sources
+// 追加ソース
 // =============================================================================
 
-// collectHeadlinesPuroEarth fetches blog articles from Puro.earth
+// collectHeadlinesPuroEarth は Puro.earthからブログ記事を取得する
 func collectHeadlinesPuroEarth(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	feedURL := "https://puro.earth/blog/our-blogs-1/feed"
 
@@ -1850,7 +1850,7 @@ func collectHeadlinesPuroEarth(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
@@ -1861,7 +1861,7 @@ func collectHeadlinesPuroEarth(limit int, cfg HeadlineSourceConfig) ([]Headline,
 	return out, nil
 }
 
-// collectHeadlinesIsometric fetches resources from Isometric
+// collectHeadlinesIsometric は Isometricからリソースを取得する
 func collectHeadlinesIsometric(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	resourcesURL := "https://isometric.com/writing"
 
@@ -2000,7 +2000,7 @@ func collectHeadlinesIsometric(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 

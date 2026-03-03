@@ -107,21 +107,21 @@ func collectHeadlinesJRI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			publishedAt = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Fetch article page and extract content
+		// 記事ページを取得してコンテンツを抽出
 		excerpt := ""
 		if item.Link != "" && !strings.HasSuffix(item.Link, ".pdf") {
 			doc, err := fetchDoc(item.Link, cfg)
 			if err == nil {
-				// JRI page structure:
-				//   - div.cont03: report pages (contains full text)
-				//   - article#main: opinion/column pages (main content area)
+				// JRI ページ構造:
+				//   - div.cont03: レポートページ（全文を含む）
+				//   - article#main: オピニオン/コラムページ（メインコンテンツ領域）
 				sel := doc.Find("div.cont03")
 				if sel.Length() == 0 {
 					sel = doc.Find("article#main")
 				}
 				sel.Find("script, style, div.content-utility").Remove()
 				text := sel.Text()
-				// Clean up: remove noise lines (navigation, category labels)
+				// ノイズ行（ナビゲーション、カテゴリラベル）を除去
 				lines := strings.Split(text, "\n")
 				var contentLines []string
 				for _, line := range lines {
@@ -129,7 +129,7 @@ func collectHeadlinesJRI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 					if line == "" {
 						continue
 					}
-					// Skip short navigation/label lines
+					// 短いナビゲーション/ラベル行をスキップ
 					if len([]rune(line)) < 20 {
 						continue
 					}
@@ -141,12 +141,12 @@ func collectHeadlinesJRI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			}
 		}
 
-		// If we couldn't get excerpt, use description from RSS
+		// Excerptを取得できなかった場合、RSSのdescriptionを使用
 		if excerpt == "" && item.Description != "" {
 			excerpt = cleanHTMLTags(item.Description)
 		}
 
-		// Keyword filter: only include carbon/climate-related articles
+		// キーワードフィルタ: カーボン/気候変動関連記事のみ収集
 		if !matchesKeywords(title, excerpt, carbonKeywordsJapan) {
 			continue
 		}
@@ -157,15 +157,15 @@ func collectHeadlinesJRI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			URL:         item.Link,
 			PublishedAt: publishedAt,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// collectHeadlinesEnvMinistry collects headlines from Japan Environment Ministry press releases
+// collectHeadlinesEnvMinistry は 環境省のプレスリリースから見出しを収集する
 func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	pressURL := "https://www.env.go.jp/press/"
 
@@ -191,7 +191,7 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	// Keywords for carbon/climate-related articles
+	// カーボン/気候変動関連記事のフィルタリング用キーワード
 	carbonKeywords := []string{
 		"カーボン", "炭素", "脱炭素", "CO2", "温室効果ガス", "GHG",
 		"気候変動", "クライメート", "排出量取引", "ETS", "カーボンプライシング",
@@ -202,20 +202,20 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 	out := make([]Headline, 0, limit)
 	currentDate := ""
 
-	// Parse press releases
+	// プレスリリースをパース
 	doc.Find("span.p-press-release-list__heading, li.c-news-link__item").Each(func(i int, s *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Check if this is a date heading
+		// 日付見出しかどうか確認
 		if s.Is("span.p-press-release-list__heading") {
 			dateText := strings.TrimSpace(s.Text())
-			// Convert "2025年12月26日発表" to "2025-12-26"
+			// "2025年12月26日発表" を "2025-12-26" に変換
 			dateText = strings.Replace(dateText, "発表", "", 1)
 			dateText = strings.TrimSpace(dateText)
 
-			// Parse Japanese date format
+			// 日本語の日付フォーマットをパース
 			var year, month, day int
 			if _, parseErr := fmt.Sscanf(dateText, "%d年%d月%d日", &year, &month, &day); parseErr == nil {
 				currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
@@ -223,12 +223,12 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 			return
 		}
 
-		// Process article items
+		// 記事アイテムを処理
 		if !s.Is("li.c-news-link__item") {
 			return
 		}
 
-		// Extract title and URL
+		// タイトルとURLを抽出
 		link := s.Find("a.c-news-link__link")
 		title := strings.TrimSpace(link.Text())
 		href, exists := link.Attr("href")
@@ -236,25 +236,25 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 			return
 		}
 
-		// Check if title contains carbon-related keywords
+		// タイトルにカーボン関連キーワードが含まれるか確認
 		if !matchesKeywords(title, "", carbonKeywords) {
 			return
 		}
 
-		// Build absolute URL
+		// 絶対URLを構築
 		articleURL := href
 		if !strings.HasPrefix(href, "http") {
 			articleURL = "https://www.env.go.jp" + href
 		}
 
-		// Fetch full article content
+		// 記事ページの全文コンテンツを取得
 		excerpt := ""
 		contentResp, err := client.Get(articleURL)
 		if err == nil {
 			if contentResp.StatusCode == http.StatusOK {
 				contentDoc, err := goquery.NewDocumentFromReader(contentResp.Body)
 				if err == nil {
-					// Extract main content from article page
+					// 記事ページからメインコンテンツを抽出
 					contentDoc.Find("div.l-content, div.c-content, article, main").Each(func(_ int, cs *goquery.Selection) {
 						if excerpt == "" {
 							text := strings.TrimSpace(cs.Text())
@@ -265,10 +265,10 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 					})
 				}
 			}
-			contentResp.Body.Close() // Close immediately, not defer in loop
+			contentResp.Body.Close() // ループ内ではdeferを使わず即座にクローズ
 		}
 
-		// Format published date (use UTC for consistency with other sources)
+		// 公開日をフォーマット（他ソースとの一貫性のためUTCを使用）
 		publishedAt := ""
 		if currentDate != "" {
 			publishedAt = currentDate + "T00:00:00Z"
@@ -280,17 +280,17 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 			URL:         articleURL,
 			PublishedAt: publishedAt,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// collectHeadlinesJPX collects headlines from Japan Exchange Group (JPX) via RSS
+// collectHeadlinesJPX は JPX（日本取引所グループ）の RSSフィードから見出しを収集する
 func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
-	// Use JPX RSS feed
+	// JPX RSSフィードを使用
 	feedURL := "https://www.jpx.co.jp/rss/jpx-news.xml"
 
 	fp := gofeed.NewParser()
@@ -301,7 +301,7 @@ func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 		return nil, fmt.Errorf("failed to fetch JPX RSS: %w", err)
 	}
 
-	// Keywords for carbon credit related articles
+	// カーボンクレジット関連記事のフィルタリング用キーワード
 	carbonKeywords := []string{
 		"カーボン", "炭素", "クレジット", "排出", "GX", "グリーン",
 		"脱炭素", "CO2", "温室効果ガス", "取引", "市場", "環境",
@@ -314,7 +314,7 @@ func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			break
 		}
 
-		// Check if title or link contains carbon-related keywords
+		// タイトルまたはリンクにカーボン関連キーワードが含まれるか確認
 		titleLower := strings.ToLower(item.Title)
 		linkLower := strings.ToLower(item.Link)
 		containsKeyword := false
@@ -331,13 +331,13 @@ func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			continue
 		}
 
-		// Parse date (empty string if not available)
+		// 日付をパース（取得できない場合は空文字列）
 		dateStr := ""
 		if item.PublishedParsed != nil {
 			dateStr = item.PublishedParsed.Format(time.RFC3339)
 		}
 
-		// Get content: RSS description/content is empty, so scrape article page
+		// コンテンツ取得: RSS description/contentが空のため、記事ページをスクレイピング
 		excerpt := ""
 		if item.Description != "" {
 			excerpt = html.UnescapeString(item.Description)
@@ -363,37 +363,37 @@ func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			URL:         item.Link,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	}
 
-	// Return empty slice if no carbon-related articles found (not an error)
-	// JPX feed is working but may not always have carbon-specific content
+	// カーボン関連記事が見つからない場合は空スライスを返す（エラーではない）
+	// JPXフィードは動作しているが、常にカーボン関連コンテンツがあるとは限らない
 	return out, nil
 }
 
-// collectHeadlinesMETI collects headlines from METI Shingikai (Council/Committee) list page
+// collectHeadlinesMETI は METI審議会一覧ページから見出しを収集する
 //
-// This function fetches the METI shingikai index page and extracts energy/carbon-related
-// council meetings using a two-stage fetch approach similar to collectHeadlinesEnvMinistry().
+// METI審議会インデックスページを取得し、エネルギー/カーボン関連の
+// 審議会情報を2段階フェッチ方式で抽出する（collectHeadlinesEnvMinistryと同様）。
 //
-// HTML structure:
-// - METI uses <dl class="date_sp"> with <dd> elements containing article links
-// - Date appears alongside each entry in Japanese format (YYYY年MM月DD日)
+// HTML構造:
+// - METIは <dl class="date_sp"> の <dd> 要素に記事リンクを配置
+// - 各エントリに日本語形式の日付（YYYY年MM月DD日）が付与
 //
-// Filter logic:
-// - URL path filter: /shingikai/enecho/ (Agency for Natural Resources and Energy) or
-//   /shingikai/sankoshin/ (Industrial Structure Council including GX-related subcommittees)
-// - Keyword filter: energy, power, gas, carbon, decarbonization, GX, hydrogen, etc.
-// - If URL path matches -> collect (even without keyword match)
-// - If keyword matches -> collect (even without URL path match)
+// フィルタロジック:
+// - URLパスフィルタ: /shingikai/enecho/（資源エネルギー庁）または
+//   /shingikai/sankoshin/（産業構造審議会、GX関連小委員会を含む）
+// - キーワードフィルタ: エネルギー、電力、ガス、カーボン、脱炭素、GX、水素等
+// - URLパスが一致 -> 収集（キーワード一致がなくても）
+// - キーワードが一致 -> 収集（URLパス一致がなくても）
 //
 // URL: https://www.meti.go.jp/shingikai/index.html
 func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	baseURL := "https://www.meti.go.jp"
 	indexURL := baseURL + "/shingikai/index.html"
 
-	// Use longer timeout for METI (government site can be slow)
+	// METI用に長めのタイムアウトを設定（政府サイトは遅いことがある）
 	timeout := cfg.Timeout
 	if timeout < 90*time.Second {
 		timeout = 90 * time.Second
@@ -403,7 +403,7 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
 	}
-	// Use standard browser User-Agent (METI may block custom agents)
+	// 標準的なブラウザUser-Agentを使用（METIはカスタムエージェントをブロックする可能性あり）
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := client.Do(req)
@@ -421,13 +421,13 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	// URL path filters (energy-related departments)
+	// URLパスフィルタ（エネルギー関連部署）
 	energyPaths := []string{
-		"/shingikai/enecho/",    // Agency for Natural Resources and Energy
-		"/shingikai/sankoshin/", // Industrial Structure Council (GX-related)
+		"/shingikai/enecho/",    // 資源エネルギー庁
+		"/shingikai/sankoshin/", // 産業構造審議会（GX関連）
 	}
 
-	// Keyword filters for energy/carbon-related content
+	// エネルギー/カーボン関連コンテンツのキーワードフィルタ
 	energyKeywords := []string{
 		"エネルギー", "電力", "ガス", "資源", "燃料",
 		"カーボン", "脱炭素", "GX", "グリーン",
@@ -435,12 +435,12 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		"排出", "温暖化", "気候", "蓄電", "電池",
 	}
 
-	// Date regex for Japanese date format (package-level)
+	// 日本語日付フォーマット用の正規表現（パッケージレベルで定義済み）
 	dateRe := reJapaneseDateYMD
 
 	out := make([]Headline, 0, limit)
 
-	// Find all dd elements containing shingikai links (METI uses dl > dd structure for updates)
+	// 審議会リンクを含むすべてのdd要素を取得（METIは dl > dd 構造で更新情報を配置）
 	doc.Find("dd").Each(func(i int, s *goquery.Selection) {
 		if len(out) >= limit {
 			return
@@ -456,7 +456,7 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			return
 		}
 
-		// Skip index pages
+		// インデックスページをスキップ
 		if strings.Contains(href, "index") {
 			return
 		}
@@ -466,7 +466,7 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			return
 		}
 
-		// Check URL path filter
+		// URLパスフィルタをチェック
 		isEnergyPath := false
 		for _, path := range energyPaths {
 			if strings.Contains(href, path) {
@@ -475,7 +475,7 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Check keyword filter
+		// キーワードフィルタをチェック
 		hasKeyword := false
 		titleLower := strings.ToLower(title)
 		for _, kw := range energyKeywords {
@@ -485,20 +485,20 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Apply filter logic:
-		// - Path match -> collect (regardless of keyword)
-		// - Keyword match -> collect (regardless of path)
+		// フィルタロジックを適用:
+		// - パス一致 -> 収集（キーワード不問）
+		// - キーワード一致 -> 収集（パス不問）
 		if !isEnergyPath && !hasKeyword {
 			return
 		}
 
-		// Build absolute URL
+		// 絶対URLを構築
 		articleURL := href
 		if !strings.HasPrefix(href, "http") {
 			articleURL = baseURL + href
 		}
 
-		// Extract date from li text (use UTC for consistency with other sources)
+		// li要素のテキストから日付を抽出（他ソースとの一貫性のためUTCを使用）
 		liText := s.Text()
 		dateStr := ""
 		if dateMatch := dateRe.FindStringSubmatch(liText); dateMatch != nil {
@@ -512,7 +512,7 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			fmt.Fprintf(os.Stderr, "[DEBUG] METI Shingikai: %s (path=%v, keyword=%v)\n", title[:min(50, len(title))], isEnergyPath, hasKeyword)
 		}
 
-		// Fetch article page for excerpt and date (2nd stage fetch)
+		// 記事ページからExcerptと日付を取得（2段階目のフェッチ）
 		excerpt, articleDate := fetchMETIArticleExcerpt(client, articleURL, cfg.UserAgent, title)
 		if articleDate != "" {
 			dateStr = articleDate
@@ -524,21 +524,21 @@ func collectHeadlinesMETI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
 	return out, nil
 }
 
-// fetchMETIArticleExcerpt fetches the article page and extracts text content and date
-// Returns (excerpt, dateStr). Empty strings if the page only contains PDFs or fetch fails
+// fetchMETIArticleExcerpt は 記事ページを取得してテキストコンテンツと日付を抽出する
+// 戻り値は (excerpt, dateStr)。ページがPDFのみの場合や取得失敗時は空文字列を返す
 func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, title string) (string, string) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", ""
 	}
-	// Use standard browser User-Agent
+	// 標準的なブラウザUser-Agentを使用
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := client.Do(req)
@@ -556,11 +556,11 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, 
 		return "", ""
 	}
 
-	// Extract date from "最終更新日：YYYY年MM月DD日"
+	// "最終更新日：YYYY年MM月DD日" から日付を抽出
 	dateStr := ""
 	bodyText := doc.Find("body").Text()
 	if dateMatch := reJapaneseDateYMD.FindStringSubmatch(bodyText); dateMatch != nil {
-		// Use the last match (最終更新日 is typically at the bottom)
+		// 最後のマッチを使用（最終更新日は通常ページ下部にある）
 		allMatches := reJapaneseDateYMD.FindAllStringSubmatch(bodyText, -1)
 		if len(allMatches) > 0 {
 			last := allMatches[len(allMatches)-1]
@@ -571,13 +571,13 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, 
 		}
 	}
 
-	// Remove unwanted elements (JS notice, breadcrumbs, print button, navigation)
+	// 不要な要素を除去（JS通知、パンくずリスト、印刷ボタン、ナビゲーション）
 	doc.Find("script, style, noscript, header, footer, nav, .jsOn, #topicpath, .topicpath, .breadcrumb, .breadcrumbs, #pankuzu, .print, .print-area").Remove()
 
-	// Try to find main content area
+	// メインコンテンツ領域を探索
 	var excerpt string
 
-	// Common content selectors for METI pages
+	// METIページの一般的なコンテンツセレクタ
 	contentSelectors := []string{
 		"#main_content",
 		".contents",
@@ -594,32 +594,32 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, 
 		}
 	}
 
-	// Fallback to body if no content area found
+	// コンテンツ領域が見つからない場合はbodyにフォールバック
 	if excerpt == "" {
 		excerpt = strings.TrimSpace(doc.Find("body").Text())
 	}
 
-	// Clean HTML tags and whitespace
+	// HTMLタグと空白を除去
 	excerpt = cleanHTMLTags(excerpt)
 	excerpt = reWhitespace.ReplaceAllString(excerpt, " ")
 	excerpt = strings.TrimSpace(excerpt)
 
-	// Remove leading "印刷" button text
+	// 先頭の「印刷」ボタンテキストを除去
 	excerpt = strings.TrimPrefix(excerpt, "印刷")
 	excerpt = strings.TrimSpace(excerpt)
 
-	// Remove breadcrumb text (e.g. "ホーム 審議会・研究会 ... タイトル タイトル")
-	// by finding "開催日" which marks the start of actual content
+	// パンくずリストのテキストを除去（例: "ホーム 審議会・研究会 ... タイトル タイトル"）
+	// 実際のコンテンツ開始を示す「開催日」を目印にする
 	if idx := strings.Index(excerpt, "開催日"); idx > 0 {
 		excerpt = excerpt[idx:]
 	} else if title != "" {
-		// Fallback: remove everything up to and including the last occurrence of the title
+		// フォールバック: タイトルの最後の出現位置までをすべて除去
 		if idx := strings.LastIndex(excerpt, title); idx >= 0 {
 			excerpt = strings.TrimSpace(excerpt[idx+len(title):])
 		}
 	}
 
-	// Truncate to 2000 characters
+	// 2000文字に切り詰め
 	if len(excerpt) > 2000 {
 		excerpt = excerpt[:2000]
 	}
@@ -627,7 +627,7 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, 
 	return excerpt, dateStr
 }
 
-// atoi converts string to int, returns 0 on error
+// atoi は 文字列をintに変換する。エラー時は0を返す
 func atoi(s string) int {
 	var n int
 	fmt.Sscanf(s, "%d", &n)
@@ -660,7 +660,7 @@ func atoi(s string) int {
 func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.pwc.com/jp/ja/knowledge/column/sustainability.html"
 
-	client := cfg.Client // Use shared client (follows redirects by default)
+	client := cfg.Client // 共有クライアントを使用（デフォルトでリダイレクトに追従）
 	req, err := http.NewRequest("GET", newsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("request creation failed: %w", err)
@@ -668,7 +668,7 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
-	// Do not set Accept-Encoding to receive uncompressed response
+	// 非圧縮レスポンスを受信するためAccept-Encodingは設定しない
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
@@ -682,16 +682,16 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Read the entire HTML content
+	// HTMLコンテンツ全体を読み込み
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 	bodyStr := string(bodyBytes)
 
-	// Extract JSON data from angular.loadFacetedNavigation script
-	// Pattern: angular.loadFacetedNavigation(..., "{...}")
-	// The JSON object contains numberHits, elements, selectedTags, filterTags
+	// angular.loadFacetedNavigation スクリプトからJSONデータを抽出
+	// パターン: angular.loadFacetedNavigation(..., "{...}")
+	// JSONオブジェクトには numberHits, elements, selectedTags, filterTags が含まれる
 	jsonPattern := regexp.MustCompile(`"(\{\\x22numberHits\\x22:\d+,\\x22elements\\x22:.*?\\x22filterTags\\x22:.*?\})"`)
 	matches := jsonPattern.FindAllStringSubmatch(bodyStr, -1)
 
@@ -708,13 +708,13 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 
 		jsonStr := match[1]
 
-		// Unescape hex-encoded quotes (\x22 -> ")
+		// 16進エスケープされた引用符をアンエスケープ (\x22 -> ")
 		jsonStr = strings.ReplaceAll(jsonStr, `\x22`, `"`)
-		// Unescape other common escapes
+		// その他の一般的なエスケープをアンエスケープ
 		jsonStr = strings.ReplaceAll(jsonStr, `\/`, `/`)
 		jsonStr = strings.ReplaceAll(jsonStr, `\u002D`, `-`)
 
-		// Extract the elements field (it's a string-encoded JSON array)
+		// elementsフィールドを抽出（文字列エンコードされたJSON配列）
 		elementsPattern := regexp.MustCompile(`"elements":"(\[.*?\])(?:",|"}|"$)`)
 		elementsMatch := elementsPattern.FindStringSubmatch(jsonStr)
 		if len(elementsMatch) < 2 {
@@ -723,23 +723,23 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 
 		elementsStr := elementsMatch[1]
 
-		// Unescape the triple-escaped elements array (needs to be done twice)
+		// 3重エスケープされたelements配列をアンエスケープ（2回実行が必要）
 		for i := 0; i < 2; i++ {
-			// Replace \\ with temporary placeholder
+			// \\ を一時プレースホルダーに置換
 			elementsStr = strings.ReplaceAll(elementsStr, `\\`, "\x00")
-			// Replace \" with "
+			// \" を " に置換
 			elementsStr = strings.ReplaceAll(elementsStr, `\"`, `"`)
-			// Restore single backslash
+			// 単一バックスラッシュを復元
 			elementsStr = strings.ReplaceAll(elementsStr, "\x00", `\`)
 		}
 
-		// Parse individual article objects
-		// Look for title, href, and publishDate fields
+		// 個別の記事オブジェクトをパース
+		// title, href, publishDate フィールドを探す
 		titlePattern := regexp.MustCompile(`"title":"([^"]+)"`)
 		hrefPattern := regexp.MustCompile(`"href":"([^"]+)"`)
 		datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
-		// Split by article objects (each starts with {"index":)
+		// 記事オブジェクトで分割（各オブジェクトは {"index": で始まる）
 		articles := strings.Split(elementsStr, `{"index":`)
 
 		for _, articleStr := range articles {
@@ -751,37 +751,37 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 				continue
 			}
 
-			// Extract title
+			// タイトルを抽出
 			titleMatches := titlePattern.FindStringSubmatch(articleStr)
 			if len(titleMatches) < 2 {
 				continue
 			}
 			title := titleMatches[1]
 
-			// Extract URL
+			// URLを抽出
 			hrefMatches := hrefPattern.FindStringSubmatch(articleStr)
 			if len(hrefMatches) < 2 {
 				continue
 			}
 			url := hrefMatches[1]
 
-			// Extract date
+			// 日付を抽出
 			dateStr := ""
 			dateMatches := datePattern.FindStringSubmatch(articleStr)
 			if len(dateMatches) >= 2 {
 				dateStr = dateMatches[1]
 			}
 
-			// Build absolute URL
+			// 絶対URLを構築
 			articleURL := url
 			if strings.HasPrefix(url, "/") {
 				articleURL = "https://www.pwc.com" + url
 			} else if !strings.HasPrefix(url, "http") {
-				// Sometimes URLs come without leading slash
+				// URLに先頭スラッシュがない場合がある
 				continue
 			}
 
-			// Parse date (format: "YYYY-MM-DD", empty string if not available)
+			// 日付をパース（形式: "YYYY-MM-DD"、取得できない場合は空文字列）
 			publishedAt := ""
 			if dateStr != "" {
 				if t, err := time.Parse("2006-01-02", dateStr); err == nil {
@@ -789,7 +789,7 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 				}
 			}
 
-			// Fetch excerpt from article page
+			// 記事ページからExcerptを取得
 			excerpt := ""
 			if doc, err := fetchDoc(articleURL, cfg); err == nil {
 				doc.Find("script, style").Remove()
@@ -812,18 +812,18 @@ func collectHeadlinesPwCJapan(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 				URL:         articleURL,
 				PublishedAt: publishedAt,
 				Excerpt:     excerpt,
-				IsHeadline:  true,
+	
 			})
 		}
 	}
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// collectHeadlinesMizuhoRT collects headlines from Mizuho Research & Technologies
+// collectHeadlinesMizuhoRT は みずほリサーチ&テクノロジーズから見出しを収集する
 func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
-	// Use current year's publication page which lists recent reports
+	// 最近のレポートが掲載される当年の出版ページを使用
 	currentYear := time.Now().Year()
 	newsURL := fmt.Sprintf("https://www.mizuho-rt.co.jp/publication/%d/index.html", currentYear)
 
@@ -852,13 +852,13 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 	out := make([]Headline, 0, limit)
 	datePattern := reJapaneseDateYMD
 
-	// Extract articles from list items
+	// リストアイテムから記事を抽出
 	doc.Find(".section__news-list-item").Each(func(i int, item *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Get title and URL from link
+		// リンクからタイトルとURLを取得
 		link := item.Find(".section__news-link")
 		title := strings.TrimSpace(link.Text())
 		if title == "" {
@@ -870,13 +870,13 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			return
 		}
 
-		// Build absolute URL
+		// 絶対URLを構築
 		articleURL := href
 		if strings.HasPrefix(href, "/") {
 			articleURL = "https://www.mizuho-rt.co.jp" + href
 		}
 
-		// Extract date from .section__news-date
+		// .section__news-date から日付を抽出
 		dateStr := ""
 		dateText := strings.TrimSpace(item.Find(".section__news-date").Text())
 		if matches := datePattern.FindStringSubmatch(dateText); len(matches) == 4 {
@@ -892,7 +892,7 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			dateStr = fmt.Sprintf("%s-%s-%sT00:00:00Z", year, month, day)
 		}
 
-		// Fetch excerpt and date from article page
+		// 記事ページからExcerptと日付を取得
 		excerpt, pageDate := fetchMizuhoArticleDetail(articleURL, client, cfg.UserAgent)
 		if pageDate != "" && dateStr == "" {
 			dateStr = pageDate
@@ -904,15 +904,15 @@ func collectHeadlinesMizuhoRT(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
-	// Return empty slice if no articles found (not an error)
+	// 記事が見つからない場合は空スライスを返す（エラーではない）
 	return out, nil
 }
 
-// fetchMizuhoArticleDetail fetches excerpt and date from a Mizuho article page.
+// fetchMizuhoArticleDetail は みずほの記事ページからExcerptと日付を取得する
 func fetchMizuhoArticleDetail(articleURL string, client *http.Client, userAgent string) (excerpt string, dateStr string) {
 	req, err := http.NewRequest("GET", articleURL, nil)
 	if err != nil {
@@ -935,13 +935,13 @@ func fetchMizuhoArticleDetail(articleURL string, client *http.Client, userAgent 
 		return "", ""
 	}
 
-	// Extract excerpt from report-detail_post
+	// report-detail_post からExcerptを抽出
 	post := doc.Find(".report-detail_post")
 	if post.Length() > 0 {
 		excerpt = strings.TrimSpace(post.Text())
 	}
 
-	// Extract date from <time> tag
+	// <time> タグから日付を抽出
 	datePattern := reJapaneseDateYMD
 	doc.Find("time").Each(func(i int, s *goquery.Selection) {
 		if dateStr != "" {

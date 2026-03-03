@@ -1,16 +1,14 @@
-// =============================================================================
-// sources_regional_ets.go - Regional Emissions Trading System Sources
+// sources_regional_ets.go - 地域別排出権取引ソース
 // =============================================================================
 //
-// This file defines sources for regional emissions trading systems and
-// regulatory bodies.
+// 地域別排出権取引制度および規制機関のソースを定義する。
 //
-// Sources:
-//   1. EU ETS (EC)      - European Commission ETS news
-//   2. California CARB  - California Air Resources Board
-//   3. RGGI             - Regional Greenhouse Gas Initiative
-//   4. Australia CER    - Clean Energy Regulator
-//   5. UK ETS           - UK Government ETS publications (HTML scraping)
+// ソース一覧:
+//   1. EU ETS (EC)      - 欧州委員会ETSニュース
+//   2. California CARB  - カリフォルニア大気資源局
+//   3. RGGI             - 地域温室効果ガスイニシアティブ
+//   4. Australia CER    - オーストラリアクリーンエネルギー規制当局
+//   5. UK ETS           - 英国政府ETS出版物（HTMLスクレイピング）
 //
 // =============================================================================
 package pipeline
@@ -29,10 +27,10 @@ import (
 )
 
 // =============================================================================
-// PDF Text Extraction Helper
+// PDFテキスト抽出ヘルパー
 // =============================================================================
 
-// extractTextFromPDF downloads a PDF from the given URL and extracts its text content
+// extractTextFromPDF は指定URLからPDFをダウンロードしてテキストコンテンツを抽出する
 func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (string, error) {
 	req, err := http.NewRequest("GET", pdfURL, nil)
 	if err != nil {
@@ -50,20 +48,20 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Read PDF content into memory
+	// PDFコンテンツをメモリに読み込む
 	pdfData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read PDF: %w", err)
 	}
 
-	// Create a reader from the PDF data
+	// PDFデータからリーダーを作成する
 	reader := bytes.NewReader(pdfData)
 	pdfReader, err := pdf.NewReader(reader, int64(len(pdfData)))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse PDF: %w", err)
 	}
 
-	// Extract text from all pages
+	// 全ページからテキストを抽出する
 	var textBuilder strings.Builder
 	numPages := pdfReader.NumPage()
 	for i := 1; i <= numPages; i++ {
@@ -79,23 +77,23 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 		textBuilder.WriteString("\n")
 	}
 
-	// Clean up the extracted text
+	// 抽出テキストを整形する
 	result := textBuilder.String()
 	result = strings.TrimSpace(result)
-	// Normalize whitespace
+	// 空白を正規化する
 	result = strings.Join(strings.Fields(result), " ")
 
 	return result, nil
 }
 
 // =============================================================================
-// EU ETS (European Commission) Source
+// EU ETS（欧州委員会）ソース
 // =============================================================================
 
-// collectHeadlinesEUETS fetches news from European Commission ETS page
+// collectHeadlinesEUETS は欧州委員会ETSページからニュースを取得する
 //
-// The European Commission's climate action site provides official news and
-// updates about the EU Emissions Trading System.
+// 欧州委員会の気候変動対策サイトからEU排出権取引制度に関する
+// 公式ニュースと更新情報を提供する。
 func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://climate.ec.europa.eu/news-other-reads/news_en"
 
@@ -124,13 +122,13 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// EC site uses news item cards
+	// ECサイトはニュースアイテムカードを使用
 	doc.Find("article, .ecl-card, .news-item, div[class*='news'], div[class*='listing-item']").Each(func(_ int, article *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Find title link
+		// タイトルリンクを検索
 		titleLink := article.Find("h2 a, h3 a, .ecl-card__title a, .title a, a[class*='title']").First()
 		if titleLink.Length() == 0 {
 			titleLink = article.Find("a").First()
@@ -155,7 +153,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 		}
 		seen[articleURL] = true
 
-		// Extract date from listing page first
+		// 一覧ページから日付を抽出
 		dateStr := ""
 		foundDate := false
 		dateElem := article.Find("time, .date, .ecl-date-block, span[class*='date']")
@@ -180,7 +178,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文コンテンツを取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -190,10 +188,10 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Remove unwanted elements
+					// 不要な要素を除去
 					articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar, .related").Remove()
 
-					// Try to extract date from article page if not found
+					// 記事ページから日付を抽出（未取得の場合）
 					if !foundDate {
 						articleDoc.Find("time, .date, meta[property='article:published_time']").Each(func(_ int, elem *goquery.Selection) {
 							if foundDate {
@@ -209,7 +207,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 						})
 					}
 
-					// Extract content from article body
+					// 記事本文からコンテンツを抽出
 					contentSelectors := []string{
 						".ecl-editor",
 						".ecl-page-content",
@@ -235,7 +233,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 						}
 					}
 
-					// Fallback: get all paragraphs from main content
+					// フォールバック: メインコンテンツから全段落を取得
 					if excerpt == "" {
 						var paragraphs []string
 						articleDoc.Find("main p, article p").Each(func(_ int, p *goquery.Selection) {
@@ -252,7 +250,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻をフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -263,7 +261,7 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -275,13 +273,13 @@ func collectHeadlinesEUETS(limit int, cfg HeadlineSourceConfig) ([]Headline, err
 }
 
 // =============================================================================
-// California CARB Source
+// カリフォルニア CARB ソース
 // =============================================================================
 
-// collectHeadlinesCARB fetches news from California Air Resources Board
+// collectHeadlinesCARB はカリフォルニア大気資源局からニュースを取得する
 //
-// CARB manages California's cap-and-trade program and publishes news about
-// emissions regulations and climate policy.
+// CARBはカリフォルニア州のキャップ・アンド・トレードプログラムを管理し、
+// 排出規制と気候政策に関するニュースを公開している。
 func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://ww2.arb.ca.gov/news"
 
@@ -310,13 +308,13 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// CARB news listing
+	// CARBニュース一覧
 	doc.Find("article, .news-item, .views-row, div[class*='node--type-news']").Each(func(_ int, article *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Find title
+		// タイトルを検索
 		titleLink := article.Find("h2 a, h3 a, .field--name-title a, a[href*='/news/']").First()
 		title := strings.TrimSpace(titleLink.Text())
 		if title == "" {
@@ -337,7 +335,7 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Extract date
+		// 日付を抽出
 		dateStr := ""
 		dateElem := article.Find("time, .date, .field--name-created, span[class*='date']")
 		if dateElem.Length() > 0 {
@@ -359,7 +357,7 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Fetch individual article page for full body content
+		// 個別記事ページから全文コンテンツを取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -369,13 +367,13 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Remove nav, header, footer, sidebar elements
+					// ナビゲーション・ヘッダー・フッター・サイドバー要素を除去
 					articleDoc.Find("header, footer, nav, aside, .sidebar, script, style, .breadcrumb").Remove()
 
-					// Extract content from main element
+					// メイン要素からコンテンツを抽出
 					mainContent := articleDoc.Find("main#main-content, main, article, .content")
 					if mainContent.Length() > 0 {
-						// Get all paragraph text
+						// 全段落テキストを取得
 						var paragraphs []string
 						mainContent.Find("p").Each(func(_ int, p *goquery.Selection) {
 							text := strings.TrimSpace(p.Text())
@@ -389,7 +387,7 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Fallback to listing page excerpt if article fetch failed
+		// 記事取得に失敗した場合は一覧ページの抜粋にフォールバック
 		if excerpt == "" {
 			excerptElem := article.Find("p, .field--name-body, .summary, .teaser").First()
 			if excerptElem.Length() > 0 {
@@ -403,7 +401,7 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -415,13 +413,13 @@ func collectHeadlinesCARB(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 }
 
 // =============================================================================
-// RGGI Source
+// RGGI ソース
 // =============================================================================
 
-// collectHeadlinesRGGI fetches news from Regional Greenhouse Gas Initiative
+// collectHeadlinesRGGI は地域温室効果ガスイニシアティブからニュースを取得する
 //
-// RGGI is a cooperative effort among Eastern US states to cap and reduce
-// power sector CO2 emissions.
+// RGGIは米国東部各州の協力によるキャップ・アンド・リデュースプログラムで、
+// 電力部門のCO2排出量を削減する取り組みである。
 func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://www.rggi.org/news-releases/rggi-releases"
 
@@ -450,13 +448,13 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// RGGI uses a table structure with rows for each news item
+	// RGGIはテーブル構造で各ニュースアイテムを行として表示
 	doc.Find("table.table tbody tr").Each(func(_ int, row *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Find link and title in the body cell
+		// 本文セルからリンクとタイトルを検索
 		bodyCell := row.Find("td.views-field-body")
 		link := bodyCell.Find("a").First()
 
@@ -476,15 +474,15 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		}
 		seen[articleURL] = true
 
-		// Extract description from body cell (text after the link)
+		// 本文セルから説明文を抽出（リンクの後のテキスト）
 		listingDescription := ""
 		bodyCellText := strings.TrimSpace(bodyCell.Text())
 		if bodyCellText != "" && bodyCellText != title {
-			// Remove the title from the body cell text to get the description
+			// 本文セルのテキストからタイトルを除去して説明文を取得
 			listingDescription = strings.TrimSpace(strings.TrimPrefix(bodyCellText, title))
 		}
 
-		// Extract date from time element
+		// time要素から日付を抽出
 		dateStr := ""
 		foundDate := false
 		timeElem := row.Find("time")
@@ -495,19 +493,19 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Extract type from type cell
+		// タイプセルからアイテム種別を抽出
 		typeCell := row.Find("td.views-field-field-item-type")
 		itemType := strings.TrimSpace(typeCell.Text())
 
-		// Fetch content from article page or PDF
+		// 記事ページまたはPDFからコンテンツを取得
 		excerpt := ""
 		isPDF := strings.HasSuffix(strings.ToLower(articleURL), ".pdf")
 
 		if isPDF {
-			// Extract text from PDF
+			// PDFからテキストを抽出
 			pdfText, err := extractTextFromPDF(articleURL, client, cfg.UserAgent)
 			if err == nil && len(pdfText) > 50 {
-				// Limit PDF text to reasonable length
+				// PDFテキストを適切な長さに制限
 				if len(pdfText) > 2000 {
 					pdfText = pdfText[:2000] + "..."
 				}
@@ -522,10 +520,10 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 					articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 					articleResp.Body.Close()
 					if err == nil {
-						// Remove unwanted elements
+						// 不要な要素を除去
 						articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar").Remove()
 
-						// Try to extract date if not found
+						// 日付が未取得の場合に抽出を試行
 						if !foundDate {
 							articleDoc.Find("time").Each(func(_ int, elem *goquery.Selection) {
 								if foundDate {
@@ -538,7 +536,7 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 							})
 						}
 
-						// Extract content from main content area
+						// メインコンテンツエリアからコンテンツを抽出
 						contentSelectors := []string{
 							".field--name-body",
 							".content",
@@ -566,10 +564,10 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Fallback: use listing description or type as excerpt
+		// フォールバック: 一覧ページの説明文またはタイプを抜粋として使用
 		if excerpt == "" {
 			if listingDescription != "" {
-				// Use description from listing page
+				// 一覧ページの説明文を使用
 				excerpt = listingDescription
 				if strings.HasSuffix(strings.ToLower(articleURL), ".pdf") {
 					excerpt = "[PDF] " + excerpt
@@ -581,7 +579,7 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻をフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -592,7 +590,7 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -604,13 +602,13 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 }
 
 // =============================================================================
-// Australia CER Source
+// オーストラリア CER ソース
 // =============================================================================
 
-// collectHeadlinesAustraliaCER fetches news from Australia Clean Energy Regulator
+// collectHeadlinesAustraliaCER はオーストラリアクリーンエネルギー規制当局からニュースを取得する
 //
-// The CER is the Australian Government agency responsible for administering
-// climate change laws including the Emissions Reduction Fund.
+// CERは排出削減基金を含む気候変動法を管理する
+// オーストラリア政府機関である。
 func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	newsURL := "https://cer.gov.au/news-and-media/news"
 
@@ -639,13 +637,13 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// Australia CER uses cer-card class for news items
+	// オーストラリアCERはcer-cardクラスでニュースアイテムを表示
 	doc.Find("div.cer-card.news, article.cer-card").Each(func(_ int, article *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Find title in cer-card__heading
+		// cer-card__headingからタイトルを検索
 		headingElem := article.Find(".cer-card__heading a, h2 a, h3 a").First()
 		title := strings.TrimSpace(headingElem.Text())
 		if title == "" {
@@ -657,7 +655,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 
 		href, exists := headingElem.Attr("href")
 		if !exists || href == "" {
-			// Try finding any link
+			// 任意のリンクを検索
 			anyLink := article.Find("a[href]").First()
 			href, exists = anyLink.Attr("href")
 		}
@@ -671,7 +669,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 		}
 		seen[articleURL] = true
 
-		// Extract date from cer-card__changed
+		// cer-card__changedから日付を抽出
 		dateStr := ""
 		foundDate := false
 		dateElem := article.Find(".cer-card__changed, time, .date")
@@ -696,7 +694,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文コンテンツを取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -706,10 +704,10 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Remove unwanted elements
+					// 不要な要素を除去
 					articleDoc.Find("header, footer, nav, script, style, noscript, .sidebar, .related").Remove()
 
-					// Try to extract date from article page if not found
+					// 記事ページから日付を抽出（未取得の場合）
 					if !foundDate {
 						articleDoc.Find("time, .date").Each(func(_ int, elem *goquery.Selection) {
 							if foundDate {
@@ -722,7 +720,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 						})
 					}
 
-					// Extract content from article body (paragraphs and list items)
+					// 記事本文からコンテンツを抽出（段落とリストアイテム）
 					contentSelectors := []string{
 						".field--name-body",
 						".content",
@@ -734,11 +732,11 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 						contentElem := articleDoc.Find(sel)
 						if contentElem.Length() > 0 {
 							var contentParts []string
-							// Extract paragraphs and list items
+							// 段落とリストアイテムを抽出
 							contentElem.Find("p, li").Each(func(_ int, elem *goquery.Selection) {
 								text := strings.TrimSpace(elem.Text())
 								if len(text) > 20 {
-									// Add bullet for list items
+									// リストアイテムには箇条書き記号を付与
 									if goquery.NodeName(elem) == "li" {
 										text = "• " + text
 									}
@@ -752,7 +750,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 						}
 					}
 
-					// Fallback: try all paragraphs and list items from main
+					// フォールバック: メインから全段落とリストアイテムを取得
 					if excerpt == "" {
 						var contentParts []string
 						articleDoc.Find("main p, main li, article p, article li").Each(func(_ int, elem *goquery.Selection) {
@@ -772,7 +770,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 			}
 		}
 
-		// Fallback to listing page excerpt if no content found
+		// コンテンツが見つからない場合は一覧ページの抜粋にフォールバック
 		if excerpt == "" {
 			bodyElem := article.Find(".cer-card__body, p, .summary")
 			if bodyElem.Length() > 0 {
@@ -780,7 +778,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻をフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -791,7 +789,7 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 
@@ -803,16 +801,16 @@ func collectHeadlinesAustraliaCER(limit int, cfg HeadlineSourceConfig) ([]Headli
 }
 
 // =============================================================================
-// UK ETS Source
+// UK ETS ソース
 // =============================================================================
 
-// collectHeadlinesUKETSHTML fetches news from UK Government ETS publications
+// collectHeadlinesUKETSHTML は英国政府ETS出版物からニュースを取得する
 //
-// The UK Emissions Trading Scheme is managed by the UK ETS Authority
-// (a joint body of UK, Scottish, Welsh governments and NI Executive).
-// This scrapes gov.uk search results for UK ETS related publications.
+// UK排出権取引制度はUK ETS当局（英国、スコットランド、ウェールズ政府および
+// 北アイルランド行政府の合同機関）が管理している。
+// gov.ukの検索結果からUK ETS関連の出版物をスクレイピングする。
 func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
-	// Search gov.uk for UK ETS publications and news
+	// gov.ukでUK ETSの出版物とニュースを検索
 	searchURL := "https://www.gov.uk/search/all?keywords=%22UK+Emissions+Trading+Scheme%22&order=updated-newest"
 
 	client := cfg.Client
@@ -840,13 +838,13 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 	out := make([]Headline, 0, limit)
 	seen := make(map[string]bool)
 
-	// gov.uk search results use gem-c-document-list__item for each result
+	// gov.ukの検索結果は各結果にgem-c-document-list__itemを使用
 	doc.Find("li.gem-c-document-list__item, .gem-c-document-list__item, div.finder-results li").Each(func(_ int, item *goquery.Selection) {
 		if len(out) >= limit {
 			return
 		}
 
-		// Find title link
+		// タイトルリンクを検索
 		link := item.Find("a.gem-c-document-list__item-title, a[data-track-category='navFinderLinkClicked']").First()
 		if link.Length() == 0 {
 			link = item.Find("a").First()
@@ -867,7 +865,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			return
 		}
 
-		// Filter: only include UK ETS related content
+		// フィルタ: UK ETS関連コンテンツのみを含める
 		titleLower := strings.ToLower(title)
 		if !strings.Contains(titleLower, "ets") &&
 			!strings.Contains(titleLower, "emissions trading") &&
@@ -877,13 +875,13 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 
 		seen[articleURL] = true
 
-		// Extract date from metadata
+		// メタデータから日付を抽出
 		dateStr := ""
 		foundDate := false
 		metaElem := item.Find(".gem-c-document-list__attribute, .document-list-item-metadata")
 		if metaElem.Length() > 0 {
 			metaText := strings.TrimSpace(metaElem.Text())
-			// Look for "Updated: DD Month YYYY" or similar
+			// "Updated: DD Month YYYY" 等の形式を検索
 			if strings.Contains(metaText, "Updated:") {
 				dateText := strings.TrimPrefix(metaText, "Updated:")
 				dateText = strings.TrimSpace(dateText)
@@ -902,7 +900,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Fetch full article content from individual page
+		// 個別記事ページから全文コンテンツを取得
 		excerpt := ""
 		articleReq, err := http.NewRequest("GET", articleURL, nil)
 		if err == nil {
@@ -912,10 +910,10 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 				articleDoc, err := goquery.NewDocumentFromReader(articleResp.Body)
 				articleResp.Body.Close()
 				if err == nil {
-					// Remove unwanted elements
+					// 不要な要素を除去
 					articleDoc.Find("header, footer, nav, script, style, noscript, .gem-c-contextual-sidebar").Remove()
 
-					// Try to extract date from article page if not found
+					// 記事ページから日付を抽出（未取得の場合）
 					if !foundDate {
 						articleDoc.Find("time, .gem-c-metadata__definition").Each(func(_ int, elem *goquery.Selection) {
 							if foundDate {
@@ -941,7 +939,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 						})
 					}
 
-					// Extract content from gov.uk page structure
+					// gov.ukのページ構造からコンテンツを抽出
 					contentSelectors := []string{
 						".gem-c-govspeak",
 						".govuk-govspeak",
@@ -966,7 +964,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 						}
 					}
 
-					// Fallback: try meta description
+					// フォールバック: metaディスクリプションを試行
 					if excerpt == "" {
 						metaDesc := articleDoc.Find("meta[name='description']")
 						if metaDesc.Length() > 0 {
@@ -978,7 +976,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Fallback to listing page description if no content found
+		// コンテンツが見つからない場合は一覧ページの説明文にフォールバック
 		if excerpt == "" {
 			descElem := item.Find(".gem-c-document-list__item-description, p")
 			if descElem.Length() > 0 {
@@ -986,7 +984,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			}
 		}
 
-		// Fallback to current time if no date found
+		// 日付が見つからない場合は現在時刻をフォールバック
 		if !foundDate {
 			dateStr = time.Now().Format(time.RFC3339)
 		}
@@ -997,7 +995,7 @@ func collectHeadlinesUKETSHTML(limit int, cfg HeadlineSourceConfig) ([]Headline,
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-			IsHeadline:  true,
+
 		})
 	})
 

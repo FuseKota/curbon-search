@@ -77,6 +77,39 @@ import (
 	"github.com/jomei/notionapi" // Notion API クライアントライブラリ
 )
 
+// notionRetry はNotion API呼び出しをリトライ付きで実行する
+// レート制限（429）やサーバーエラー（5xx）でHTMLが返された場合、
+// JSONパースエラー（"invalid character '<'"）として検出しリトライする
+func notionRetry(operation string, fn func() error) error {
+	const maxRetries = 3
+	var lastErr error
+
+	for i := 0; i <= maxRetries; i++ {
+		if i > 0 {
+			wait := time.Duration(1<<uint(i)) * time.Second // 2s, 4s, 8s
+			fmt.Fprintf(os.Stderr, "⏳ Notion API retry %d/%d for %s (waiting %v)...\n", i, maxRetries, operation, wait)
+			time.Sleep(wait)
+		}
+
+		err := fn()
+		if err == nil {
+			if i > 0 {
+				fmt.Fprintf(os.Stderr, "✅ Notion API %s succeeded after %d retries\n", operation, i)
+			}
+			return nil
+		}
+
+		lastErr = err
+
+		// HTMLレスポンス（レート制限/サーバーエラー）の場合のみリトライ
+		if !strings.Contains(err.Error(), "invalid character '<'") {
+			return err
+		}
+	}
+
+	return lastErr
+}
+
 // academicSources は査読付き学術論文・プレプリントのソース
 var academicSources = map[string]bool{
 	"arXiv":              true,
@@ -350,7 +383,12 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		Properties: properties,
 	}
 
-	page, err := nc.client.Page.Create(ctx, pageRequest)
+	var page *notionapi.Page
+	err := notionRetry("Page.Create", func() error {
+		var createErr error
+		page, createErr = nc.client.Page.Create(ctx, pageRequest)
+		return createErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to clip headline: %w", err)
 	}
@@ -363,8 +401,11 @@ func (nc *NotionClipper) ClipHeadline(ctx context.Context, h Headline) error {
 		}
 
 		// ページにブロックを追加
-		_, err = nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
-			Children: blocks,
+		err = notionRetry("Block.AppendChildren", func() error {
+			_, appendErr := nc.client.Block.AppendChildren(ctx, notionapi.BlockID(page.ID), &notionapi.AppendBlockChildrenRequest{
+				Children: blocks,
+			})
+			return appendErr
 		})
 		if err != nil {
 			return fmt.Errorf("failed to add content blocks: %w", err)

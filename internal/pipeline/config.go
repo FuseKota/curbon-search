@@ -14,6 +14,7 @@ package pipeline
 
 import (
 	"flag"
+	"os"
 	"strings"
 )
 
@@ -38,16 +39,25 @@ type InputConfig struct {
 
 	// PerSource はソースあたりの最大記事数
 	PerSource int
+
+	// HoursBack は収集後に過去N時間以内の記事のみにフィルタ（0=フィルタなし）
+	HoursBack int
 }
 
 // Sources はSourcesRawをパースしてスライスで返す
+// "all-free" を指定すると全ソースに展開される
 func (c *InputConfig) Sources() []string {
 	var result []string
 	for _, s := range strings.Split(c.SourcesRaw, ",") {
 		s = strings.TrimSpace(strings.ToLower(s))
-		if s != "" {
-			result = append(result, s)
+		if s == "" {
+			continue
 		}
+		// "all-free" は全ソースに展開
+		if s == "all-free" {
+			return strings.Split(DefaultSources, ",")
+		}
+		result = append(result, s)
 	}
 	return result
 }
@@ -56,9 +66,6 @@ func (c *InputConfig) Sources() []string {
 type OutputConfig struct {
 	// OutFile が指定された場合、ファイルに出力（空の場合はstdout）
 	OutFile string
-
-	// SaveFree が指定された場合、候補プールをファイルに保存
-	SaveFree string
 
 	// NotionClip がtrueの場合、Notionに保存
 	NotionClip bool
@@ -74,9 +81,6 @@ type OutputConfig struct {
 //
 // 【注意】email.goのEmailConfig（SMTP設定）とは別物
 type EmailModeConfig struct {
-	// SendEmail がtrueの場合、フルメールサマリーを送信
-	SendEmail bool
-
 	// SendShortEmail がtrueの場合、50文字ダイジェストを送信
 	SendShortEmail bool
 
@@ -91,29 +95,29 @@ type EmailModeConfig struct {
 // フラグ解析
 // =============================================================================
 
-// DefaultSources はデフォルトソースリスト（全38アクティブソース）
+// DefaultSources はデフォルトソースリスト（全39アクティブソース）
 // 2026-02-17更新: nature-ecoevo を停止（有料記事のため）
 // 2026-02-18更新: env-ministry, meti を停止
-const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
+// 2026-03-01更新: nature-comms を追加
+const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {
 	cfg := &PipelineConfig{}
 
-	// Input flags
+	// 入力フラグ
 	flag.StringVar(&cfg.Input.HeadlinesFile, "headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 	flag.StringVar(&cfg.Input.SourcesRaw, "sources", DefaultSources, "sources to scrape when --headlines is empty")
 	flag.IntVar(&cfg.Input.PerSource, "perSource", 30, "max headlines to collect per source")
+	flag.IntVar(&cfg.Input.HoursBack, "hoursBack", 0, "filter headlines to last N hours (0=no filter)")
 
-	// Output flags
-	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write matched output JSON to this path (default: stdout)")
-	flag.StringVar(&cfg.Output.SaveFree, "saveFree", "", "optional: write pooled free candidates to file")
+	// 出力フラグ
+	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write output JSON to this path (default: stdout)")
 	flag.BoolVar(&cfg.Output.NotionClip, "notionClip", false, "clip articles to Notion database")
-	flag.StringVar(&cfg.Output.NotionPageID, "notionPageID", "", "parent page ID for creating new Notion database (required for new DB)")
-	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", "", "existing Notion database ID (optional, will create new if empty)")
+	flag.StringVar(&cfg.Output.NotionPageID, "notionPageID", os.Getenv("NOTION_PAGE_ID"), "parent page ID for creating new Notion database")
+	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", os.Getenv("NOTION_DATABASE_ID"), "existing Notion database ID")
 
-	// Email flags
-	flag.BoolVar(&cfg.Email.SendEmail, "sendEmail", false, "send headlines summary via email")
+	// メールフラグ
 	flag.BoolVar(&cfg.Email.SendShortEmail, "sendShortEmail", false, "send 50-char short headlines digest via email")
 	flag.BoolVar(&cfg.Email.ListShortHeadlines, "listShortHeadlines", false, "list Article Summary 300 values from NotionDB (diagnostic)")
 	flag.IntVar(&cfg.Email.DaysBack, "emailDaysBack", 1, "fetch headlines from last N days for email")
@@ -124,5 +128,5 @@ func ParseFlags() *PipelineConfig {
 
 // IsEmailMode はメール関連モードかどうかを返す
 func (c *PipelineConfig) IsEmailMode() bool {
-	return c.Email.SendEmail || c.Email.SendShortEmail || c.Email.ListShortHeadlines
+	return c.Email.SendShortEmail || c.Email.ListShortHeadlines
 }

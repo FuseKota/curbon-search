@@ -44,7 +44,6 @@
 //
 // ▼ メール設定
 //
-//	-sendEmail       メール送信モード
 //	-sendShortEmail  50文字ヘッドラインダイジェスト送信
 //	-notionClip      Notionデータベースに保存
 //
@@ -79,7 +78,7 @@ func main() {
 	// CLIフラグを解析（config.goのParseFlags）
 	cfg := ParseFlags()
 
-	// --- Early exit for email-only modes ---
+	// --- メール専用モードの早期終了 ---
 	if cfg.Email.SendShortEmail {
 		handleShortEmailSend(cfg.Email.DaysBack)
 		return
@@ -89,7 +88,7 @@ func main() {
 		return
 	}
 
-	// --- 1) Collect or read headlines ---
+	// --- 1) ヘッドラインの収集または読み込み ---
 	var headlines []Headline
 	var collectResult *CollectResult
 	if cfg.Input.HeadlinesFile != "" {
@@ -112,7 +111,7 @@ func main() {
 		fatalf("no headlines collected")
 	}
 
-	// --- 1.5) Filter by hours if specified ---
+	// --- 1.5) 時間指定フィルタリング ---
 	if cfg.Input.HoursBack > 0 {
 		headlines = FilterHeadlinesByHours(headlines, cfg.Input.HoursBack)
 		if len(headlines) == 0 {
@@ -120,10 +119,10 @@ func main() {
 		}
 	}
 
-	// --- 2) Output results ---
+	// --- 2) 結果の出力 ---
 	handleJSONOutput(headlines, &cfg.Output)
 
-	// --- 3) Clip to Notion (if enabled) ---
+	// --- 3) Notionへのクリップ（有効な場合） ---
 	var notionResult *NotionClipResult
 	if cfg.Output.NotionClip {
 		notionResult = handleNotionClip(headlines, &cfg.Output)
@@ -133,9 +132,8 @@ func main() {
 	sendErrorNotification(collectResult, notionResult)
 }
 
-// Handlers are defined in handlers.go:
-// - handleEmailSend
-// - handleShortEmailSend
-// - handleListShortHeadlines
-// - handleJSONOutput
-// - handleNotionClip
+// ハンドラは handlers.go で定義:
+// - handleShortEmailSend（ショートメール送信）
+// - handleListShortHeadlines（ショートヘッドライン一覧表示）
+// - handleJSONOutput（JSON出力）
+// - handleNotionClip（Notionクリップ）

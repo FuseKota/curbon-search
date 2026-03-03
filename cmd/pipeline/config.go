@@ -95,28 +95,29 @@ type EmailModeConfig struct {
 // フラグ解析
 // =============================================================================
 
-// デフォルトソースリスト（全38アクティブソース）
+// デフォルトソースリスト（全39アクティブソース）
 // 2026-02-17更新: nature-ecoevo を停止（有料記事のため）
 // 2026-02-18更新: env-ministry, meti を停止
-const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
+// 2026-03-01更新: nature-comms を追加
+const defaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {
 	cfg := &PipelineConfig{}
 
-	// Input flags
+	// 入力フラグ
 	flag.StringVar(&cfg.Input.HeadlinesFile, "headlines", "", "optional: path to headlines.json; if empty, scrape from sources")
 	flag.StringVar(&cfg.Input.SourcesRaw, "sources", defaultSources, "sources to scrape when --headlines is empty")
 	flag.IntVar(&cfg.Input.PerSource, "perSource", 30, "max headlines to collect per source")
 	flag.IntVar(&cfg.Input.HoursBack, "hoursBack", 0, "filter headlines to last N hours (0=no filter)")
 
-	// Output flags
+	// 出力フラグ
 	flag.StringVar(&cfg.Output.OutFile, "out", "", "optional: write output JSON to this path (default: stdout)")
 	flag.BoolVar(&cfg.Output.NotionClip, "notionClip", false, "clip articles to Notion database")
 	flag.StringVar(&cfg.Output.NotionPageID, "notionPageID", os.Getenv("NOTION_PAGE_ID"), "parent page ID for creating new Notion database")
 	flag.StringVar(&cfg.Output.NotionDatabaseID, "notionDatabaseID", os.Getenv("NOTION_DATABASE_ID"), "existing Notion database ID")
 
-	// Email flags
+	// メールフラグ
 	flag.BoolVar(&cfg.Email.SendShortEmail, "sendShortEmail", false, "send 50-char short headlines digest via email")
 	flag.BoolVar(&cfg.Email.ListShortHeadlines, "listShortHeadlines", false, "list Article Summary 300 values from NotionDB (diagnostic)")
 	flag.IntVar(&cfg.Email.DaysBack, "emailDaysBack", 1, "fetch headlines from last N days for email")

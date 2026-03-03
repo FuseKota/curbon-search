@@ -5,7 +5,6 @@
 // このファイルはCLIコマンドの各ハンドラ関数を提供します。
 //
 // 【このファイルで提供する機能】
-//   - handleEmailSend:          フルメールサマリー送信
 //   - handleShortEmailSend:     50文字ヘッドラインダイジェスト送信
 //   - handleListShortHeadlines: Article Summary 300診断表示
 //   - handleJSONOutput:         JSON出力
@@ -136,11 +135,11 @@ func handleShortEmailSend(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "📧 Sending Short Headlines Digest")
 	fmt.Fprintln(os.Stderr, "========================================")
 
-	// Create Notion clipper and fetch headlines
+	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
 
-	// Create email sender and send（0件でも送信する）
+	// メール送信者を作成して送信（0件でも送信する）
 	sender, from, to := createEmailSender()
 	ctx := context.Background()
 	if err := sender.SendShortHeadlinesDigest(ctx, headlines); err != nil {
@@ -166,7 +165,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "📋 Listing Article Summary 300 Values from NotionDB")
 	fmt.Fprintln(os.Stderr, "========================================")
 
-	// Create Notion clipper and fetch headlines
+	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
 	if headlines == nil {
@@ -175,7 +174,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 
 	fmt.Fprintf(os.Stderr, "Found %d headlines (last %d days)\n\n", len(headlines), emailDaysBack)
 
-	// Group by Article Summary 300 status
+	// Article Summary 300のステータスでグループ化
 	var withSummary, withDash, empty []NotionHeadline
 	for _, h := range headlines {
 		switch {
@@ -188,14 +187,14 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display statistics
+	// 統計情報を表示
 	fmt.Fprintf(os.Stderr, "📊 Statistics:\n")
 	fmt.Fprintf(os.Stderr, "   ✅ With Summary: %d\n", len(withSummary))
 	fmt.Fprintf(os.Stderr, "   ❌ Filtered (-): %d\n", len(withDash))
 	fmt.Fprintf(os.Stderr, "   ⏳ Empty:        %d\n", len(empty))
 	fmt.Fprintln(os.Stderr, "")
 
-	// Display headlines with summary
+	// 要約ありのヘッドラインを表示
 	if len(withSummary) > 0 {
 		fmt.Fprintln(os.Stderr, "✅ Headlines with Summary:")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
@@ -207,7 +206,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display filtered headlines
+	// フィルタ済みヘッドラインを表示
 	if len(withDash) > 0 {
 		fmt.Fprintln(os.Stderr, "❌ Filtered Headlines (-):")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")
@@ -218,7 +217,7 @@ func handleListShortHeadlines(emailDaysBack int) {
 		}
 	}
 
-	// Display empty headlines
+	// 空のヘッドラインを表示
 	if len(empty) > 0 {
 		fmt.Fprintln(os.Stderr, "⏳ Headlines without Article Summary 300 (need Notion AI processing):")
 		fmt.Fprintln(os.Stderr, "----------------------------------------")

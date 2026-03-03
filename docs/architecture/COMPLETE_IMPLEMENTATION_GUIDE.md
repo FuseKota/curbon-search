@@ -189,9 +189,12 @@ Carbon関連の無料記事を幅広く確認
 
 ## 3. 全ソースの実装詳細
 
-### 3.1 無料ソース - 日本市場（7ソース、うち2つ停止中）
+> **構成**: 各セクションはソースコードファイル（`sources_*.go`）と 1:1 で対応しています。
+> 全 42 ソース（39 アクティブ + 3 停止中/不安定）に通し番号 #1〜#42 を付与。
 
-#### ソース1: CarbonCredits.jp
+### 3.1 WordPress REST APIソース（7ソース） — `sources_wordpress.go`
+
+#### #1: CarbonCredits.jp
 **実装**: `collectHeadlinesCarbonCreditsJP()`
 **手法**: WordPress REST API
 **エンドポイント**: `https://carboncredits.jp/wp-json/wp/v2/posts`
@@ -224,7 +227,141 @@ for _, p := range posts {
 }
 ```
 
-#### ソース2: Japan Research Institute (JRI - 日本総研)
+#### #2: Carbon Herald
+**実装**: `collectHeadlinesCarbonHerald()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://carbonherald.com/wp-json/wp/v2/posts`
+**焦点**: CDR技術とスタートアップ
+
+**コンテンツ**: 完全記事
+**ステータス**: ✅ 完全動作
+
+#### #3: Climate Home News
+**実装**: `collectHeadlinesClimateHomeNews()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://www.climatechangenews.com/wp-json/wp/v2/posts`
+**焦点**: 国際交渉と政策
+
+**コンテンツ**: 完全記事
+**ステータス**: ✅ 完全動作
+
+#### #4: CarbonCredits.com
+**実装**: `collectHeadlinesCarbonCreditscom()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://carboncredits.com/wp-json/wp/v2/posts`
+**焦点**: 初心者向けコンテンツ
+
+**コンテンツ**: 完全記事
+**ステータス**: ✅ 完全動作
+
+#### #5: Sandbag
+**実装**: `collectHeadlinesSandbag()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://sandbag.be/wp-json/wp/v2/posts`
+**焦点**: EU ETS分析
+
+**コンテンツ**: HTMLクリーニング付き完全記事
+**ステータス**: ✅ 完全動作
+
+#### #6: Ecosystem Marketplace
+**実装**: `collectHeadlinesEcosystemMarketplace()`
+**手法**: WordPress REST API
+**エンドポイント**: `https://www.ecosystemmarketplace.com/wp-json/wp/v2/posts`
+**焦点**: 自然ベース解決策（NbS）市場
+
+**コンテンツ**: 完全記事
+**ステータス**: ✅ 完全動作
+
+#### #7: RMI (Rocky Mountain Institute)
+**実装**: `collectHeadlinesRMI()`
+**手法**: WordPress REST API（記事一覧） + HTMLスクレイピング（本文）
+**エンドポイント**: `https://rmi.org/wp-json/wp/v2/posts`
+
+**特徴**:
+- エネルギー転換に特化したシンクタンク
+- WordPress APIで記事一覧を取得し、各記事ページをスクレイピングして全文取得
+- Gutenbergブロック（Datawrapperチャート等）によりAPI content.renderedが不完全なため、ページ直接取得に変更
+- 新旧2つのテンプレート（`div.my-12.single_news_content-wrapper` / `div.single_news_content-wrapper`）に対応
+
+**ステータス**: ✅ 完全動作
+
+---
+
+### 3.2 RSSフィードソース（4ソース） — `sources_rss.go`
+
+#### #8: Carbon Brief
+**実装**: `collectHeadlinesCarbonBrief()`
+**手法**: RSS Feed（gofeed）
+**フィードURL**: `https://www.carbonbrief.org/feed/`
+
+**特徴**:
+- 気候科学と政策に特化したメディア
+- `content:encoded` から全文取得、なければ `description` にフォールバック
+- Excerpt を 3,000文字で切り詰め（Notion AI要約用）
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+#### #9: POLITICO EU
+**実装**: `collectHeadlinesPoliticoEU()`
+**手法**: RSS Feed（gofeed）
+**フィードURL**: `https://www.politico.eu/section/energy/feed/`
+
+**特徴**:
+- EUエネルギー政策セクションのRSSフィード
+- `content:encoded` または `description` から Excerpt 抽出
+- UTMトラッキングパラメータ（`?utm_`）を自動除去
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+#### #10: Euractiv
+**実装**: `collectHeadlinesEuractiv()`
+**手法**: RSS Feed + HTMLスクレイピング + キーワードフィルタ
+**フィードURL**: `https://www.euractiv.com/feed/`
+
+**特徴**:
+- メインフィードから取得（セクション別フィードはCloudflare保護あり）
+- タイトル + RSS description + カテゴリでキーワード照合
+- 記事ページの `div.c-news-detail__content` から全文 Excerpt 取得
+- ペイウォール検出（`"Lorem ipsum"` / `"…Subscribe now"`）→ 該当記事はスキップ
+- スクレイピング失敗時は RSS description にフォールバック
+
+**キーワードフィルタ**: あり
+```go
+var carbonKeywordsEuractiv = []string{
+    "carbon", "emission", "climate", "co2", "greenhouse",
+    "net zero", "net-zero", "decarbonisation", "decarbonization",
+    "green deal", "fit for 55", "cbam", "carbon border",
+    "renewable", "energy transition", "paris agreement",
+    "methane", "carbon market", "carbon price", "carbon tax",
+    "energy", "environment", "sustainability",
+    "eu ets", "ets2", "emissions trading", "uk ets",
+}
+```
+
+**ステータス**: ✅ 完全動作
+
+#### #11: Carbon Market Watch
+**実装**: `collectHeadlinesCarbonMarketWatch()`
+**手法**: WordPress RSS Feed（`content:encoded` で全文含有）
+**フィードURL**: `https://carbonmarketwatch.org/feed/`
+
+**特徴**:
+- Webサイト直接アクセスは403ブロック → RSS フィード経由で取得
+- `content:encoded` から全文取得、なければ `description` にフォールバック
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+---
+
+### 3.3 日本語ソース（6ソース、うち2つ停止中） — `sources_japan.go`
+
+#### #12: Japan Research Institute (JRI - 日本総研)
 **実装**: `collectHeadlinesJRI()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.jri.co.jp/xml.jsp?id=12966`
@@ -253,7 +390,7 @@ for _, item := range feed.Items {
 }
 ```
 
-#### ソース3: Japan Environment Ministry（環境省）
+#### #13: Japan Environment Ministry（環境省）
 **実装**: `collectHeadlinesEnvMinistry()`
 **手法**: HTML Scraping + キーワードフィルタリング
 **収集URL**: `https://www.env.go.jp/press/`
@@ -283,7 +420,7 @@ fmt.Sscanf(dateText, "%d年%d月%d日", &year, &month, &day)
 currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 ```
 
-#### ソース4: Japan Exchange Group (JPX)
+#### #14: Japan Exchange Group (JPX)
 **実装**: `collectHeadlinesJPX()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.jpx.co.jp/rss/jpx-news.xml`
@@ -296,7 +433,7 @@ currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 **ステータス**: ✅ 完全動作
 
-#### ソース5: Japan Ministry of Economy (METI - 経済産業省)
+#### #15: Japan Ministry of Economy (METI - 経済産業省)
 **実装**: `collectHeadlinesMETI()`
 **手法**: RSS Feed（gofeed）
 **フィードURL**: `https://www.chusho.meti.go.jp/rss/index.xml`
@@ -308,29 +445,7 @@ currentDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 **ステータス**: ⛔ 停止中（2026-02-18）
 
-#### ソース6: Mizuho Research & Technologies（みずほリサーチ＆テクノロジーズ）
-**実装**: `collectHeadlinesMizuhoRT()`
-**手法**: HTML Scraping + キーワードフィルタリング
-**収集URL**: `https://www.mizuho-rt.co.jp/publication/2025/index.html`
-
-**特徴**:
-- 正規表現パターンでの日付抽出
-- サステナビリティキーワードフィルタリング（20+用語）
-- /business/ と /publication/ パスのリンクフィルタリング
-
-**日付解析例**:
-```go
-datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-matches := datePattern.FindStringSubmatch(dateText)
-if len(matches) == 4 {
-    year, month, day := matches[1], matches[2], matches[3]
-    publishedAt = fmt.Sprintf("%s-%02s-%02sT00:00:00Z", year, month, day)
-}
-```
-
-**ステータス**: ✅ 完全動作
-
-#### ソース7: PwC Japan
+#### #16: PwC Japan
 **実装**: `collectHeadlinesPwCJapan()`
 **手法**: HTML Scraping（複雑なJSON抽出）
 **収集URL**: `https://www.pwc.com/jp/ja/knowledge/column/sustainability.html`
@@ -372,47 +487,216 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 **ステータス**: ✅ 実装済み（2026年1月4日修正で動作確認）
 
+#### #17: Mizuho Research & Technologies（みずほリサーチ＆テクノロジーズ）
+**実装**: `collectHeadlinesMizuhoRT()`
+**手法**: HTML Scraping + キーワードフィルタリング
+**収集URL**: `https://www.mizuho-rt.co.jp/publication/2025/index.html`
+
+**特徴**:
+- 正規表現パターンでの日付抽出
+- サステナビリティキーワードフィルタリング（20+用語）
+- /business/ と /publication/ パスのリンクフィルタリング
+
+**日付解析例**:
+```go
+datePattern := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
+matches := datePattern.FindStringSubmatch(dateText)
+if len(matches) == 4 {
+    year, month, day := matches[1], matches[2], matches[3]
+    publishedAt = fmt.Sprintf("%s-%02s-%02sT00:00:00Z", year, month, day)
+}
+```
+
+**ステータス**: ✅ 完全動作
+
 ---
 
-### 3.2 無料ソース - ヨーロッパ＆国際（6ソース）
+### 3.4 学術・研究ソース（6ソース、うち1つ不安定） — `sources_academic.go`
 
-#### ソース8: Sandbag
-**実装**: `collectHeadlinesSandbag()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://sandbag.be/wp-json/wp/v2/posts`
-**焦点**: EU ETS分析
+#### #18: arXiv
+**実装**: `collectHeadlinesArXiv()`
+**手法**: XML API（Atom形式）+ キーワードフィルタ
+**エンドポイント**: `http://export.arxiv.org/api/query`
 
-**コンテンツ**: HTMLクリーニング付き完全記事
+**特徴**:
+- カテゴリ（`econ.GN`, `q-fin.GN`, `q-fin.PM`, `stat.AP`）とキーワードの組み合わせでクエリ
+- `limit*10` 件を取得し、キーワードフィルタ後に制限（フィルタ後にデータが減るため）
+- 著者情報を Excerpt に付加（100文字以下に制限）
+- **レート制限**: API仕様で3秒間隔必須（`time.Sleep(3 * time.Second)`）
+- IPベースのレート制限（429）が厳しいため、他ソースと同時テスト時は注意
+
+**キーワードフィルタ**: あり（複合フレーズ使用、物理学論文の誤検出防止）
+```go
+// 主要キーワード例
+"carbon emission", "carbon pricing", "carbon market", "emissions trading",
+"climate change", "climate policy", "decarbonization", "net-zero",
+"renewable energy", "carbon capture", "paris agreement", ...
+```
+
 **ステータス**: ✅ 完全動作
 
-#### ソース9: Ecosystem Marketplace
-**実装**: `collectHeadlinesEcosystemMarketplace()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://www.ecosystemmarketplace.com/wp-json/wp/v2/posts`
-**焦点**: 自然ベース解決策（NbS）市場
+#### #19: Nature Communications
+**実装**: `collectHeadlinesNatureComms()`
+**手法**: curl + RSS + HTMLスクレイピング
+**フィードURL**: `https://www.nature.com/subjects/climate-change/ncomms.rss`
 
-**コンテンツ**: 完全記事
+**特徴**:
+- 気候変動主題のRSSフィード（事前フィルタ済み）
+- **curl経由でフェッチ**: Nature.comはGoのTLSフィンガープリントを検出 → JSチャレンジページを返すため、`fetchViaCurl()` で回避
+- アブストラクト抽出: 各記事ページの `#Abs1-content p` / `#Abs1 p` セレクタ（curl経由）
+
+**キーワードフィルタ**: なし（主題別フィードで事前フィルタ済み）
+
 **ステータス**: ✅ 完全動作
 
-#### ソース10: Carbon Brief
-**実装**: `collectHeadlinesCarbonBrief()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://www.carbonbrief.org/wp-json/wp/v2/posts`
-**焦点**: 気候科学と政策
+#### #20: OIES (Oxford Institute for Energy Studies)
+**実装**: `collectHeadlinesOIES()`
+**手法**: 2段階HTMLスクレイピング（複数プログラムページ）
+**URL**:
+```
+https://www.oxfordenergy.org/carbon-management-programme/
+https://www.oxfordenergy.org/energy-transition-research-initiative/
+https://www.oxfordenergy.org/gas-programme/
+https://www.oxfordenergy.org/electricity-programme/
+```
 
-**コンテンツ**: 完全記事
+**特徴**:
+- **段階1**: プログラムページから出版物リンク抽出（`a[href*='/publications/']`, `a[href*='/research/']`）
+- **段階2**: 個別記事ページから本文抽出（段落フィルタリング付き）
+- OIES固有の日付形式: `DD.MM.YY`（例: `"22.01.26"` = 2026年1月22日）
+- 2年以上前のエントリを自動除外
+- 重複排除マップで複数プログラム間の重複を排除
+- JSON-LD (`script[type='application/ld+json']`) からも日付を抽出
+
+**キーワードフィルタ**: なし（ソース自体がカーボン/エネルギー特化）
+
 **ステータス**: ✅ 完全動作
 
-#### ソース11: Climate Home News
-**実装**: `collectHeadlinesClimateHomeNews()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://www.climatechangenews.com/wp-json/wp/v2/posts`
-**焦点**: 国際交渉と政策
+#### #21: IOP Science (Environmental Research Letters)
+**実装**: `collectHeadlinesIOPScience()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**フィードURL**: `https://iopscience.iop.org/journal/rss/1748-9326`
+**フォーマット**: RDF/RSS 1.0
 
-**コンテンツ**: 完全記事
+**特徴**:
+- 環境科学全般をカバーする学術誌
+- `carbonKeywordsAcademic`によるキーワードフィルタリング
+- gofeedがRDF/RSS 1.0を自動処理
+
 **ステータス**: ✅ 完全動作
 
-#### ソース12: ICAP (International Carbon Action Partnership)
+#### #22: Nature Ecology & Evolution
+**実装**: `collectHeadlinesNatureEcoEvo()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ
+**フィードURL**: `https://www.nature.com/natecolevol.rss`
+
+**特徴**:
+- 生態学・進化学の学術誌
+- Nature.comのbot保護により空スライスを返す場合あり（Nature Commsと同様）
+- エラー時はgracefulに空スライスを返却
+
+**ステータス**: ⚠️ bot保護により不安定（空スライス返却で対応）
+
+#### #23: ScienceDirect (Total Environment Engineering)
+**実装**: `collectHeadlinesScienceDirect()`
+**手法**: RSS Feed（gofeed） + キーワードフィルタ + 記事ページスクレイピング
+**フィードURL**: `https://rss.sciencedirect.com/publication/science/2950631X`
+
+**特徴**:
+- Elsevier社の学術誌プラットフォーム
+- `carbonKeywordsAcademic`によるキーワードフィルタリング
+- RSSに日付フィールドがないため、descriptionの`Publication date: Month Year`からパース
+- Abstractは記事ページの`div.abstract.author`から取得（Highlights・Graphical abstractを除外）
+
+**ステータス**: ✅ 完全動作
+
+---
+
+### 3.5 地域排出量取引システム（5ソース） — `sources_regional_ets.go`
+
+#### #24: EU ETS
+**実装**: `collectHeadlinesEUETS()`
+**手法**: HTMLスクレイピング
+**URL**: `https://climate.ec.europa.eu/news-other-reads/news_en`
+
+**特徴**:
+- EC気候変動ニュースページをスクレイピング
+- セレクタ: `article, .ecl-card, .news-item` など
+- 個別記事ページから本文抽出（`.ecl-editor`, `.ecl-page-content` 等）
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+#### #25: UK ETS
+**実装**: `collectHeadlinesUKETSHTML()`
+**手法**: HTMLスクレイピング（gov.uk検索）
+**URL**: `https://www.gov.uk/search/all?keywords=%22UK+Emissions+Trading+Scheme%22&order=updated-newest`
+
+**特徴**:
+- gov.uk検索結果ページをスクレイピング
+- セレクタ: `li.gem-c-document-list__item` 等
+- gov.uk固有のコンテンツセレクタ: `.gem-c-govspeak`, `.govuk-govspeak`
+- **タイトルフィルタ**: `"ets"`, `"emissions trading"`, `"carbon"` のいずれかを含む記事のみ
+
+**キーワードフィルタ**: あり（タイトルベース）
+
+**ステータス**: ✅ 完全動作
+
+#### #26: CARB (California Air Resources Board)
+**実装**: `collectHeadlinesCARB()`
+**手法**: HTMLスクレイピング
+**URL**: `https://ww2.arb.ca.gov/news`
+
+**特徴**:
+- カリフォルニア州大気資源局のニュースページ
+- 複数の日付フォーマット対応（`"January 2, 2006"`, `"Jan 2, 2006"`, `"01/02/2006"`, `"2006-01-02"`）
+- 記事ページの `main#main-content` から段落抽出（20文字以上）
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+#### #27: RGGI (Regional Greenhouse Gas Initiative)
+**実装**: `collectHeadlinesRGGI()`
+**手法**: HTMLスクレイピング + PDF抽出
+**URL**: `https://www.rggi.org/news-releases/rggi-releases`
+
+**特徴**:
+- テーブル形式の一覧ページ（`table.table tbody tr`）からリンクとメタデータを抽出
+- **PDF対応**: URLが `.pdf` で終わる場合、`extractTextFromPDF()` でテキスト抽出（`ledongthuc/pdf` ライブラリ使用）
+- HTMLページの場合は `.field--name-body` 等から段落抽出
+
+```go
+// PDF抽出の例
+func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (string, error)
+// 全ページからテキスト抽出、空白正規化
+```
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+#### #28: Australia CER (Clean Energy Regulator)
+**実装**: `collectHeadlinesAustraliaCER()`
+**手法**: HTMLスクレイピング
+**URL**: `https://cer.gov.au/news-and-media/news`
+
+**特徴**:
+- オーストラリア連邦政府のクリーンエネルギー規制機関
+- セレクタ: `div.cer-card.news`, `article.cer-card`
+- 段落とリストアイテムを混在抽出（リストアイテムに「• 」プレフィックス付加）
+- 複数の日付フォーマット対応（`"2 January 2006"`, `"02/01/2006"` 等）
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作
+
+---
+
+### 3.6 ニュース・情報サイト（4ソース） — `sources_html.go`
+
+#### #29: ICAP (International Carbon Action Partnership)
 **実装**: `collectHeadlinesICAP()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://icapcarbonaction.com/en/news`
@@ -425,7 +709,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 **ステータス**: ✅ 完全動作
 
-#### ソース13: IETA (International Emissions Trading Association)
+#### #30: IETA (International Emissions Trading Association)
 **実装**: `collectHeadlinesIETA()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://www.ieta.org/`
@@ -438,29 +722,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 **ステータス**: ✅ 完全動作
 
----
-
-### 3.3 無料ソース - グローバルメディア（3ソース）
-
-#### ソース14: Carbon Herald
-**実装**: `collectHeadlinesCarbonHerald()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://carbonherald.com/wp-json/wp/v2/posts`
-**焦点**: CDR技術とスタートアップ
-
-**コンテンツ**: 完全記事
-**ステータス**: ✅ 完全動作
-
-#### ソース15: CarbonCredits.com
-**実装**: `collectHeadlinesCarbonCreditscom()`
-**手法**: WordPress REST API
-**エンドポイント**: `https://carboncredits.com/wp-json/wp/v2/posts`
-**焦点**: 初心者向けコンテンツ
-
-**コンテンツ**: 完全記事
-**ステータス**: ✅ 完全動作
-
-#### ソース16: Energy Monitor
+#### #31: Energy Monitor
 **実装**: `collectHeadlinesEnergyMonitor()`
 **手法**: HTML Scraping + 完全コンテンツ取得
 **収集URL**: `https://www.energymonitor.ai/news/`
@@ -473,11 +735,7 @@ datePattern := regexp.MustCompile(`"publishDate":"([^"]*)"`)
 
 **ステータス**: ✅ 完全動作
 
----
-
-### 3.4 追加実装ソース
-
-#### Carbon Knowledge Hub
+#### #32: Carbon Knowledge Hub
 **実装**: `collectHeadlinesCarbonKnowledgeHub()`
 **手法**: HTML Scraping（CSS-in-JS対応）
 **収集URL**: `https://www.carbonknowledgehub.com`
@@ -506,278 +764,14 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 
 **ステータス**: ✅ 実装済み（2026年1月4日修正で動作確認）
 
-### 3.5 追加実装ソース（2026年2月6日）
+---
 
-#### RMI (Rocky Mountain Institute)
-**実装**: `collectHeadlinesRMI()`
-**手法**: WordPress REST API（記事一覧） + HTMLスクレイピング（本文）
-**エンドポイント**: `https://rmi.org/wp-json/wp/v2/posts`
-**ファイル**: `sources_wordpress.go`
+### 3.7 国際機関・シンクタンク（4ソース） — `sources_html.go`
 
-**特徴**:
-- エネルギー転換に特化したシンクタンク
-- WordPress APIで記事一覧を取得し、各記事ページをスクレイピングして全文取得
-- Gutenbergブロック（Datawrapperチャート等）によりAPI content.renderedが不完全なため、ページ直接取得に変更
-- 新旧2つのテンプレート（`div.my-12.single_news_content-wrapper` / `div.single_news_content-wrapper`）に対応
-
-**ステータス**: ✅ 完全動作
-
-#### IOP Science (Environmental Research Letters)
-**実装**: `collectHeadlinesIOPScience()`
-**手法**: RSS Feed（gofeed） + キーワードフィルタ
-**フィードURL**: `https://iopscience.iop.org/journal/rss/1748-9326`
-**フォーマット**: RDF/RSS 1.0
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- 環境科学全般をカバーする学術誌
-- `carbonKeywordsAcademic`によるキーワードフィルタリング
-- gofeedがRDF/RSS 1.0を自動処理
-
-**ステータス**: ✅ 完全動作
-
-#### Nature Ecology & Evolution
-**実装**: `collectHeadlinesNatureEcoEvo()`
-**手法**: RSS Feed（gofeed） + キーワードフィルタ
-**フィードURL**: `https://www.nature.com/natecolevol.rss`
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- 生態学・進化学の学術誌
-- Nature.comのbot保護により空スライスを返す場合あり（Nature Commsと同様）
-- エラー時はgracefulに空スライスを返却
-
-**ステータス**: ⚠️ bot保護により不安定（空スライス返却で対応）
-
-#### ScienceDirect (Total Environment Engineering)
-**実装**: `collectHeadlinesScienceDirect()`
-**手法**: RSS Feed（gofeed） + キーワードフィルタ + 記事ページスクレイピング
-**フィードURL**: `https://rss.sciencedirect.com/publication/science/2950631X`
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- Elsevier社の学術誌プラットフォーム
-- `carbonKeywordsAcademic`によるキーワードフィルタリング
-- RSSに日付フィールドがないため、descriptionの`Publication date: Month Year`からパース
-- Abstractは記事ページの`div.abstract.author`から取得（Highlights・Graphical abstractを除外）
-
-**ステータス**: ✅ 完全動作
-
-### 3.6 RSSフィードソース（3ソース）
-
-#### ソース17: POLITICO EU
-**実装**: `collectHeadlinesPoliticoEU()`
-**手法**: RSS Feed（gofeed）
-**フィードURL**: `https://www.politico.eu/section/energy/feed/`
-**ファイル**: `sources_rss.go`
-
-**特徴**:
-- EUエネルギー政策セクションのRSSフィード
-- `content:encoded` または `description` から Excerpt 抽出
-- UTMトラッキングパラメータ（`?utm_`）を自動除去
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-#### ソース18: Euractiv
-**実装**: `collectHeadlinesEuractiv()`
-**手法**: RSS Feed + HTMLスクレイピング + キーワードフィルタ
-**フィードURL**: `https://www.euractiv.com/feed/`
-**ファイル**: `sources_rss.go`
-
-**特徴**:
-- メインフィードから取得（セクション別フィードはCloudflare保護あり）
-- タイトル + RSS description + カテゴリでキーワード照合
-- 記事ページの `div.c-news-detail__content` から全文 Excerpt 取得
-- ペイウォール検出（`"Lorem ipsum"` / `"…Subscribe now"`）→ 該当記事はスキップ
-- スクレイピング失敗時は RSS description にフォールバック
-
-**キーワードフィルタ**: あり
-```go
-var carbonKeywordsEuractiv = []string{
-    "carbon", "emission", "climate", "co2", "greenhouse",
-    "net zero", "net-zero", "decarbonisation", "decarbonization",
-    "green deal", "fit for 55", "cbam", "carbon border",
-    "renewable", "energy transition", "paris agreement",
-    "methane", "carbon market", "carbon price", "carbon tax",
-    "energy", "environment", "sustainability",
-    "eu ets", "ets2", "emissions trading", "uk ets",
-}
-```
-
-**ステータス**: ✅ 完全動作
-
-#### ソース19: Carbon Market Watch
-**実装**: `collectHeadlinesCarbonMarketWatch()`
-**手法**: WordPress RSS Feed（`content:encoded` で全文含有）
-**フィードURL**: `https://carbonmarketwatch.org/feed/`
-**ファイル**: `sources_rss.go`
-
-**特徴**:
-- Webサイト直接アクセスは403ブロック → RSS フィード経由で取得
-- `content:encoded` から全文取得、なければ `description` にフォールバック
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-### 3.7 学術・研究ソース（3ソース）
-
-#### ソース20: arXiv
-**実装**: `collectHeadlinesArXiv()`
-**手法**: XML API（Atom形式）+ キーワードフィルタ
-**エンドポイント**: `http://export.arxiv.org/api/query`
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- カテゴリ（`econ.GN`, `q-fin.GN`, `q-fin.PM`, `stat.AP`）とキーワードの組み合わせでクエリ
-- `limit*10` 件を取得し、キーワードフィルタ後に制限（フィルタ後にデータが減るため）
-- 著者情報を Excerpt に付加（100文字以下に制限）
-- **レート制限**: API仕様で3秒間隔必須（`time.Sleep(3 * time.Second)`）
-- IPベースのレート制限（429）が厳しいため、他ソースと同時テスト時は注意
-
-**キーワードフィルタ**: あり（複合フレーズ使用、物理学論文の誤検出防止）
-```go
-// 主要キーワード例
-"carbon emission", "carbon pricing", "carbon market", "emissions trading",
-"climate change", "climate policy", "decarbonization", "net-zero",
-"renewable energy", "carbon capture", "paris agreement", ...
-```
-
-**ステータス**: ✅ 完全動作
-
-#### ソース21: Nature Communications
-**実装**: `collectHeadlinesNatureComms()`
-**手法**: curl + RSS + HTMLスクレイピング
-**フィードURL**: `https://www.nature.com/subjects/climate-change/ncomms.rss`
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- 気候変動主題のRSSフィード（事前フィルタ済み）
-- **curl経由でフェッチ**: Nature.comはGoのTLSフィンガープリントを検出 → JSチャレンジページを返すため、`fetchViaCurl()` で回避
-- アブストラクト抽出: 各記事ページの `#Abs1-content p` / `#Abs1 p` セレクタ（curl経由）
-
-**キーワードフィルタ**: なし（主題別フィードで事前フィルタ済み）
-
-**ステータス**: ✅ 完全動作
-
-#### ソース22: OIES (Oxford Institute for Energy Studies)
-**実装**: `collectHeadlinesOIES()`
-**手法**: 2段階HTMLスクレイピング（複数プログラムページ）
-**URL**:
-```
-https://www.oxfordenergy.org/carbon-management-programme/
-https://www.oxfordenergy.org/energy-transition-research-initiative/
-https://www.oxfordenergy.org/gas-programme/
-https://www.oxfordenergy.org/electricity-programme/
-```
-**ファイル**: `sources_academic.go`
-
-**特徴**:
-- **段階1**: プログラムページから出版物リンク抽出（`a[href*='/publications/']`, `a[href*='/research/']`）
-- **段階2**: 個別記事ページから本文抽出（段落フィルタリング付き）
-- OIES固有の日付形式: `DD.MM.YY`（例: `"22.01.26"` = 2026年1月22日）
-- 2年以上前のエントリを自動除外
-- 重複排除マップで複数プログラム間の重複を排除
-- JSON-LD (`script[type='application/ld+json']`) からも日付を抽出
-
-**キーワードフィルタ**: なし（ソース自体がカーボン/エネルギー特化）
-
-**ステータス**: ✅ 完全動作
-
-### 3.8 地域排出量取引システム（5ソース）
-
-#### ソース23: EU ETS
-**実装**: `collectHeadlinesEUETS()`
-**手法**: HTMLスクレイピング
-**URL**: `https://climate.ec.europa.eu/news-other-reads/news_en`
-**ファイル**: `sources_regional_ets.go`
-
-**特徴**:
-- EC気候変動ニュースページをスクレイピング
-- セレクタ: `article, .ecl-card, .news-item` など
-- 個別記事ページから本文抽出（`.ecl-editor`, `.ecl-page-content` 等）
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-#### ソース24: UK ETS
-**実装**: `collectHeadlinesUKETSHTML()`
-**手法**: HTMLスクレイピング（gov.uk検索）
-**URL**: `https://www.gov.uk/search/all?keywords=%22UK+Emissions+Trading+Scheme%22&order=updated-newest`
-**ファイル**: `sources_regional_ets.go`
-
-**特徴**:
-- gov.uk検索結果ページをスクレイピング
-- セレクタ: `li.gem-c-document-list__item` 等
-- gov.uk固有のコンテンツセレクタ: `.gem-c-govspeak`, `.govuk-govspeak`
-- **タイトルフィルタ**: `"ets"`, `"emissions trading"`, `"carbon"` のいずれかを含む記事のみ
-
-**キーワードフィルタ**: あり（タイトルベース）
-
-**ステータス**: ✅ 完全動作
-
-#### ソース25: CARB (California Air Resources Board)
-**実装**: `collectHeadlinesCARB()`
-**手法**: HTMLスクレイピング
-**URL**: `https://ww2.arb.ca.gov/news`
-**ファイル**: `sources_regional_ets.go`
-
-**特徴**:
-- カリフォルニア州大気資源局のニュースページ
-- 複数の日付フォーマット対応（`"January 2, 2006"`, `"Jan 2, 2006"`, `"01/02/2006"`, `"2006-01-02"`）
-- 記事ページの `main#main-content` から段落抽出（20文字以上）
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-#### ソース26: RGGI (Regional Greenhouse Gas Initiative)
-**実装**: `collectHeadlinesRGGI()`
-**手法**: HTMLスクレイピング + PDF抽出
-**URL**: `https://www.rggi.org/news-releases/rggi-releases`
-**ファイル**: `sources_regional_ets.go`
-
-**特徴**:
-- テーブル形式の一覧ページ（`table.table tbody tr`）からリンクとメタデータを抽出
-- **PDF対応**: URLが `.pdf` で終わる場合、`extractTextFromPDF()` でテキスト抽出（`ledongthuc/pdf` ライブラリ使用）
-- HTMLページの場合は `.field--name-body` 等から段落抽出
-
-```go
-// PDF抽出の例
-func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (string, error)
-// 全ページからテキスト抽出、空白正規化
-```
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-#### ソース27: Australia CER (Clean Energy Regulator)
-**実装**: `collectHeadlinesAustraliaCER()`
-**手法**: HTMLスクレイピング
-**URL**: `https://cer.gov.au/news-and-media/news`
-**ファイル**: `sources_regional_ets.go`
-
-**特徴**:
-- オーストラリア連邦政府のクリーンエネルギー規制機関
-- セレクタ: `div.cer-card.news`, `article.cer-card`
-- 段落とリストアイテムを混在抽出（リストアイテムに「• 」プレフィックス付加）
-- 複数の日付フォーマット対応（`"2 January 2006"`, `"02/01/2006"` 等）
-
-**キーワードフィルタ**: なし
-
-**ステータス**: ✅ 完全動作
-
-### 3.9 国際機関・シンクタンク（4ソース）
-
-#### ソース28: World Bank
+#### #33: World Bank
 **実装**: `collectHeadlinesWorldBank()`
 **手法**: JSON API + HTMLスクレイピング
 **エンドポイント**: `https://search.worldbank.org/api/v2/news?format=json&qterm=...`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - 検索APIでカーボン関連キーワード（`"carbon pricing" OR "carbon market" OR "carbon credit" OR "emissions trading"`）で記事を取得
@@ -789,11 +783,10 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 
 **ステータス**: ✅ 完全動作
 
-#### ソース29: NewClimate Institute
+#### #34: NewClimate Institute
 **実装**: `collectHeadlinesNewClimate()`
 **手法**: HTMLスクレイピング + 個別記事ページ取得
 **URL**: `https://newclimate.org/news`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - ニュースと出版物の両方を収集（`a[href^='/news/']`, `a[href^='/resources/publications/']`）
@@ -805,11 +798,10 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 
 **ステータス**: ✅ 完全動作
 
-#### ソース30: IISD ENB (Earth Negotiations Bulletin)
+#### #35: IISD ENB (Earth Negotiations Bulletin)
 **実装**: `collectHeadlinesIISD()`
 **手法**: HTMLスクレイピング（Cookie jar + リトライ付き）
 **URL**: `https://enb.iisd.org/`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - **Cookie jar付きカスタムHTTPクライアント**: ホームページアクセスでセッションCookieを取得
@@ -828,11 +820,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース31: Climate Focus
+#### #36: Climate Focus
 **実装**: `collectHeadlinesClimateFocus()`
 **手法**: HTMLスクレイピング
 **URL**: `https://climatefocus.com/publications/`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - セレクタ: `a[href*='/publications/']`
@@ -845,13 +836,14 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-### 3.10 VCM認証・CDR関連（6ソース）
+---
 
-#### ソース32: Verra
+### 3.8 VCM認証・CDR関連（6ソース） — `sources_html.go`
+
+#### #37: Verra
 **実装**: `collectHeadlinesVerra()`
 **手法**: RSS + HTMLスクレイピング
 **フィードURL**: `https://verra.org/news/feed/`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - RSSフィードで記事一覧を取得
@@ -862,11 +854,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース33: Gold Standard
+#### #38: Gold Standard
 **実装**: `collectHeadlinesGoldStandard()`
 **手法**: HTMLスクレイピング
 **URL**: `https://www.goldstandard.org/newsroom`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - ニュース、イベント、コンサルテーション、出版物を横断的に収集（`a[href*='/news/']`, `/events/`, `/consultations/`, `/publications/`）
@@ -878,11 +869,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース34: ACR (American Carbon Registry)
+#### #39: ACR (American Carbon Registry)
 **実装**: `collectHeadlinesACR()`
 **手法**: HTMLスクレイピング
 **URL**: `https://acrcarbon.org/news/`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - ACR固有のタイトルプレフィックス除去: `"Program Announcements "`, `"General "`, `"ACR in the News "`, `"Op-eds "`, `"Events "`
@@ -893,11 +883,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース35: CAR (Climate Action Reserve)
+#### #40: CAR (Climate Action Reserve)
 **実装**: `collectHeadlinesCAR()`
 **手法**: HTMLスクレイピング
 **URL**: `https://climateactionreserve.org/updates/`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - 内部ブログ記事のみ許可（`climateactionreserve.org` ドメイン + `/blog/` パス）
@@ -908,11 +897,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース36: Puro.earth
+#### #41: Puro.earth
 **実装**: `collectHeadlinesPuroEarth()`
 **手法**: Atom Feed + HTMLスクレイピング
 **フィードURL**: `https://puro.earth/blog/our-blogs-1/feed`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - Odoo CMS ベースのブログ
@@ -925,11 +913,10 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 **ステータス**: ✅ 完全動作
 
-#### ソース37: Isometric
+#### #42: Isometric
 **実装**: `collectHeadlinesIsometric()`
 **手法**: HTMLスクレイピング
 **URL**: `https://isometric.com/writing`
-**ファイル**: `sources_html.go`
 
 **特徴**:
 - CDR（Carbon Dioxide Removal）科学検証プラットフォーム

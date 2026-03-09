@@ -443,6 +443,8 @@ func collectWordPressHeadlines(baseURL, sourceName string, limit int, cfg Headli
 		// 無料記事の全文からHTMLを除去
 		content := cleanHTMLTags(p.Content.Rendered)
 		content = strings.TrimSpace(content)
+		// Notion AI要約用に3000文字で切り詰め
+		content = truncateString(content, 3000)
 
 		// date_gmt を UTC タイムゾーン付きの RFC3339 形式に変換
 		// WordPress の date_gmt 形式: "2026-01-05T14:42:50"
@@ -498,6 +500,8 @@ func collectWordPressHeadlinesCustomType(baseURL, sourceName, postType string, l
 
 		content := cleanHTMLTags(p.Content.Rendered)
 		content = strings.TrimSpace(content)
+		// Notion AI要約用に3000文字で切り詰め
+		content = truncateString(content, 3000)
 
 		publishedAt := ""
 		if p.DateGMT != "" {

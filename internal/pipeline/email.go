@@ -334,13 +334,13 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 
 	var body, subject string
 	if len(filtered) == 0 {
-		subject = fmt.Sprintf("Carbon Headlines Digest - %s (0 articles)",
+		subject = fmt.Sprintf("炭素関連記事一覧 - %s (0 記事)",
 			time.Now().Format("2006-01-02"))
-		body = fmt.Sprintf("Carbon Headlines Digest - %s\nTotal: 0 articles\n\nNo carbon-related headlines found for this period.\n",
+		body = fmt.Sprintf("炭素関連記事一覧 - %s\n合計: 0 記事\n\nこの期間にカーボン関連の記事は見つかりませんでした。\n",
 			time.Now().Format("2006-01-02"))
 	} else {
 		body = es.generateShortHeadlinesBody(filtered)
-		subject = fmt.Sprintf("Carbon Headlines Digest - %s (%d articles)",
+		subject = fmt.Sprintf("炭素関連記事一覧 - %s (%d 記事)",
 			time.Now().Format("2006-01-02"),
 			len(filtered))
 	}
@@ -356,8 +356,8 @@ func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines [
 //
 // 【出力フォーマット】
 //
-//	Carbon Headlines Digest - 2026-01-06
-//	Total: 25 articles
+//	炭素関連記事一覧 - 2026-01-06
+//	合計: 25 記事
 //
 //	1. EU carbon prices hit record high...
 //	   https://carbonherald.com/...
@@ -365,8 +365,8 @@ func (es *EmailSender) generateShortHeadlinesBody(headlines []NotionHeadline) st
 	var sb strings.Builder
 
 	// ヘッダー
-	sb.WriteString(fmt.Sprintf("Carbon Headlines Digest - %s\n", time.Now().Format("2006-01-02")))
-	sb.WriteString(fmt.Sprintf("Total: %d articles\n\n", len(headlines)))
+	sb.WriteString(fmt.Sprintf("炭素関連記事一覧 - %s\n", time.Now().Format("2006-01-02")))
+	sb.WriteString(fmt.Sprintf("合計: %d 記事\n\n", len(headlines)))
 
 	// 各記事
 	for i, h := range headlines {

@@ -5,10 +5,10 @@
 // このファイルはCLIコマンドの各ハンドラ関数を提供します。
 //
 // 【このファイルで提供する機能】
-//   - handleShortEmailSend:     50文字ヘッドラインダイジェスト送信
-//   - handleListShortHeadlines: Article Summary 300診断表示
-//   - handleNotionClip:         Notionに記事を保存
-//   - handleJSONOutput:         JSON出力
+//   - HandleShortEmailSend:     50文字ヘッドラインダイジェスト送信
+//   - HandleListShortHeadlines: Article Summary 300診断表示
+//   - HandleNotionClip:         Notionに記事を保存
+//   - HandleJSONOutput:         JSON出力
 //
 // 【共通ヘルパー関数】
 //   - validateNotionEnv:    Notion環境変数の検証
@@ -94,19 +94,11 @@ func createNotionClipper() *NotionClipper {
 }
 
 // fetchNotionHeadlines はNotionDBから最近の記事を取得する
-//
-// 記事が0件の場合は警告を表示してnilを返す
 func fetchNotionHeadlines(clipper *NotionClipper, daysBack int) []NotionHeadline {
 	ctx := context.Background()
 	headlines, err := clipper.FetchRecentHeadlines(ctx, daysBack)
 	if err != nil {
 		fatalf("ERROR fetching headlines from Notion: %v", err)
-	}
-
-	if len(headlines) == 0 {
-		fmt.Fprintf(os.Stderr, "⚠️  No headlines found in the last %d days\n", daysBack)
-		fmt.Fprintln(os.Stderr, "========================================")
-		return nil
 	}
 
 	fmt.Fprintf(os.Stderr, "Fetched %d headlines from Notion (last %d days)\n", len(headlines), daysBack)
@@ -129,14 +121,14 @@ func createEmailSender() (*EmailSender, string, string) {
 // メールハンドラ
 // =============================================================================
 
-// handleShortEmailSend は50文字ヘッドラインダイジェストメールを送信する
+// HandleShortEmailSend は50文字ヘッドラインダイジェストメールを送信する
 //
 // 【処理の流れ】
 //  1. 環境変数をチェック（Notion + Email）
 //  2. NotionDBから記事を取得
 //  3. カーボンキーワードでフィルタリング（email.go内で実行）
 //  4. 50文字ヘッドライン + URLのメールを送信
-func handleShortEmailSend(emailDaysBack int) {
+func HandleShortEmailSend(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📧 Sending Short Headlines Digest")
 	fmt.Fprintln(os.Stderr, "========================================")
@@ -144,11 +136,8 @@ func handleShortEmailSend(emailDaysBack int) {
 	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
-	if headlines == nil {
-		return
-	}
 
-	// メール送信者を作成して送信
+	// メール送信者を作成して送信（0件でも送信する）
 	sender, from, to := createEmailSender()
 	ctx := context.Background()
 	if err := sender.SendShortHeadlinesDigest(ctx, headlines); err != nil {
@@ -165,11 +154,11 @@ func handleShortEmailSend(emailDaysBack int) {
 // 診断ハンドラ
 // =============================================================================
 
-// handleListShortHeadlines はNotionDBのArticle Summary 300値を一覧表示する
+// HandleListShortHeadlines はNotionDBのArticle Summary 300値を一覧表示する
 //
 // Notion AIによるフィルタリング結果を確認するための診断機能。
 // Article Summary 300の状態（要約あり、"-"、空）でグループ化して表示する。
-func handleListShortHeadlines(emailDaysBack int) {
+func HandleListShortHeadlines(emailDaysBack int) {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📋 Listing Article Summary 300 Values from NotionDB")
 	fmt.Fprintln(os.Stderr, "========================================")
@@ -177,9 +166,6 @@ func handleListShortHeadlines(emailDaysBack int) {
 	// Notionクリッパーを作成してヘッドラインを取得
 	clipper := createNotionClipper()
 	headlines := fetchNotionHeadlines(clipper, emailDaysBack)
-	if headlines == nil {
-		return
-	}
 
 	fmt.Fprintf(os.Stderr, "Found %d headlines (last %d days)\n\n", len(headlines), emailDaysBack)
 
@@ -251,13 +237,13 @@ type NotionClipResult struct {
 	Errors  []string // "[Notion] 'タイトル': エラー内容" 形式
 }
 
-// handleNotionClip は見出しをNotionデータベースに保存する
+// HandleNotionClip は見出しをNotionデータベースに保存する
 //
 // 【処理の流れ】
 //  1. Notion環境変数を確認
 //  2. 必要に応じて新規データベースを作成
 //  3. 各見出しをクリップ
-func handleNotionClip(headlines []Headline, cfg *OutputConfig) *NotionClipResult {
+func HandleNotionClip(headlines []Headline, cfg *OutputConfig) *NotionClipResult {
 	fmt.Fprintln(os.Stderr, "\n========================================")
 	fmt.Fprintln(os.Stderr, "📎 Clipping to Notion Database")
 	fmt.Fprintln(os.Stderr, "========================================")
@@ -324,11 +310,11 @@ func handleNotionClip(headlines []Headline, cfg *OutputConfig) *NotionClipResult
 // JSON出力ハンドラ
 // =============================================================================
 
-// handleJSONOutput は見出しをJSON形式で出力する
+// HandleJSONOutput は見出しをJSON形式で出力する
 //
 // cfg.OutFileが指定されている場合はファイルに、
 // 指定されていない場合はstdoutに出力する
-func handleJSONOutput(headlines []Headline, cfg *OutputConfig) {
+func HandleJSONOutput(headlines []Headline, cfg *OutputConfig) {
 	if cfg.OutFile != "" {
 		if err := writeJSONFile(cfg.OutFile, headlines); err != nil {
 			fatalf("writing output: %v", err)

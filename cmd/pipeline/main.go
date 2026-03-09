@@ -3,33 +3,8 @@
 // =============================================================================
 //
 // このプログラムは、カーボンニュース収集・配信を自動化するCLIツールです。
-//
-// =============================================================================
-// 【主な機能】
-// =============================================================================
-//
-// 🟢 無料記事収集モード
-//
-//	┌─────────────────────────────────────────────────────────────────┐
-//	│ 目的:     複数のソースから記事を直接収集                         │
-//	│ コスト:   無料                                                   │
-//	│ 速度:     5-15秒                                                 │
-//	│ 出力:     JSON、メール送信                                       │
-//	│ コマンド: ./pipeline -sources=carbonherald -perSource=10        │
-//	└─────────────────────────────────────────────────────────────────┘
-//
-// =============================================================================
-// 【処理フロー】
-// =============================================================================
-//
-//	┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-//	│  1. 設定    │ -> │  2. 収集    │ -> │  3. 出力    │
-//	│  読み込み   │    │  スクレイピ │    │  JSON/Mail  │
-//	└─────────────┘    └─────────────┘    └─────────────┘
-//	       │                  │                  │
-//	       v                  v                  v
-//	.env読み込み        各ソースから      JSON出力 or
-//	CLIフラグ解析       見出し収集        メール送信
+// ロジックは internal/pipeline パッケージに集約されており、
+// このファイルは .env 読み込みとフラグ解析のみを行う薄いエントリーポイントです。
 //
 // =============================================================================
 // 【CLIフラグ一覧】
@@ -48,18 +23,15 @@
 //	-notionClip      Notionデータベースに保存
 //
 // =============================================================================
-// 【初心者向けポイント】
-// =============================================================================
-//
-// - flag パッケージでCLI引数を解析
-// - godotenv パッケージで.envファイルを読み込み
-// - エラーは標準エラー出力（os.Stderr）に出力
-// - 処理の進捗も標準エラー出力に出力（stdoutはJSONのみ）
-//
-// =============================================================================
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"carbon-relay/internal/pipeline"
+
 	"github.com/joho/godotenv" // .env ファイル読み込み
 )
 
@@ -72,32 +44,32 @@ func main() {
 	// .env ファイルから環境変数を読み込み
 	// ファイルが存在しない場合はログを出力するが、処理は続行する
 	if err := godotenv.Load(); err != nil {
-		warnf(".env file not loaded: %v (using environment variables only)", err)
+		fmt.Fprintf(os.Stderr, "WARN: .env file not loaded: %v (using environment variables only)\n", err)
 	}
 
-	// CLIフラグを解析（config.goのParseFlags）
-	cfg := ParseFlags()
+	// CLIフラグを解析
+	cfg := pipeline.ParseFlags()
 
 	// --- メール専用モードの早期終了 ---
 	if cfg.Email.SendShortEmail {
-		handleShortEmailSend(cfg.Email.DaysBack)
+		pipeline.HandleShortEmailSend(cfg.Email.DaysBack)
 		return
 	}
 	if cfg.Email.ListShortHeadlines {
-		handleListShortHeadlines(cfg.Email.DaysBack)
+		pipeline.HandleListShortHeadlines(cfg.Email.DaysBack)
 		return
 	}
 
 	// --- 1) ヘッドラインの収集または読み込み ---
-	var headlines []Headline
-	var collectResult *CollectResult
+	var headlines []pipeline.Headline
+	var collectResult *pipeline.CollectResult
 	if cfg.Input.HeadlinesFile != "" {
 		if err := readJSONFile(cfg.Input.HeadlinesFile, &headlines); err != nil {
 			fatalf("reading headlines: %v", err)
 		}
 	} else {
-		headlineCfg := defaultHeadlineConfig()
-		result, err := CollectFromSources(cfg.Input.Sources(), cfg.Input.PerSource, headlineCfg)
+		headlineCfg := pipeline.DefaultHeadlineConfig()
+		result, err := pipeline.CollectFromSources(cfg.Input.Sources(), cfg.Input.PerSource, headlineCfg)
 		if err != nil {
 			fatalf("collecting headlines: %v", err)
 		}
@@ -107,33 +79,46 @@ func main() {
 
 	if len(headlines) == 0 {
 		// fatalf前にエラー通知を送る
-		sendErrorNotification(collectResult, nil)
+		pipeline.SendErrorNotification(collectResult, nil)
 		fatalf("no headlines collected")
 	}
 
 	// --- 1.5) 時間指定フィルタリング ---
 	if cfg.Input.HoursBack > 0 {
-		headlines = FilterHeadlinesByHours(headlines, cfg.Input.HoursBack)
+		headlines = pipeline.FilterHeadlinesByHours(headlines, cfg.Input.HoursBack)
 		if len(headlines) == 0 {
 			fatalf("no headlines after filtering by %d hours", cfg.Input.HoursBack)
 		}
 	}
 
 	// --- 2) 結果の出力 ---
-	handleJSONOutput(headlines, &cfg.Output)
+	pipeline.HandleJSONOutput(headlines, &cfg.Output)
 
 	// --- 3) Notionへのクリップ（有効な場合） ---
-	var notionResult *NotionClipResult
+	var notionResult *pipeline.NotionClipResult
 	if cfg.Output.NotionClip {
-		notionResult = handleNotionClip(headlines, &cfg.Output)
+		notionResult = pipeline.HandleNotionClip(headlines, &cfg.Output)
 	}
 
 	// --- 4) エラー通知（全処理完了後） ---
-	sendErrorNotification(collectResult, notionResult)
+	pipeline.SendErrorNotification(collectResult, notionResult)
 }
 
-// ハンドラは handlers.go で定義:
-// - handleShortEmailSend（ショートメール送信）
-// - handleListShortHeadlines（ショートヘッドライン一覧表示）
-// - handleJSONOutput（JSON出力）
-// - handleNotionClip（Notionクリップ）
+// =============================================================================
+// CLI専用ヘルパー関数
+// =============================================================================
+
+// readJSONFile はJSONファイルを読み込んで指定した型に変換する
+func readJSONFile(path string, out any) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
+}
+
+// fatalf はエラーメッセージを出力してプログラムを終了する
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}

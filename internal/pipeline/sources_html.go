@@ -453,8 +453,13 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 
 	out := make([]Headline, 0, limit)
 
-	doc.Find("a[href^='/news/'], a[href^='/resources/publications/']").Each(func(i int, link *goquery.Selection) {
+	doc.Find("div.teaser").Each(func(i int, teaser *goquery.Selection) {
 		if len(out) >= limit {
+			return
+		}
+
+		link := teaser.Find("a.teaser__title")
+		if link.Length() == 0 {
 			return
 		}
 
@@ -470,23 +475,24 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 
 		articleURL := "https://newclimate.org" + href
 
+		// リスティングページから日付を取得（"05 Mar 2026" 形式）
 		dateStr := ""
-		parent := link.Parent().Parent()
-		dateElem := parent.Find("time, .date, span[class*='date']")
+		dateElem := teaser.Find(".event-details__value")
 		if dateElem.Length() > 0 {
-			if dateAttr, exists := dateElem.Attr("datetime"); exists {
-				dateStr = dateAttr
-			} else {
-				dateText := strings.TrimSpace(dateElem.Text())
-				if t, err := time.Parse("2 January 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-				} else if t, err := time.Parse("January 2, 2006", dateText); err == nil {
-					dateStr = t.Format(time.RFC3339)
-				}
+			dateText := strings.TrimSpace(dateElem.First().Text())
+			if t, err := time.Parse("02 Jan 2006", dateText); err == nil {
+				dateStr = t.Format(time.RFC3339)
 			}
 		}
 
+		// リスティングページから説明を取得
 		excerpt := ""
+		descElem := teaser.Find(".teaser__description")
+		if descElem.Length() > 0 {
+			excerpt = strings.TrimSpace(descElem.Text())
+		}
+
+		// 記事ページからより詳細なExcerptを取得（フォールバック付き）
 		articleDoc, err := fetchDoc(articleURL, cfg)
 		if err == nil {
 			if dateStr == "" {
@@ -503,8 +509,15 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 			}
 			nodeContent := articleDoc.Find(".node__content")
 			if nodeContent.Length() > 0 {
-				excerpt = strings.TrimSpace(nodeContent.Text())
+				articleExcerpt := strings.TrimSpace(nodeContent.Text())
+				if len(articleExcerpt) > len(excerpt) {
+					excerpt = articleExcerpt
+				}
 			}
+		}
+
+		if len(excerpt) > 3000 {
+			excerpt = excerpt[:3000]
 		}
 
 		out = append(out, Headline{
@@ -513,7 +526,6 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 			URL:         articleURL,
 			PublishedAt: dateStr,
 			Excerpt:     excerpt,
-
 		})
 	})
 

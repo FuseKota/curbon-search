@@ -1002,7 +1002,7 @@ type Headline struct {
         * Source（色分けSelectオプション）
         * Type: "News"
         * Published Date
-        * Article Summary 300（記事要約、最初の2000文字）
+        * Article Summary 300（記事要約、最初の4000文字）
       - 完全コンテンツをブロックに追加（2000文字/ブロック）
 
    c) 各RelatedFreeをクリップ
@@ -1091,7 +1091,7 @@ stopwords := map[string]bool{
 | Type | Select | 記事タイプ | "News" または "Academic" |
 | Score | Number | マッチングスコア | Related Freeのみ、0-1の範囲 |
 | Published Date | Date | 公開日 | RFC3339からパース |
-| Article Summary 300 | Rich Text | 記事要約 | 最初の2000文字を保存 |
+| Article Summary 300 | Rich Text | 記事要約 | 最初の4000文字を保存 |
 
 **Sourceオプション（色分け）**:
 ```go
@@ -1219,7 +1219,7 @@ func appendToEnvFile(path, key, value string) error {
       - Source: headline.Source (Select)
       - Type: "News" (Select)
       - Published Date: parseDate(headline.PublishedAt)
-      - Article Summary 300: excerpt[:2000] (Rich Text)
+      - Article Summary 300: truncateString(excerpt, 4000)（CollectFromSourcesで統一適用）
 
    b) ページコンテンツ作成
       - Excerpt/Full Contentを段落ブロックに分割
@@ -1240,7 +1240,7 @@ func appendToEnvFile(path, key, value string) error {
       - Type: "Academic" (Select)
       - Score: related.Score (Number)
       - Published Date: parseDate(related.PublishedAt)
-      - Article Summary 300: excerpt[:2000]
+      - Article Summary 300: truncateString(excerpt, 4000)
 
    b) ページコンテンツ作成（同上）
 

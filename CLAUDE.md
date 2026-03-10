@@ -103,7 +103,7 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 ```
 
 ### ステップ4: コードを確認
-- `cmd/pipeline/headlines.go`の該当関数を確認
+- `internal/pipeline/`配下の該当ソースファイルを確認
 - セレクタやURLパターンを検証
 
 ---
@@ -286,18 +286,27 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 #### フィルタリング簡素化
 - **carbonKeywordsForFilter / containsCarbonKeyword()**: メール送信時のカーボンキーワードフィルタを廃止
-- ダイジェストメールのフィルタはArticle Summary 300の"-"除外のみに簡素化
-
-#### コンテンツ抽出改善
-- **Carbon Brief**: Excerpt切り詰めを1,000文字→3,000文字に拡大
+- ダイジェストメールのフィルタはArticle Summary 300の空/"-"除外 + Published Date空除外
 
 ### ソース復旧（2026年3月1日）
 
 - **Nature Communications**: `nature-comms`としてアクティブソースに復帰（curl + 主題別RSSフィード）
 
+### リファクタリング・改善（2026年3月10日）
+
+#### コード構造
+- **パイプラインロジック移動**: `cmd/pipeline/` → `internal/pipeline/` にリファクタリング（`cmd/pipeline/`は`main.go`のみ）
+
+#### Excerpt統一切り詰め
+- **全ソース4000文字統一**: 各ソース個別の2000/3000文字制限を廃止し、`CollectFromSources()`で一括4000文字に切り詰め
+
+#### メールダイジェストフィルタ改善
+- **PublishedDate空記事除外**: メールダイジェスト生成時にPublishedDateが空の記事を除外
+- **サマリー空記事除外**: Article Summary 300が空の記事も除外
+
 ---
 
-**最終更新**: 2026年3月3日
+**最終更新**: 2026年3月10日
 **プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 
@@ -317,7 +326,8 @@ carbon-relay/
 ├── scripts/                 # 🛠️ スクリプト
 │   ├── README.md           # スクリプト一覧
 │   └── *.sh                # 各種便利スクリプト
-├── cmd/pipeline/           # Go実装
+├── cmd/pipeline/           # エントリーポイント（main.go）
+├── internal/pipeline/      # パイプラインロジック（ソース収集・Notion・メール等）
 ├── CLAUDE.md               # このファイル
 └── README.md               # メインREADME
 ```

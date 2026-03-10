@@ -80,9 +80,6 @@ func collectHeadlinesPoliticoEU(limit int, cfg HeadlineSourceConfig) ([]Headline
 
 		// 記事の全文を取得（content:encoded から、なければ description から）
 		excerpt := extractRSSExcerpt(item)
-		// Notion AI要約用に3000文字で切り詰め
-		excerpt = truncateString(excerpt, 3000)
-
 		out = append(out, Headline{
 			Source:      "Politico EU",
 			Title:       title,
@@ -173,9 +170,6 @@ func collectHeadlinesEuractiv(limit int, cfg HeadlineSourceConfig) ([]Headline, 
 			// スクレイピング失敗時はRSS descriptionにフォールバック
 			excerpt = rssExcerpt
 		}
-		// Notion AI要約用に3000文字で切り詰め
-		excerpt = truncateString(excerpt, 3000)
-
 		// 日付のパース
 		dateStr := ""
 		if item.PublishedParsed != nil {
@@ -393,9 +387,6 @@ func collectHeadlinesCarbonBrief(limit int, cfg HeadlineSourceConfig) ([]Headlin
 
 		// content:encoded から全文取得、なければ description にフォールバック
 		excerpt := extractRSSExcerpt(item)
-		// Notion AI要約用に3000文字で切り詰め
-		excerpt = truncateString(excerpt, 3000)
-
 		out = append(out, Headline{
 			Source:      "Carbon Brief",
 			Title:       title,

@@ -505,10 +505,6 @@ func collectHeadlinesRGGI(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			// PDFからテキストを抽出
 			pdfText, err := extractTextFromPDF(articleURL, client, cfg.UserAgent)
 			if err == nil && len(pdfText) > 50 {
-				// PDFテキストを適切な長さに制限
-				if len(pdfText) > 2000 {
-					pdfText = pdfText[:2000] + "..."
-				}
 				excerpt = pdfText
 			}
 		} else {

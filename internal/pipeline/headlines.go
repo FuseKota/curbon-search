@@ -316,6 +316,10 @@ func CollectFromSources(sources []string, perSource int, cfg HeadlineSourceConfi
 			})
 		}
 
+		// Excerpt を4000文字で切り詰め
+		for i := range hs {
+			hs[i].Excerpt = truncateString(hs[i].Excerpt, 4000)
+		}
 		result.Headlines = append(result.Headlines, hs...)
 	}
 

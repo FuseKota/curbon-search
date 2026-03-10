@@ -619,11 +619,6 @@ func fetchMETIArticleExcerpt(client *http.Client, url string, userAgent string, 
 		}
 	}
 
-	// 2000文字に切り詰め
-	if len(excerpt) > 2000 {
-		excerpt = excerpt[:2000]
-	}
-
 	return excerpt, dateStr
 }
 

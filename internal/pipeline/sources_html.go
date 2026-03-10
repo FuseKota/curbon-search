@@ -516,10 +516,6 @@ func collectHeadlinesNewClimate(limit int, cfg HeadlineSourceConfig) ([]Headline
 			}
 		}
 
-		if len(excerpt) > 3000 {
-			excerpt = excerpt[:3000]
-		}
-
 		out = append(out, Headline{
 			Source:      "NewClimate Institute",
 			Title:       title,

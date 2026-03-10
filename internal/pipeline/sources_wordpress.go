@@ -124,7 +124,6 @@ func collectHeadlinesRMI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 			URL:         p.Link,
 			PublishedAt: publishedAt,
 			Excerpt:     excerpt,
-
 		})
 	}
 

@@ -472,11 +472,6 @@ func fetchOIESArticleContent(client *http.Client, articleURL, userAgent string) 
 	excerpt = strings.TrimSuffix(excerpt, " [")
 	excerpt = strings.TrimSpace(excerpt)
 
-	// 非常に長いExcerptを切り詰め（最大2000文字）
-	if len(excerpt) > 2000 {
-		excerpt = excerpt[:1997] + "..."
-	}
-
 	// JSON-LDから日付の取得を試行
 	doc.Find("script[type='application/ld+json']").Each(func(_ int, script *goquery.Selection) {
 		text := script.Text()

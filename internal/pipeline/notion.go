@@ -624,6 +624,12 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				}
 			}
 
+			// Published Dateを抽出
+			publishedDate := ""
+			if dateProp, ok := page.Properties["Published Date"].(*notionapi.DateProperty); ok && dateProp.Date != nil && dateProp.Date.Start != nil {
+				publishedDate = time.Time(*dateProp.Date.Start).Format(time.RFC3339)
+			}
+
 			// 作成日時を抽出
 			createdAt := page.CreatedTime.Format(time.RFC3339)
 
@@ -633,6 +639,7 @@ func (nc *NotionClipper) FetchRecentHeadlines(ctx context.Context, daysBack int)
 				Source:        source,
 				Type:          articleType,
 				ShortHeadline: shortHeadline,
+				PublishedDate: publishedDate,
 				CreatedAt:     createdAt,
 			})
 		}

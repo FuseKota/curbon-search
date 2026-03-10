@@ -322,15 +322,25 @@ func (es *EmailSender) send(msg []byte) error {
 //	2. Japan launches new GX initiative...
 //	   https://carboncredits.jp/...
 func (es *EmailSender) SendShortHeadlinesDigest(ctx context.Context, headlines []NotionHeadline) error {
-	// Article Summary 300が"-"のものを除外
+	// Article Summary 300が空または"-"、Published Dateが空の記事を除外
 	filtered := make([]NotionHeadline, 0, len(headlines))
+	skippedNoSummary := 0
+	skippedNoDate := 0
 	for _, h := range headlines {
-		// Article Summary 300が"-"系の場合は除外（Notion AIが要約できなかった記事）
-		if h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
+		// Article Summary 300が空・"-"系の場合は除外
+		if h.ShortHeadline == "" || h.ShortHeadline == "-" || h.ShortHeadline == "−" || h.ShortHeadline == "—" {
+			skippedNoSummary++
+			continue
+		}
+		// Published Dateが空の場合は除外
+		if h.PublishedDate == "" {
+			skippedNoDate++
 			continue
 		}
 		filtered = append(filtered, h)
 	}
+	fmt.Fprintf(os.Stderr, "Filtered: %d → %d articles (skipped: %d no summary, %d no date)\n",
+		len(headlines), len(filtered), skippedNoSummary, skippedNoDate)
 
 	var body, subject string
 	if len(filtered) == 0 {
@@ -368,19 +378,9 @@ func (es *EmailSender) generateShortHeadlinesBody(headlines []NotionHeadline) st
 	sb.WriteString(fmt.Sprintf("炭素関連記事一覧 - %s\n", time.Now().Format("2006-01-02")))
 	sb.WriteString(fmt.Sprintf("合計: %d 記事\n\n", len(headlines)))
 
-	// 各記事
+	// 各記事（フィルタ済みのためShortHeadlineは必ず存在する）
 	for i, h := range headlines {
-		// Article Summary 300があればそれを使用、なければTitleを50文字に切り詰め
 		displayText := h.ShortHeadline
-		if displayText == "" {
-			// フォールバック: タイトルを50文字に切り詰め
-			runes := []rune(h.Title)
-			if len(runes) > 50 {
-				displayText = string(runes[:47]) + "..."
-			} else {
-				displayText = h.Title
-			}
-		}
 
 		typeLabel := ""
 		if h.Type != "" {

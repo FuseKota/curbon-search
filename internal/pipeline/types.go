@@ -54,6 +54,7 @@ type NotionHeadline struct {
 	Source        string // ソース名
 	Type          string // 記事タイプ（Academic/News）
 	ShortHeadline string // Article Summary 300（短い要約、Notion AIで生成）
+	PublishedDate string // Published Date（記事の公開日、RFC3339形式）
 	CreatedAt     string // 作成日時（RFC3339形式）
 }
 

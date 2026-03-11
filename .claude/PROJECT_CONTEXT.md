@@ -20,17 +20,21 @@
 
 ```
 cmd/pipeline/
-├── main.go              - エントリーポイント、CLI制御
+├── main.go                  - エントリーポイント（薄いラッパー）
 internal/pipeline/
-├── headlines.go         - 共通ロジック
-├── sources_wordpress.go - WordPress REST APIソース
-├── sources_html.go      - HTMLスクレイピングソース
-├── sources_japan.go     - 日本語ソース
-├── sources_rss.go       - RSSフィードソース
-├── notion.go            - Notion統合
-├── email.go             - メール送信
-├── types.go             - データ構造
-└── utils.go             - ユーティリティ
+├── config.go                - CLIフラグ解析・設定管理
+├── handlers.go              - 出力モード処理（JSON/Notion/メール）
+├── headlines.go             - 共通ロジック（CollectFromSources等）
+├── sources_wordpress.go     - WordPress REST APIソース
+├── sources_html.go          - HTMLスクレイピングソース
+├── sources_japan.go         - 日本語ソース
+├── sources_rss.go           - RSSフィードソース
+├── sources_academic.go      - 学術・研究ソース
+├── sources_regional_ets.go  - 地域ETS関連ソース
+├── notion.go                - Notion統合
+├── email.go                 - メール送信
+├── types.go                 - データ構造
+└── utils.go                 - ユーティリティ
 ```
 
 ## 🗂️ データソース（39アクティブソース）
@@ -123,13 +127,22 @@ EMAIL_TO=recipient@example.com
 ## 📊 主要なフラグ
 
 ```bash
+# 入力
 -sources              # ソース指定（CSV形式、"all-free"で全39ソース）
 -perSource            # ソースあたりの記事数（デフォルト: 30）
 -hoursBack            # 指定時間以内の記事のみ（デフォルト: 0、日付なし記事は保持）
+-headlines            # 既存JSONファイルから読み込み（スクレイピングをスキップ）
+
+# 出力
 -out                  # 出力ファイル（省略時はstdout）
 -notionClip           # Notionにクリップ
 -notionPageID         # Notion親ページID（初回のみ）
+-notionDatabaseID     # 既存Notion Database ID
+
+# メール
 -sendShortEmail       # 50文字ダイジェストメール送信
+-listShortHeadlines   # Article Summary 300の診断表示
+-emailDaysBack        # メール用の取得期間（日数、デフォルト: 1）
 ```
 
 ## 🐛 トラブルシューティング
@@ -160,30 +173,24 @@ EMAIL_TO=recipient@example.com
 - **ドキュメント目次**: `docs/README.md`
 - **スクリプト一覧**: `scripts/README.md`
 
-## 🔄 最近の重要な変更（2026年2月4日）
+## 🔄 最近の重要な変更（2026年3月10日）
 
-### インフラ改善
-1. **HTTPクライアント共有（コネクションプーリング）**
-   - 全ソースで共有クライアントを使用
-   - MaxIdleConns: 100, MaxIdleConnsPerHost: 10
-   - タイムアウト: 30秒（20秒から増加）
+### コード構造（2026-03-10）
+- **パイプラインロジック移動**: `cmd/pipeline/` → `internal/pipeline/` に完全移行
+- `config.go`（CLIフラグ）・`handlers.go`（出力処理）を分離
+- `sources_academic.go`・`sources_regional_ets.go` を分割
 
-2. **WordPress API日付処理改善**
-   - `date`から`date_gmt`フィールドに変更
-   - UTC形式（Z suffix）で統一
+### Notion・メール改善（2026-02-28）
+- **Article Summary 1500** プロパティを廃止
+- メールダイジェストのフィルタ簡素化（PublishedDate空・Summary空を除外）
+- カーボンキーワードフィルタを廃止
 
-3. **日付フィルタリング改善**
-   - `FilterHeadlinesByHours`: 日付なし記事を保持
-   - `time.Now()`フォールバックを廃止（空文字列に変更）
-   - 全ソースでUTC形式に統一（JST→UTC）
+### ソース復旧（2026-03-01）
+- **Nature Communications**: `nature-comms` としてアクティブ復帰（curl + RSS）
 
-### ソース修正
-4. **Mizuho R&T**: 年を動的取得（`time.Now().Year()`）
-5. **リソースリーク修正**: JRI、環境省のdeferループ問題を修正
-6. **正規表現最適化**: パッケージレベルで事前コンパイル
-
-### CLI改善
-7. **`all-free`サポート**: `-sources=all-free`で全39ソース指定可能
+### ソース品質改善（2026-02-09）
+- **Carbon Market Watch**: RSS方式に変更（`/feed/`で全文取得）
+- **Euractiv**: 記事ページスクレイピング追加、Excerpt大幅改善
 
 ## 💡 開発のヒント
 
@@ -204,3 +211,4 @@ EMAIL_TO=recipient@example.com
 - **ブランチ**: main
 - **Go バージョン**: 1.23+
 - **ステータス**: 本番環境対応済み ✅
+- **最終更新**: 2026年3月11日

@@ -38,22 +38,7 @@
 
 ---
 
-### 3. settings.json
-**プロジェクト全体のHooks設定**
-
-内容:
-- .env保護フック（誤編集防止）
-- Go自動フォーマットフック
-- コンテキスト再注入フック
-- モード認識リマインダー
-
-**こんな時に役立つ**:
-- 自動的に動作（手動操作不要）
-- セキュリティとコード品質を自動保証
-
----
-
-### 4. config.json
+### 3. config.json
 **プロジェクト設定とメタデータ**
 
 内容:
@@ -68,13 +53,6 @@
 - プロジェクト全体の構成を理解したい時
 - 環境変数のセットアップ方法を知りたい時
 - ベストプラクティスを確認したい時
-
----
-
-### 5. settings.local.json
-**Claude Code のローカル設定**
-
-自動生成されるファイル。手動編集は通常不要。
 
 ---
 
@@ -132,37 +110,20 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 # または、PROJECT_CONTEXT.mdの「よく使うコマンド」セクション
 ```
 
-### パターン4: 新しいニュースソースを追加したい（推奨ワークフロー）
+### パターン4: 新しいニュースソースを追加したい
 ```bash
-# 1. source-researcherエージェントでソースを調査
-#    Claude Codeで: "Launch source-researcher agent to analyze https://example.com"
+# 1. ソースの構造を調査（WordPress API、HTML、RSS）
 #
-# 2. エージェントが提供するコードテンプレートを実装
+# 2. collectHeadlines{Name}() を headlines.go に実装
 #
 # 3. /test-sourceスキルでテスト
 #    Claude Codeで: /test-source newsource
 #
-# 4. code-reviewerエージェントでレビュー
-#    Claude Codeで: "Launch code-reviewer agent to review my changes"
-#
-# 5. /commit-patternスキルでコミット
+# 4. /commit-patternスキルでコミット
 #    Claude Codeで: /commit-pattern "Add new source: Example News"
 ```
 
-### パターン5: コード変更をレビューしてほしい
-```bash
-# code-reviewerエージェントを起動
-# Claude Codeで:
-# "Launch code-reviewer agent to review my recent changes"
-#
-# エージェントが以下をチェック:
-# - セキュリティ問題
-# - ベストプラクティス準拠
-# - パフォーマンス問題
-# - Carbon Relay固有パターン
-```
-
-### パターン6: 環境変数の設定方法がわからない
+### パターン5: 環境変数の設定方法がわからない
 ```bash
 # config.jsonを参照
 # すべての環境変数の説明とセットアップガイドが記載されている
@@ -187,15 +148,9 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 
 ---
 
-## 🎯 自動化機能（2026年1月31日追加）
+## 🎯 自動化機能
 
 このプロジェクトには、Claude Codeが自動的にサポートする機能が組み込まれています：
-
-### Hooks（自動保護）
-- `.env`ファイルの誤編集を防止
-- Go自動フォーマット（編集後）
-- セッション開始時のコンテキスト再注入
-- 初回プロンプト時の2モードリマインダー
 
 ### Skills（タスクパターン）
 - `/test-source <name>` - ソースのテスト
@@ -207,17 +162,6 @@ DEBUG_SCRAPING=1 ./pipeline -sources={問題のソース} -perSource=1
 - `/build` - パイプラインのビルド
 - `/test-all` - 全ソースのクイックテスト
 - `/check-env` - 環境変数の確認
-
-### Agents（専門タスク）
-- `source-researcher` - 新しいニュースソースの調査・分析
-  - WordPress API vs HTML scraping判定
-  - セレクタ抽出と実装推奨
-  - Goコードテンプレート生成
-- `code-reviewer` - コード変更のレビュー
-  - Carbon Relayベストプラクティスチェック
-  - セキュリティ脆弱性検出
-  - パフォーマンス問題の指摘
-  - アーキテクチャ準拠確認
 
 ### Config（プロジェクト設定）
 - `config.json` - プロジェクト全体の設定とメタデータ

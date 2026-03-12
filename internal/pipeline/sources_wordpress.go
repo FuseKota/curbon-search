@@ -94,9 +94,10 @@ func collectHeadlinesRMI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 		}
 
 		// 各記事ページをスクレイピングして全文取得
-		// RMIには2つのテンプレートがある:
+		// RMIには3つのテンプレートがある:
 		//   新: div.my-12.single_news_content-wrapper に本文
 		//   旧: div.single_news_content-wrapper 内に直接 <p> タグ
+		//   COA: section.coa-content > div.container > div.coa-mw に本文
 		excerpt := ""
 		doc, err := fetchDoc(p.Link, cfg)
 		if err == nil {
@@ -108,6 +109,10 @@ func collectHeadlinesRMI(limit int, cfg HeadlineSourceConfig) ([]Headline, error
 				sel.Find("div.single_news_content_meta").Remove()
 				sel.Find("h3").First().Remove()
 				sel.Find("h6").First().Remove()
+			}
+			if sel.Length() == 0 {
+				// COAテンプレート: section.coa-content 内の div.coa-mw を結合
+				sel = doc.Find("section.coa-content div.coa-mw")
 			}
 			if sel.Length() > 0 {
 				sel.Find("script, style, iframe, svg").Remove()

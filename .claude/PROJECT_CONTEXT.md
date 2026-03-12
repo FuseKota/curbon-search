@@ -6,8 +6,6 @@
 
 **Carbon Relay**は、カーボン関連ニュースの収集・分析・配信を自動化するGo製システムです。
 
-**プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
-
 ## 🔑 運用モード
 
 ### 無料記事収集モード

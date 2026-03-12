@@ -259,7 +259,7 @@ const DefaultSources = "...isometric,{cli-id}"
 
 ## Phase 4: テストと検証
 
-### テストコマンド
+### 4-A: スクレイピング動作テスト
 
 ```bash
 # 1. ビルド
@@ -274,9 +274,6 @@ DEBUG_SCRAPING=1 ./pipeline -sources={cli-id} -perSource=1
 # 4. 通常テスト（5件）
 ./pipeline -sources={cli-id} -perSource=5 -out=/tmp/test_{cli-id}.json
 cat /tmp/test_{cli-id}.json | jq '.'
-
-# 5. 全ソースと一緒に動作確認（オプション）
-./pipeline -sources=all-free -perSource=5 -out=/tmp/test_all.json 2>&1 | grep -E "({cli-id}|ERROR)"
 ```
 
 ### 成功判定基準
@@ -289,7 +286,43 @@ cat /tmp/test_{cli-id}.json | jq '.'
 | PublishedAt | RFC3339形式（例: `2026-01-05T12:00:00Z`） |
 | Excerpt | 50文字以上（理想は200文字以上） |
 
-### エラー対処表
+### 4-B: Notion 連携テスト
+
+スクレイピングが成功したら、Notion に実際に記事が登録されるか確認する。
+
+```bash
+# 既存 Database ID が .env に設定済みの場合（通常運用）
+./pipeline -sources={cli-id} -perSource=3 -notionClip
+
+# 初回セットアップ（NOTION_DATABASE_ID が未設定の場合）
+./pipeline -sources={cli-id} -perSource=3 -notionClip -notionPageID=$NOTION_PAGE_ID
+```
+
+**Notion 確認ポイント**:
+1. Notion のデータベースを開き、新しく追加された記事を確認
+2. 以下の項目が正しく入っていることをチェック：
+
+| Notion プロパティ | 期待値 |
+|-----------------|--------|
+| Title | 記事タイトル（空でない） |
+| Source | `{Display Name}` |
+| URL | 記事の URL |
+| PublishedDate | 日付（空でないことが望ましい） |
+| Article Summary 300 | 要約テキスト（メールダイジェスト除外条件に関係） |
+
+> **注意**: PublishedDate が空・Article Summary 300 が空の記事はメールダイジェストから除外される。
+> 日付が取れていない場合はスクレイピングロジックの日付パースを見直すこと。
+
+**エラー例と対処**:
+
+| エラー | 原因 | 対処法 |
+|--------|------|--------|
+| `NOTION_API_KEY is required` | `.env` に `NOTION_API_KEY` が未設定 | `.env` を確認 |
+| `NOTION_DATABASE_ID is not set` | データベース未作成 | `-notionPageID` フラグを付けて初回実行 |
+| Notion に記事が現れない | `notionClip` が false / ビルド未更新 | ビルドを確認、フラグを確認 |
+| 記事が重複登録される | URL の正規化問題 | `resolveURL()` の出力を確認 |
+
+### エラー対処表（スクレイピング）
 
 | エラー | 原因 | 対処法 |
 |--------|------|--------|
@@ -322,23 +355,6 @@ cat /tmp/test_{cli-id}.json | jq '.'
 ```
 ### 新規ソース追加（{日付}）
 - **{Display Name}**: {パターン}（{簡単な説明}）
-```
-
----
-
-## コミットメッセージテンプレート
-
-```
-feat: Add {Display Name} source ({パターン}パターン)
-
-- Implemented collectHeadlines{SourceName}() in {ソースファイル}.go
-- Added "{cli-id}" to sourceCollectors registry in headlines.go
-- Added to DefaultSources in config.go
-- Tested: {N} articles retrieved (Title/URL/Excerpt/Date all populated)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 
 ---

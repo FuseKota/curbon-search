@@ -2,6 +2,8 @@
 carbon-relay
 /pipeline
 /collect
+/collect-exception
+/collect-delayed
 /email
 
 # Build artifacts

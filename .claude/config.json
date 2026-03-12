@@ -115,7 +115,7 @@
   },
   "codingStandards": {
     "language": "Go",
-    "formatting": "gofmt (auto-applied via hooks)",
+    "formatting": "gofmt",
     "naming": {
       "sourceFunctions": "collectHeadlines{SourceName}()",
       "errorHandling": "Always wrap errors with context using fmt.Errorf",
@@ -137,11 +137,11 @@
   },
   "workflows": {
     "addNewSource": [
-      "1. Research with /add-source skill or source-researcher agent",
+      "1. Research the source structure (WordPress API, HTML, RSS)",
       "2. Implement collectHeadlines{Name}() in cmd/pipeline/headlines.go",
       "3. Add to sourceMap in cmd/pipeline/main.go",
       "4. Test with /test-source skill",
-      "5. Review with code-reviewer agent",
+      "5. Review changes manually",
       "6. Update documentation",
       "7. Commit with /commit-pattern skill"
     ],
@@ -190,20 +190,11 @@
     "Never use git --force on main/master branch"
   ],
   "automation": {
-    "hooks": {
-      "env_protection": "Blocks .env editing",
-      "auto_format": "Runs gofmt on Go files",
-      "context_injection": "Re-injects project context after compaction"
-    },
     "skills": {
       "test_source": "Test individual sources",
       "verify_mode": "Verify operational mode",
       "commit_pattern": "Generate commit messages",
       "add_source": "Guide for new sources"
-    },
-    "agents": {
-      "source_researcher": "Research new sources before implementation",
-      "code_reviewer": "Review code for quality and compliance"
     }
   }
 }

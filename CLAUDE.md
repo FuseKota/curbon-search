@@ -298,7 +298,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **パイプラインロジック移動**: `cmd/pipeline/` → `internal/pipeline/` にリファクタリング（`cmd/pipeline/`は`main.go`のみ）
 
 #### Excerpt統一切り詰め
-- **全ソース4000文字統一**: 各ソース個別の2000/3000文字制限を廃止し、`CollectFromSources()`で一括4000文字に切り詰め
+- **全ソース3000文字統一**: 各ソース個別の2000/3000文字制限を廃止し、`CollectFromSources()`で一括3000文字に切り詰め
 
 #### メールダイジェストフィルタ改善
 - **PublishedDate空記事除外**: メールダイジェスト生成時にPublishedDateが空の記事を除外

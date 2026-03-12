@@ -1,6 +1,6 @@
 # Carbon Relay - Complete Implementation Guide 2026
 
-**最終更新**: 2026年3月3日
+**最終更新**: 2026年3月12日
 **バージョン**: 1.0
 **ステータス**: Production Ready
 
@@ -74,7 +74,7 @@ Carbon関連の無料記事を幅広く確認
 
 ### 1.5 技術スタック
 
-**プログラミング言語**: Go 1.23
+**プログラミング言語**: Go 1.24.1
 **主要ライブラリ**:
 - `github.com/PuerkitoBio/goquery v1.10.2` - HTML解析
 - `github.com/mmcdole/gofeed v1.3.0` - RSS/Atomフィード解析
@@ -95,13 +95,22 @@ Carbon関連の無料記事を幅広く確認
 /Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/
 ├── cmd/
 │   └── pipeline/
-│       ├── main.go              - パイプライン制御とCLI
+│       └── main.go              - エントリーポイント（薄いラッパー）
+├── internal/
+│   └── pipeline/
+│       ├── config.go            - CLIフラグ解析・設定管理
+│       ├── handlers.go          - 出力モード処理
 │       ├── headlines.go         - ヘッドライン収集共通ロジック
-│       ├── sources_*.go         - 各ソース実装
+│       ├── sources_wordpress.go - WordPress REST API ソース
+│       ├── sources_html.go      - HTMLスクレイピングソース
+│       ├── sources_japan.go     - 日本語ソース
+│       ├── sources_rss.go       - RSS フィードソース
+│       ├── sources_academic.go  - 学術・研究ソース
+│       ├── sources_regional_ets.go - 地域ETS ソース
 │       ├── notion.go            - Notion統合
 │       ├── email.go             - メール送信
 │       ├── types.go             - データ構造
-│       └── config.go            - ソース設定
+│       └── utils.go             - ユーティリティ
 ├── .env                         - 環境変数設定
 ├── .env.example                 - 環境変数サンプル
 ├── go.mod                       - Go依存関係
@@ -111,10 +120,14 @@ Carbon関連の無料記事を幅広く確認
 
 ### 2.2 コアモジュール
 
-#### main.go (パイプライン制御)
+#### cmd/pipeline/main.go (エントリーポイント)
+**責務**:
+- 環境変数読み込み（godotenv）
+- `internal/pipeline` の `Run()` 呼び出し（薄いラッパー）
+
+#### internal/pipeline/config.go (設定管理)
 **責務**:
 - コマンドラインフラグ解析（13フラグ）
-- 環境変数読み込み（godotenv）
 - パイプライン全体の制御
 - エラーハンドリングとログ出力
 - Database ID の自動保存
@@ -124,23 +137,26 @@ Carbon関連の無料記事を幅広く確認
 -sources           // 収集するソース（CSV形式）
 -perSource         // ソースあたりの最大記事数
 -notionClip        // Notionへクリップ
--sendShortEmail         // メール送信
+-sendShortEmail    // メール送信
 ```
 
-#### headlines.go (ソース実装)
+#### internal/pipeline/handlers.go (出力処理)
 **責務**:
-- 39ニュースソースの実装
+- 出力モード処理（JSON出力・Notionクリップ・メール送信）
+- 各出力ハンドラの呼び出し制御
+
+#### internal/pipeline/headlines.go (ソース実装)
+**責務**:
+- 39ニュースソースのソースマップ定義
 - 複数のスクレイピングパターン:
   - WordPress REST API（8ソース）
   - HTML Scraping with goquery（8ソース）
   - RSS Feed with gofeed（3ソース）
 - キーワードフィルタリング（日本語ソース）
 - URL重複排除
-- Excerpt抽出
+- Excerpt抽出・3000文字統一切り詰め
 
-**コード比率**: 全体の49.6%
-
-#### notion.go (Notion統合)
+#### internal/pipeline/notion.go (Notion統合)
 **責務**:
 - Notion Database統合
 - データベース自動作成
@@ -190,7 +206,7 @@ Carbon関連の無料記事を幅広く確認
 ## 3. 全ソースの実装詳細
 
 > **構成**: 各セクションはソースコードファイル（`sources_*.go`）と 1:1 で対応しています。
-> 全 42 ソース（39 アクティブ + 3 停止中/不安定）に通し番号 #1〜#42 を付与。
+> 全 44 ソース（39 アクティブ + 5 停止中）に通し番号 #1〜#44 を付与。
 
 ### 3.1 WordPress REST APIソース（7ソース） — `sources_wordpress.go`
 
@@ -595,7 +611,7 @@ https://www.oxfordenergy.org/electricity-programme/
 - Nature.comのbot保護により空スライスを返す場合あり（Nature Commsと同様）
 - エラー時はgracefulに空スライスを返却
 
-**ステータス**: ⚠️ bot保護により不安定（空スライス返却で対応）
+**ステータス**: ⛔ 停止中（2026-02: 有料記事のため。有料記事を返すため収集対象から除外）
 
 #### #23: ScienceDirect (Total Environment Engineering)
 **実装**: `collectHeadlinesScienceDirect()`
@@ -932,6 +948,24 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 ---
 
+### 3.9 停止中ソース（実装済みだが無効化）
+
+#### #43: UN News
+**実装**: `collectHeadlinesUNNews()`（headlines.go にコメントアウト済み）
+**手法**: HTMLスクレイピング
+**停止理由**: コンテンツ抽出の改善が必要（2026-02）
+
+**ステータス**: ⛔ 停止中
+
+#### #44: UNFCCC
+**実装**: `collectHeadlinesUNFCCC()`（headlines.go にコメントアウト済み）
+**手法**: HTMLスクレイピング
+**停止理由**: Imperva Incapsula による全エンドポイントブロック（2026-01）。ヘッドレスブラウザなしでは回避不可能。
+
+**ステータス**: ⛔ 停止中（回復不可）
+
+---
+
 ## 4. データ処理パイプライン
 
 ### 4.1 フェーズ1: 収集
@@ -1002,7 +1036,7 @@ type Headline struct {
         * Source（色分けSelectオプション）
         * Type: "News"
         * Published Date
-        * Article Summary 300（記事要約、最初の4000文字）
+        * Article Summary 300（記事要約、最初の3000文字）
       - 完全コンテンツをブロックに追加（2000文字/ブロック）
 
    c) 各RelatedFreeをクリップ
@@ -1091,7 +1125,7 @@ stopwords := map[string]bool{
 | Type | Select | 記事タイプ | "News" または "Academic" |
 | Score | Number | マッチングスコア | Related Freeのみ、0-1の範囲 |
 | Published Date | Date | 公開日 | RFC3339からパース |
-| Article Summary 300 | Rich Text | 記事要約 | 最初の4000文字を保存 |
+| Article Summary 300 | Rich Text | 記事要約 | CollectFromSources で切り詰め済みの Excerpt を保存（最大3000文字） |
 
 **Sourceオプション（色分け）**:
 ```go
@@ -1219,7 +1253,7 @@ func appendToEnvFile(path, key, value string) error {
       - Source: headline.Source (Select)
       - Type: "News" (Select)
       - Published Date: parseDate(headline.PublishedAt)
-      - Article Summary 300: truncateString(excerpt, 4000)（CollectFromSourcesで統一適用）
+      - Article Summary 300: h.Excerpt（CollectFromSources で3000文字に切り詰め済み）
 
    b) ページコンテンツ作成
       - Excerpt/Full Contentを段落ブロックに分割
@@ -1240,7 +1274,7 @@ func appendToEnvFile(path, key, value string) error {
       - Type: "Academic" (Select)
       - Score: related.Score (Number)
       - Published Date: parseDate(related.PublishedAt)
-      - Article Summary 300: truncateString(excerpt, 4000)
+      - Article Summary 300: h.Excerpt（CollectFromSources で3000文字に切り詰め済み）
 
    b) ページコンテンツ作成（同上）
 

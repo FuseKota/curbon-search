@@ -1,6 +1,6 @@
 ---
 name: build-lambda
-description: AWS Lambda用のzipファイルをビルドする（collect-headlines / send-email）
+description: AWS Lambda用のzipファイルをビルドする（collect-headlines / collect-exception / send-email）
 allowed-tools: Bash
 disable-model-invocation: true
 ---
@@ -11,8 +11,9 @@ disable-model-invocation: true
 
 | 引数 | 対象 |
 |------|------|
-| （なし） | 両方ビルド |
+| （なし） | 全てビルド |
 | `collect` | collect-headlines のみ |
+| `exception` | collect-exception のみ |
 | `email` | send-email のみ |
 
 ## 実行手順
@@ -35,6 +36,21 @@ cd dist && zip -j collect-headlines.zip bootstrap && rm bootstrap
 echo "Built: dist/collect-headlines.zip"
 ls -lh "$PROJECT_ROOT/dist/collect-headlines.zip"
 ```
+
+**`exception` の場合：**
+
+```bash
+PROJECT_ROOT=/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay
+mkdir -p "$PROJECT_ROOT/dist"
+cd "$PROJECT_ROOT"
+GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o dist/bootstrap ./cmd/lambda/collect-exception/
+cd dist && zip -j collect-exception.zip bootstrap && rm bootstrap
+echo "Built: dist/collect-exception.zip"
+ls -lh "$PROJECT_ROOT/dist/collect-exception.zip"
+```
+
+> **注記**: `collect-exception` は `ExceptionSources`（rggi, jri, arxiv, iisd）専用。
+> `HOURS_BACK` のデフォルトは 48 時間（UTC午後公開ソース・レート制限の厳しいソース向け）。
 
 **`email` の場合：**
 

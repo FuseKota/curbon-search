@@ -44,12 +44,12 @@ Carbon関連の無料記事を幅広く確認
 
 **使用例**:
 ```bash
-# 39の無料ソースから幅広く記事を収集
+# 35の無料ソースから幅広く記事を収集（+ 例外4ソースは別Lambda）
 ./pipeline -sources=all-free -perSource=10 -sendShortEmail
 ```
 
 **特徴**:
-- 39の無料ソースから直接記事を収集
+- 35の無料ソースから直接記事を収集（collect-exception Lambda で rggi/jri/arxiv/iisd を別途収集）
 - 高速実行（5-15秒）
 - メール配信・Notion統合に対応
 
@@ -57,7 +57,7 @@ Carbon関連の無料記事を幅広く確認
 
 ### 1.3 主要機能
 
-- ✅ 39の情報ソースからのニュース自動収集
+- ✅ 35+4の情報ソースからのニュース自動収集（メイン35 + 例外4）
 - ✅ HTML/RSS/WordPress API によるスクレイピング
 - ✅ メール送信機能（Gmail SMTP）
 - ✅ Notion Databaseへの自動クリッピング
@@ -67,7 +67,7 @@ Carbon関連の無料記事を幅広く確認
 | 項目 | 値 |
 |------|-----|
 | 総コード行数 | 4,751行（Go） |
-| 実装ソース数 | 39（無料ソースのみ） |
+| 実装ソース数 | 35（メイン）+ 4（例外: rggi/jri/arxiv/iisd） |
 | テスト成功率 | 100%（15/15テスト合格） |
 | 実装期間 | 2025年12月29日 - 2026年1月4日 |
 | ステータス | 本番環境対応済み |
@@ -94,8 +94,12 @@ Carbon関連の無料記事を幅広く確認
 ```
 /Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/
 ├── cmd/
-│   └── pipeline/
-│       └── main.go              - エントリーポイント（薄いラッパー）
+│   ├── pipeline/
+│   │   └── main.go              - CLIエントリーポイント（薄いラッパー）
+│   └── lambda/
+│       ├── collect/             - collect-headlines Lambda（DefaultSources 35ソース）
+│       ├── collect-exception/   - collect-exception Lambda（ExceptionSources 4ソース）
+│       └── email/               - send-email Lambda（Notionからメール配信）
 ├── internal/
 │   └── pipeline/
 │       ├── config.go            - CLIフラグ解析・設定管理
@@ -147,7 +151,7 @@ Carbon関連の無料記事を幅広く確認
 
 #### internal/pipeline/headlines.go (ソース実装)
 **責務**:
-- 39ニュースソースのソースマップ定義
+- 35+4ニュースソースのソースマップ定義（DefaultSources 35 + ExceptionSources 4）
 - 複数のスクレイピングパターン:
   - WordPress REST API（8ソース）
   - HTML Scraping with goquery（8ソース）
@@ -165,7 +169,22 @@ Carbon関連の無料記事を幅広く確認
 - コンテンツブロック作成
 - 公開日パース（複数フォーマット対応）
 
-### 2.3 データフロー図
+### 2.3 Lambda 構成
+
+| Lambda | エントリーポイント | 対象ソース | HOURS_BACK | 推奨実行時刻(UTC) |
+|--------|-----------------|-----------|-----------|-----------------|
+| collect-headlines | cmd/lambda/collect/ | DefaultSources（35ソース） | 24時間 | 9:00 |
+| collect-exception | cmd/lambda/collect-exception/ | ExceptionSources（rggi/jri/arxiv/iisd） | 48時間 | 21:00 |
+| send-email | cmd/lambda/email/ | Notionからメール配信 | - | 10:00 |
+
+**ExceptionSources を分離した理由**:
+- **RGGI・JRI**: UTC午後公開のため UTC 9:00 実行では未来記事として除外される
+- **arXiv**: IPベースのレート制限（429）が厳しく同時実行で失敗しやすい
+- **IISD ENB**: 403レスポンスが頻発し、リトライが必要
+
+---
+
+### 2.4 データフロー図
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -1498,7 +1517,7 @@ DEBUG_HTML=1
 
 ### 7.3 デフォルトソースリスト
 
-**`-sources=all-free`指定時の全39アクティブソース**:
+**`-sources=all-free`指定時の全35アクティブソース（例外4ソースは collect-exception Lambda で別途収集）**:
 
 `internal/pipeline/config.go` の `defaultSources` を参照してください。
 
@@ -1547,7 +1566,7 @@ DEBUG_HTML=1
 ```
 
 **特徴**:
-- ✅ 39の無料ソースから直接記事を収集
+- ✅ 35の無料ソースから直接記事を収集（例外4ソースは collect-exception Lambda）
 - ✅ 実行速度が速い（5-15秒程度）
 - ✅ メール配信・Notion統合に対応
 
@@ -2149,7 +2168,7 @@ time ./pipeline -sources=all-free -perSource=10
 
 - **用途**: 幅広いCarbon関連無料記事の収集と要約配信
 - **コマンド例**: `./pipeline -sources=all-free -perSource=10 -sendShortEmail`
-- **特徴**: 39の無料ソースから直接収集、コスト効率が高く、高速実行
+- **特徴**: 35の無料ソース（+ 4例外ソース）から直接収集、コスト効率が高く、高速実行
 - **詳細**: セクション1.2、セクション8.1
 
 ---

@@ -219,7 +219,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## 📊 プロジェクト統計
 
-- **実装ソース数**: 39（アクティブ）、5停止中
+- **実装ソース数**: 35（メインLambda）+ 4（例外Lambda: rggi/jri/arxiv/iisd）、5停止中
 - **HTTPタイムアウト**: 30秒（共有クライアント）
 - **ステータス**: 本番環境対応済み ✅
 
@@ -304,9 +304,18 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - **PublishedDate空記事除外**: メールダイジェスト生成時にPublishedDateが空の記事を除外
 - **サマリー空記事除外**: Article Summary 300が空の記事も除外
 
+### collect-exception Lambda 新規作成（2026年3月13日）
+
+- **ExceptionSources**: rggi, jri, arxiv, iisd を DefaultSources から分離
+  - RGGI・JRI: UTC午後公開のため朝実行では未来記事として除外される
+  - arXiv・IISD: レート制限が厳しく同時実行で失敗しやすい
+- **DefaultSources**: 39 → 35ソースに変更
+- **新Lambda**: `cmd/lambda/collect-exception/`（HOURS_BACK デフォルト 48時間）
+- **EventBridge推奨**: collect-headlines は UTC 9:00、collect-exception は UTC 21:00
+
 ---
 
-**最終更新**: 2026年3月10日
+**最終更新**: 2026年3月13日
 **プロジェクトパス**: `/Users/kotafuse/Work/Yasui/Prog/Test/carbon-relay/`
 **リポジトリ**: https://github.com/FuseKota/curbon-search.git
 

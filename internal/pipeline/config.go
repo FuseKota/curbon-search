@@ -95,11 +95,19 @@ type EmailModeConfig struct {
 // フラグ解析
 // =============================================================================
 
-// DefaultSources はデフォルトソースリスト（全39アクティブソース）
+// DefaultSources はデフォルトソースリスト（メインLambdaで収集する35ソース）
 // 2026-02-17更新: nature-ecoevo を停止（有料記事のため）
 // 2026-02-18更新: env-ministry, meti を停止
 // 2026-03-01更新: nature-comms を追加
-const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,jri,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,arxiv,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,iisd,climate-focus,eu-ets,uk-ets,carb,rggi,australia-cer,puro-earth,isometric"
+// 2026-03-13更新: rggi, jri, arxiv, iisd を ExceptionSources に移動
+const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,climate-focus,eu-ets,uk-ets,carb,australia-cer,puro-earth,isometric"
+
+// ExceptionSources は別スケジュールで収集するソース（タイミング/レート制限問題あり）
+//   - rggi:  UTC正午ごろ公開 → 朝UTC実行の FilterHeadlinesByHours で「未来記事」として除外される
+//   - jri:   UTC 15:00ごろ公開 → 同上
+//   - arxiv: IPベースのレート制限（429）が厳しく、他ソースと同時実行すると失敗しやすい
+//   - iisd:  403レスポンスが頻発（リトライあり）
+const ExceptionSources = "rggi,jri,arxiv,iisd"
 
 // ParseFlags はCLIフラグを解析してPipelineConfigを返す
 func ParseFlags() *PipelineConfig {

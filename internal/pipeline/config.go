@@ -100,7 +100,8 @@ type EmailModeConfig struct {
 // 2026-02-18更新: env-ministry, meti を停止
 // 2026-03-01更新: nature-comms を追加
 // 2026-03-13更新: rggi, jri, arxiv, iisd を ExceptionSources に移動
-const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,climate-focus,eu-ets,uk-ets,carb,australia-cer,puro-earth,isometric"
+// 2026-03-13更新: un-news を復活（RSS正常動作を確認）
+const DefaultSources = "carboncredits.jp,carbonherald,climatehomenews,carboncredits.com,sandbag,ecosystem-marketplace,carbon-brief,rmi,icap,ieta,energy-monitor,world-bank,newclimate,carbon-knowledge-hub,carbon-market-watch,pwc-japan,mizuho-rt,jpx,politico-eu,euractiv,un-news,nature-comms,oies,iopscience,sciencedirect,verra,gold-standard,acr,car,climate-focus,eu-ets,uk-ets,carb,australia-cer,puro-earth,isometric"
 
 // ExceptionSources は別スケジュールで収集するソース（タイミング/レート制限問題あり）
 //   - rggi:  UTC正午ごろ公開 → 朝UTC実行の FilterHeadlinesByHours で「未来記事」として除外される

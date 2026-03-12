@@ -74,7 +74,6 @@
 //
 // ▼ 一時無効化中のソース
 //   - UNFCCC              - Incapsula (Imperva) 保護により全エンドポイントブロック
-//   - UN News Climate     - コンテンツ抽出の改善が必要
 //
 // =============================================================================
 // 【デバッグ方法】
@@ -169,7 +168,7 @@ var sourceCollectors = map[string]HeadlineCollector{
 	"politico-eu":         collectHeadlinesPoliticoEU,
 	"euractiv":            collectHeadlinesEuractiv,
 	"carbon-market-watch": collectHeadlinesCarbonMarketWatch,
-	// "un-news": collectHeadlinesUNNews, // 2026-02: コンテンツ抽出の改善が必要
+	"un-news": collectHeadlinesUNNews,
 	// "unfccc": collectHeadlinesUNFCCC, // 2026-01: Incapsula (Imperva) 保護 - 全エンドポイントブロック
 
 	// =========================================================================

@@ -291,7 +291,7 @@ func collectHeadlinesEnvMinistry(limit int, cfg HeadlineSourceConfig) ([]Headlin
 // collectHeadlinesJPX は JPX（日本取引所グループ）の RSSフィードから見出しを収集する
 func collectHeadlinesJPX(limit int, cfg HeadlineSourceConfig) ([]Headline, error) {
 	// JPX RSSフィードを使用
-	feedURL := "https://www.jpx.co.jp/rss/jpx-news.xml"
+	feedURL := "https://www.jpx.co.jp/rss/markets_news.xml"
 
 	fp := gofeed.NewParser()
 	fp.Client = cfg.Client

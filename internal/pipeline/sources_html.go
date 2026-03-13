@@ -1404,86 +1404,40 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 		return ""
 	}
 
-	fetchArticleContent := func(articleURL string) string {
-		time.Sleep(500 * time.Millisecond)
-
-		var resp *http.Response
-		for attempt := 0; attempt < 3; attempt++ {
-			if attempt > 0 {
-				time.Sleep(time.Duration(attempt) * 2 * time.Second)
-			}
-			req, err := http.NewRequest("GET", articleURL, nil)
-			if err != nil {
-				return ""
-			}
-			req.Header.Set("User-Agent", cfg.UserAgent)
-			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-			req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-			req.Header.Set("Referer", newsURL)
-
-			resp, err = client.Do(req)
-			if err != nil {
-				return ""
-			}
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-			resp.Body.Close()
-			if resp.StatusCode != 403 {
-				return ""
-			}
+	// section.c-featured-content-banner からトップ記事取得（Excerptあり）
+	doc.Find("section.c-featured-content-banner").Each(func(_ int, banner *goquery.Selection) {
+		if len(out) >= limit {
+			return
 		}
-		if resp.StatusCode != http.StatusOK {
-			return ""
+		link := banner.Find(".c-featured-content-banner__link")
+		href, exists := link.Attr("href")
+		if !exists || href == "" {
+			return
 		}
-		defer resp.Body.Close()
-
-		articleDoc, err := goquery.NewDocumentFromReader(resp.Body)
-		if err != nil {
-			return ""
+		articleURL := resolveURL(newsURL, href)
+		if articleURL == "" || seen[articleURL] {
+			return
 		}
+		seen[articleURL] = true
 
-		var parts []string
-
-		if about := articleDoc.Find("meta[property='og:description']").AttrOr("content", ""); about != "" {
-			parts = append(parts, "【About】\n"+strings.TrimSpace(about))
+		title := strings.TrimSpace(banner.Find(".c-featured-content-banner__heading").Text())
+		if title == "" || len(title) < 10 {
+			return
 		}
+		excerpt := strings.TrimSpace(banner.Find(".c-featured-content-banner__excerpt").Text())
 
-		var bodyParts []string
-		seenText := make(map[string]bool)
-
-		articleDoc.Find(".c-wysiwyg__content").Each(func(_ int, section *goquery.Selection) {
-			section.Find("p").Each(func(_ int, p *goquery.Selection) {
-				text := strings.TrimSpace(p.Text())
-				if len(text) > 50 && !strings.Contains(text, "subscribe to the ENB") &&
-					!strings.Contains(text, "Earth Negotiations Bulletin writers") &&
-					!seenText[text] {
-					seenText[text] = true
-					bodyParts = append(bodyParts, text)
-				}
-			})
-			section.Find("li").Each(func(_ int, li *goquery.Selection) {
-				text := strings.TrimSpace(li.Text())
-				if len(text) > 20 && !seenText[text] {
-					seenText[text] = true
-					bodyParts = append(bodyParts, "• "+text)
-				}
-			})
+		dateStr := extractDate(banner.Text())
+		if dateStr == "" {
+			dateStr = time.Now().Format(time.RFC3339)
+		}
+		out = append(out, Headline{
+			Source:      "IISD ENB",
+			Title:       title,
+			URL:         articleURL,
+			PublishedAt: dateStr,
+			Excerpt:     excerpt,
 		})
-
-		if len(bodyParts) > 0 {
-			parts = append(parts, "\n【Content】\n"+strings.Join(bodyParts, "\n\n"))
-		}
-
-		if len(parts) == 0 {
-			if desc := articleDoc.Find("meta[name='description']").AttrOr("content", ""); desc != "" {
-				return strings.TrimSpace(desc)
-			}
-			return ""
-		}
-
-		return strings.Join(parts, "\n")
-	}
+	})
 
 	doc.Find("a.c-featured-box, .c-featured-box").Each(func(_ int, box *goquery.Selection) {
 		if len(out) >= limit {
@@ -1511,7 +1465,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 			return
 		}
 
-		excerpt := fetchArticleContent(articleURL)
+		excerpt := strings.TrimSpace(box.Find(".c-featured-box__summary").Text())
 
 		boxText := box.Text()
 		dateStr := extractDate(boxText)
@@ -1552,7 +1506,7 @@ func collectHeadlinesIISD(limit int, cfg HeadlineSourceConfig) ([]Headline, erro
 				return
 			}
 
-			excerpt := fetchArticleContent(articleURL)
+			excerpt := ""
 
 			dateStr := extractDate(hero.Text())
 			if dateStr == "" {

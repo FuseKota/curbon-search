@@ -35,39 +35,39 @@ internal/pipeline/
 └── utils.go                 - ユーティリティ
 ```
 
-## 🗂️ データソース（39アクティブソース）
+## 🗂️ データソース
 
 ### アクティブソース
 
-**WordPress REST API（8ソース）**:
+**WordPress REST API**:
 CarbonCredits.jp, Carbon Herald, Climate Home News, CarbonCredits.com, Sandbag, Ecosystem Marketplace, Carbon Brief, RMI
 
-**日本市場（5ソース）**:
+**日本市場**:
 JRI, PwC Japan, Mizuho R&T, JPX, CarbonCredits.jp（WP API兼用）
 
-**HTMLスクレイピング（6ソース）**:
+**HTMLスクレイピング**:
 ICAP, IETA, Energy Monitor, World Bank, NewClimate, Carbon Knowledge Hub
 
-**VCM認証団体（4ソース）**:
+**VCM認証団体**:
 Verra, Gold Standard, ACR, CAR
 
-**国際機関（2ソース）**:
+**国際機関**:
 IISD ENB, Climate Focus
 
-**地域ETS（5ソース）**:
+**地域ETS**:
 EU ETS, UK ETS, CARB, RGGI, Australia CER
 
-**RSSフィード（3ソース）**:
-Politico EU, Euractiv, Carbon Market Watch
+**RSSフィード**:
+Politico EU, Euractiv, Carbon Market Watch, UN News
 
-**学術・研究（5ソース）**:
+**学術・研究**:
 arXiv, Nature Communications, OIES, IOP Science (ERL), ScienceDirect
 
-**CDR関連（2ソース）**:
+**CDR関連**:
 Puro.earth, Isometric
 
-### 停止中ソース（5）
-env-ministry, meti, nature-ecoevo, unfccc, un-news
+### 停止中ソース（4）
+env-ministry, meti, nature-ecoevo, unfccc
 
 ## 🛠️ よく使うコマンド
 
@@ -79,7 +79,7 @@ go build -o pipeline ./cmd/pipeline
 
 ### 無料記事収集
 ```bash
-# 全ソースから収集（all-freeで全39ソース指定）
+# 全ソースから収集（all-freeで全ソース指定）
 ./pipeline -sources=all-free -perSource=10 -out=free_articles.json
 
 # ダイジェストメール送信
@@ -126,7 +126,7 @@ EMAIL_TO=recipient@example.com
 
 ```bash
 # 入力
--sources              # ソース指定（CSV形式、"all-free"で全39ソース）
+-sources              # ソース指定（CSV形式、"all-free"で全ソース）
 -perSource            # ソースあたりの記事数（デフォルト: 30）
 -hoursBack            # 指定時間以内の記事のみ（デフォルト: 0、日付なし記事は保持）
 -headlines            # 既存JSONファイルから読み込み（スクレイピングをスキップ）

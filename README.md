@@ -19,7 +19,7 @@
 ```
 
 **特徴**:
-- 39のアクティブソースから直接記事を収集
+- 各アクティブソースから直接記事を収集
 - 高速実行（5-15秒程度）
 - 日次レビューに最適
 - Notion統合・メール配信に対応
@@ -32,39 +32,39 @@
 
 #### 1. ヘッドライン収集 (`internal/pipeline/` 配下のソースファイル群)
 
-**無料ソース（全文取得）：** **39アクティブソース**
+**無料ソース（全文取得）：** **アクティブソース**
 
-**日本市場（5ソース）：**
+**日本市場：**
 - CarbonCredits.jp、JRI、PwC Japan、Mizuho R&T、JPX
 
-**WordPress REST API（8ソース）：**
+**WordPress REST API：**
 - CarbonCredits.jp、Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
 
-**HTMLスクレイピング（6ソース）：**
+**HTMLスクレイピング：**
 - ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
 
-**VCM認証団体（4ソース）：**
+**VCM認証団体：**
 - Verra、Gold Standard、ACR、CAR
 
-**国際機関（2ソース）：**
+**国際機関：**
 - IISD ENB、Climate Focus
 
-**地域ETS（5ソース）：**
+**地域ETS：**
 - EU ETS、UK ETS、CARB、RGGI、Australia CER
 
-**RSSフィード（3ソース）：**
-- Politico EU、Euractiv、Carbon Market Watch
+**RSSフィード：**
+- Politico EU、Euractiv、Carbon Market Watch、UN News
 
-**学術・研究（5ソース）：**
+**学術・研究：**
 - arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
 
-**CDR関連（2ソース）：**
+**CDR関連：**
 - Puro.earth、Isometric
 
 **技術スタック：**
-- WordPress REST API（8サイト）- 標準化されたJSON endpoint
-- HTML Scraping + goquery（多数サイト）- カスタムHTML構造解析
-- RSSフィード解析（5サイト）
+- WordPress REST API - 標準化されたJSON endpoint
+- HTML Scraping + goquery - カスタムHTML構造解析
+- RSSフィード解析
 
 #### 2. Notion統合 (`internal/pipeline/notion.go`)
 - Notion Databaseへの自動クリッピング
@@ -106,7 +106,7 @@ DEBUG_SCRAPING=1 ./pipeline -sources=carbonherald -perSource=2
 | オプション | デフォルト | 説明 |
 |----------|----------|------|
 | `-headlines` | - | 既存のheadlines.jsonを読み込む（指定しない場合はスクレイピング） |
-| `-sources` | `all-free` | スクレイピング対象（カンマ区切り、39アクティブソース） |
+| `-sources` | `all-free` | スクレイピング対象（カンマ区切り、all-freeで全アクティブソース） |
 | `-perSource` | `30` | 各ソースから収集する最大件数 |
 | `-hoursBack` | `0` | 指定時間以内に公開された記事のみ収集（0で無効） |
 | `-out` | - | 出力先（指定しない場合はstdout） |
@@ -252,16 +252,16 @@ EOF
 - ✅ **Excerptフィールド** - 全文の最初4000文字（CollectFromSourcesで統一切り詰め）
 - ✅ **メタデータ** - Title, URL, Source, Type, Published Date
 
-**対応ソース（39アクティブソース）：**
-- **日本（5）**: CarbonCredits.jp、JRI、PwC Japan、Mizuho R&T、JPX
-- **WordPress API（8）**: CarbonCredits.jp、Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
-- **HTML（6）**: ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
-- **VCM認証（4）**: Verra、Gold Standard、ACR、CAR
-- **国際機関（2）**: IISD ENB、Climate Focus
-- **地域ETS（5）**: EU ETS、UK ETS、CARB、RGGI、Australia CER
-- **RSS（3）**: Politico EU、Euractiv、Carbon Market Watch
-- **学術（5）**: arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
-- **CDR（2）**: Puro.earth、Isometric
+**対応ソース：**
+- **日本**: CarbonCredits.jp、JRI、PwC Japan、Mizuho R&T、JPX
+- **WordPress API**: CarbonCredits.jp、Carbon Herald、Climate Home News、CarbonCredits.com、Sandbag、Ecosystem Marketplace、Carbon Brief、RMI
+- **HTML**: ICAP、IETA、Energy Monitor、World Bank、NewClimate、Carbon Knowledge Hub
+- **VCM認証**: Verra、Gold Standard、ACR、CAR
+- **国際機関**: IISD ENB、Climate Focus
+- **地域ETS**: EU ETS、UK ETS、CARB、RGGI、Australia CER
+- **RSS**: Politico EU、Euractiv、Carbon Market Watch、UN News
+- **学術**: arXiv、Nature Communications、OIES、IOP Science (ERL)、ScienceDirect
+- **CDR**: Puro.earth、Isometric
 
 ### 🗂️ Notionデータベーススキーマ
 

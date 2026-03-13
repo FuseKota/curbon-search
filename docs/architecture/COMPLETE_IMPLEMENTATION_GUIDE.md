@@ -44,12 +44,12 @@ Carbon関連の無料記事を幅広く確認
 
 **使用例**:
 ```bash
-# 35の無料ソースから幅広く記事を収集（+ 例外4ソースは別Lambda）
+# 各無料ソースから幅広く記事を収集（+ 例外ソースは別Lambda）
 ./pipeline -sources=all-free -perSource=10 -sendShortEmail
 ```
 
 **特徴**:
-- 35の無料ソースから直接記事を収集（collect-exception Lambda で rggi/jri/arxiv/iisd を別途収集）
+- 各無料ソースから直接記事を収集（collect-exception Lambda で rggi/jri/arxiv/iisd を別途収集）
 - 高速実行（5-15秒）
 - メール配信・Notion統合に対応
 
@@ -57,7 +57,7 @@ Carbon関連の無料記事を幅広く確認
 
 ### 1.3 主要機能
 
-- ✅ 35+4の情報ソースからのニュース自動収集（メイン35 + 例外4）
+- ✅ 各情報ソースからのニュース自動収集（メインLambda DefaultSources + 例外Lambda: rggi/jri/arxiv/iisd）
 - ✅ HTML/RSS/WordPress API によるスクレイピング
 - ✅ メール送信機能（Gmail SMTP）
 - ✅ Notion Databaseへの自動クリッピング
@@ -67,7 +67,7 @@ Carbon関連の無料記事を幅広く確認
 | 項目 | 値 |
 |------|-----|
 | 総コード行数 | 4,751行（Go） |
-| 実装ソース数 | 35（メイン）+ 4（例外: rggi/jri/arxiv/iisd） |
+| 実装ソース | メイン（DefaultSources）+ 例外（ExceptionSources: rggi/jri/arxiv/iisd） |
 | テスト成功率 | 100%（15/15テスト合格） |
 | 実装期間 | 2025年12月29日 - 2026年1月4日 |
 | ステータス | 本番環境対応済み |
@@ -97,8 +97,8 @@ Carbon関連の無料記事を幅広く確認
 │   ├── pipeline/
 │   │   └── main.go              - CLIエントリーポイント（薄いラッパー）
 │   └── lambda/
-│       ├── collect/             - collect-headlines Lambda（DefaultSources 35ソース）
-│       ├── collect-exception/   - collect-exception Lambda（ExceptionSources 4ソース）
+│       ├── collect/             - collect-headlines Lambda（DefaultSources）
+│       ├── collect-exception/   - collect-exception Lambda（ExceptionSources: rggi/jri/arxiv/iisd）
 │       └── email/               - send-email Lambda（Notionからメール配信）
 ├── internal/
 │   └── pipeline/
@@ -151,11 +151,11 @@ Carbon関連の無料記事を幅広く確認
 
 #### internal/pipeline/headlines.go (ソース実装)
 **責務**:
-- 35+4ニュースソースのソースマップ定義（DefaultSources 35 + ExceptionSources 4）
+- 各ニュースソースのソースマップ定義（DefaultSources + ExceptionSources: rggi/jri/arxiv/iisd）
 - 複数のスクレイピングパターン:
-  - WordPress REST API（8ソース）
-  - HTML Scraping with goquery（8ソース）
-  - RSS Feed with gofeed（3ソース）
+  - WordPress REST API
+  - HTML Scraping with goquery
+  - RSS Feed with gofeed
 - キーワードフィルタリング（日本語ソース）
 - URL重複排除
 - Excerpt抽出・3000文字統一切り詰め
@@ -173,7 +173,7 @@ Carbon関連の無料記事を幅広く確認
 
 | Lambda | エントリーポイント | 対象ソース | HOURS_BACK | 推奨実行時刻(UTC) |
 |--------|-----------------|-----------|-----------|-----------------|
-| collect-headlines | cmd/lambda/collect/ | DefaultSources（35ソース） | 24時間 | 9:00 |
+| collect-headlines | cmd/lambda/collect/ | DefaultSources | 24時間 | 9:00 |
 | collect-exception | cmd/lambda/collect-exception/ | ExceptionSources（rggi/jri/arxiv/iisd） | 48時間 | 21:00 |
 | send-email | cmd/lambda/email/ | Notionからメール配信 | - | 10:00 |
 
@@ -225,9 +225,9 @@ Carbon関連の無料記事を幅広く確認
 ## 3. 全ソースの実装詳細
 
 > **構成**: 各セクションはソースコードファイル（`sources_*.go`）と 1:1 で対応しています。
-> 全 44 ソース（39 アクティブ + 5 停止中）に通し番号 #1〜#44 を付与。
+> 各ソースに通し番号 #1〜#44 を付与（アクティブ + 停止中）。
 
-### 3.1 WordPress REST APIソース（7ソース） — `sources_wordpress.go`
+### 3.1 WordPress REST APIソース — `sources_wordpress.go`
 
 #### #1: CarbonCredits.jp
 **実装**: `collectHeadlinesCarbonCreditsJP()`
@@ -322,7 +322,7 @@ for _, p := range posts {
 
 ---
 
-### 3.2 RSSフィードソース（4ソース） — `sources_rss.go`
+### 3.2 RSSフィードソース — `sources_rss.go`
 
 #### #8: Carbon Brief
 **実装**: `collectHeadlinesCarbonBrief()`
@@ -392,9 +392,24 @@ var carbonKeywordsEuractiv = []string{
 
 **ステータス**: ✅ 完全動作
 
+#### #12 (旧#43): UN News
+**実装**: `collectHeadlinesUNNews()`
+**手法**: RSS Feed（gofeed）
+**フィードURL**: `https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml`
+
+**特徴**:
+- 国際連合の公式ニュースサービス
+- 気候変動・UNFCCC会議・国際気候政策をカバー
+- UNFCCC直接スクレイピングの代替手段として機能
+- description から Excerpt 抽出
+
+**キーワードフィルタ**: なし
+
+**ステータス**: ✅ 完全動作（2026-03-13 復旧）
+
 ---
 
-### 3.3 日本語ソース（6ソース、うち2つ停止中） — `sources_japan.go`
+### 3.3 日本語ソース（うち2つ停止中） — `sources_japan.go`
 
 #### #12: Japan Research Institute (JRI - 日本総研)
 **実装**: `collectHeadlinesJRI()`
@@ -546,7 +561,7 @@ if len(matches) == 4 {
 
 ---
 
-### 3.4 学術・研究ソース（6ソース、うち1つ不安定） — `sources_academic.go`
+### 3.4 学術・研究ソース（うち1つ不安定） — `sources_academic.go`
 
 #### #18: arXiv
 **実装**: `collectHeadlinesArXiv()`
@@ -647,7 +662,7 @@ https://www.oxfordenergy.org/electricity-programme/
 
 ---
 
-### 3.5 地域排出量取引システム（5ソース） — `sources_regional_ets.go`
+### 3.5 地域排出量取引システム — `sources_regional_ets.go`
 
 #### #24: EU ETS
 **実装**: `collectHeadlinesEUETS()`
@@ -729,7 +744,7 @@ func extractTextFromPDF(pdfURL string, client *http.Client, userAgent string) (s
 
 ---
 
-### 3.6 ニュース・情報サイト（4ソース） — `sources_html.go`
+### 3.6 ニュース・情報サイト — `sources_html.go`
 
 #### #29: ICAP (International Carbon Action Partnership)
 **実装**: `collectHeadlinesICAP()`
@@ -801,7 +816,7 @@ isContentURL := (strings.Contains(href, "/factsheet") ||
 
 ---
 
-### 3.7 国際機関・シンクタンク（4ソース） — `sources_html.go`
+### 3.7 国際機関・シンクタンク — `sources_html.go`
 
 #### #33: World Bank
 **実装**: `collectHeadlinesWorldBank()`
@@ -873,7 +888,7 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 ---
 
-### 3.8 VCM認証・CDR関連（6ソース） — `sources_html.go`
+### 3.8 VCM認証・CDR関連 — `sources_html.go`
 
 #### #37: Verra
 **実装**: `collectHeadlinesVerra()`
@@ -969,13 +984,6 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 
 ### 3.9 停止中ソース（実装済みだが無効化）
 
-#### #43: UN News
-**実装**: `collectHeadlinesUNNews()`（headlines.go にコメントアウト済み）
-**手法**: HTMLスクレイピング
-**停止理由**: コンテンツ抽出の改善が必要（2026-02）
-
-**ステータス**: ⛔ 停止中
-
 #### #44: UNFCCC
 **実装**: `collectHeadlinesUNFCCC()`（headlines.go にコメントアウト済み）
 **手法**: HTMLスクレイピング
@@ -997,7 +1005,7 @@ client := &http.Client{Timeout: cfg.Timeout, Jar: jar}
 1. ユーザー入力（CLI flags）
    ↓
 2. ソース選択（-sources flag）
-   - デフォルト: 全39ソース
+   - デフォルト: 全ソース
    - カスタム: カンマ区切りリスト
    ↓
 3. ソースごとのスクレイピング
@@ -1469,7 +1477,7 @@ DEBUG_HTML=1
 ```bash
 -sources <csv>
   # 収集するソースのカンマ区切りリスト
-  # デフォルト: all-free（全39ソース）
+  # デフォルト: all-free（全アクティブソース）
   # 例: -sources=carbonherald,sandbag,carbon-brief
 
 -perSource <int>
@@ -1517,7 +1525,7 @@ DEBUG_HTML=1
 
 ### 7.3 デフォルトソースリスト
 
-**`-sources=all-free`指定時の全35アクティブソース（例外4ソースは collect-exception Lambda で別途収集）**:
+**`-sources=all-free`指定時の全アクティブソース（例外ソース rggi/jri/arxiv/iisd は collect-exception Lambda で別途収集）**:
 
 `internal/pipeline/config.go` の `defaultSources` を参照してください。
 
@@ -1566,7 +1574,7 @@ DEBUG_HTML=1
 ```
 
 **特徴**:
-- ✅ 35の無料ソースから直接記事を収集（例外4ソースは collect-exception Lambda）
+- ✅ 各無料ソースから直接記事を収集（例外ソース rggi/jri/arxiv/iisd は collect-exception Lambda）
 - ✅ 実行速度が速い（5-15秒程度）
 - ✅ メール配信・Notion統合に対応
 
@@ -2168,7 +2176,7 @@ time ./pipeline -sources=all-free -perSource=10
 
 - **用途**: 幅広いCarbon関連無料記事の収集と要約配信
 - **コマンド例**: `./pipeline -sources=all-free -perSource=10 -sendShortEmail`
-- **特徴**: 35の無料ソース（+ 4例外ソース）から直接収集、コスト効率が高く、高速実行
+- **特徴**: 各無料ソース（DefaultSources + 例外ソース: rggi/jri/arxiv/iisd）から直接収集、コスト効率が高く、高速実行
 - **詳細**: セクション1.2、セクション8.1
 
 ---
